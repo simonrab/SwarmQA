@@ -302,10 +302,7 @@ def _menu_expression(path: list[str]) -> str:
     return f"{expr} of menu 1 of menu bar item {_as_string(path[0])} of menu bar 1"
 
 
-def _tree_script(process: str) -> str:
-    proc = _as_string(process)
-    return f"""-- SWARMQA_TREE
-on sanitize(rawValue)
+_SANITIZE_HANDLER = """on sanitize(rawValue)
   set t to ""
   try
     set t to rawValue as text
@@ -313,76 +310,92 @@ on sanitize(rawValue)
     return ""
   end try
   set saved to AppleScript's text item delimiters
-  set AppleScript's text item delimiters to {{tab, linefeed, return}}
+  set AppleScript's text item delimiters to {tab, linefeed, return}
   set chunks to text items of t
   set AppleScript's text item delimiters to " "
   set t to chunks as text
   set AppleScript's text item delimiters to saved
   return t
 end sanitize
-
-on emit(el, depth)
-  set r to ""
-  try
-    set r to role of el as text
-  end try
-  set n to ""
-  try
-    set n to my sanitize(name of el)
-  end try
-  set ident to ""
-  try
-    set ident to my sanitize(value of attribute "AXIdentifier" of el)
-  end try
-  set v to ""
-  try
-    set v to my sanitize(value of el)
-  end try
-  set en to "1"
-  try
-    if enabled of el is false then set en to "0"
-  end try
-  set xs to "0"
-  set ys to "0"
-  set ws to "0"
-  set hs to "0"
-  try
-    set pos to position of el
-    set xs to (item 1 of pos) as text
-    set ys to (item 2 of pos) as text
-    set sz to size of el
-    set ws to (item 1 of sz) as text
-    set hs to (item 2 of sz) as text
-  end try
-  return (depth as text) & tab & r & tab & n & tab & ident & tab & v & tab & en & tab & xs & tab & ys & tab & ws & tab & hs & linefeed
-end emit
-
-set output to ""
-tell application "System Events"
-  tell process {proc}
-    set frontmost to true
-    repeat with w in windows
-      set output to output & my emit(w, 0)
-      try
-        repeat with el in entire contents of w
-          set output to output & my emit(el, 1)
-        end repeat
-      end try
-    end repeat
-    try
-      repeat with mb in menu bars
-        set output to output & my emit(mb, 0)
-        try
-          repeat with el in entire contents of mb
-            set output to output & my emit(el, 1)
-          end repeat
-        end try
-      end repeat
-    end try
-  end tell
-end tell
-return output
 """
+
+
+def _append_element(var: str, depth: int) -> str:
+    """Inline a tree row. UI elements stay in the caller's tell block.
+
+    System Events rejects UI element references passed into handlers, so the
+    property reads happen on ``var`` directly. ``sanitize`` only receives text.
+    """
+    return f"""set r to ""
+try
+  set r to role of {var} as text
+end try
+set n to ""
+try
+  set n to my sanitize(name of {var})
+end try
+set rowId to ""
+try
+  set rowId to my sanitize(value of attribute "AXIdentifier" of {var})
+end try
+set v to ""
+try
+  set v to my sanitize(value of {var})
+end try
+set en to "1"
+try
+  if enabled of {var} is false then set en to "0"
+end try
+set xs to "0"
+set ys to "0"
+set ws to "0"
+set hs to "0"
+try
+  set pos to position of {var}
+  set xs to (item 1 of pos) as text
+  set ys to (item 2 of pos) as text
+  set sz to size of {var}
+  set ws to (item 1 of sz) as text
+  set hs to (item 2 of sz) as text
+end try
+set output to output & ("{depth}" & tab & r & tab & n & tab & rowId & tab & v & tab & en & tab & xs & tab & ys & tab & ws & tab & hs & linefeed)
+"""
+
+
+def _tree_script(process: str) -> str:
+    proc = _as_string(process)
+    window = _append_element("w", 0)
+    child = _append_element("el", 1)
+    menu = _append_element("mb", 0)
+    return (
+        "-- SWARMQA_TREE\n"
+        + _SANITIZE_HANDLER
+        + 'set output to ""\n'
+        + 'tell application "System Events"\n'
+        + f"  tell process {proc}\n"
+        + "    set frontmost to true\n"
+        + "    repeat with w in windows\n"
+        + window
+        + "      try\n"
+        + "        repeat with el in entire contents of w\n"
+        + child
+        + "        end repeat\n"
+        + "      end try\n"
+        + "    end repeat\n"
+        + "    try\n"
+        + "      repeat with mb in menu bars\n"
+        + menu
+        + "        try\n"
+        + "          repeat with el in entire contents of mb\n"
+        + child
+        + "          end repeat\n"
+        + "        end try\n"
+        + "      end repeat\n"
+        + "    end try\n"
+        + "  end tell\n"
+        + "end tell\n"
+        + "return output\n"
+    )
 
 
 def _alive_script(process: str) -> str:
@@ -428,89 +441,102 @@ set roleNames to {{{roles}}}
 """
 
 
-_MATCH_HANDLER = """on matchesElement(el, ident, labelText, valueText, useValue, roleNames)
-  set r to ""
-  try
-    set r to role of el as text
-  end try
-  set roleOk to false
-  repeat with candidate in roleNames
-    if r is (candidate as text) then set roleOk to true
-  end repeat
-  if roleOk is false then return false
+def _match_lines(var: str) -> str:
+    """Set ``matched`` by reading ``var`` in the current System Events tell."""
+    return f"""set matched to false
+set r to ""
+try
+  set r to role of {var} as text
+end try
+set roleOk to false
+repeat with candidate in roleNames
+  if r is (candidate as text) then set roleOk to true
+end repeat
+if roleOk then
   if ident is not "" then
     set actualId to ""
     try
-      set actualId to value of attribute "AXIdentifier" of el as text
+      set actualId to value of attribute "AXIdentifier" of {var} as text
     end try
-    return actualId is ident
-  end if
-  if labelText is not "" then
+    if actualId is ident then set matched to true
+  else if labelText is not "" then
     set actualName to ""
     try
-      set actualName to name of el as text
+      set actualName to name of {var} as text
     end try
-    if actualName is labelText then return true
-    try
-      if actualName contains labelText then return true
-    end try
-    return false
-  end if
-  if useValue then
-    set actualValue to ""
-    try
-      set actualValue to value of el as text
-    end try
-    return actualValue is valueText
-  end if
-  return true
-end matchesElement
-"""
-
-
-def _choose_block(process: str) -> str:
-    proc = _as_string(process)
-    return f"""set chosen to missing value
-tell application "System Events"
-  tell process {proc}
-    set frontmost to true
-    repeat with w in windows
-      if chosen is missing value then
-        try
-          if my matchesElement(w, ident, labelText, valueText, useValue, roleNames) then set chosen to w
-        end try
-      end if
-      if chosen is missing value then
-        try
-          repeat with el in entire contents of w
-            if my matchesElement(el, ident, labelText, valueText, useValue, roleNames) then
-              set chosen to el
-              exit repeat
-            end if
-          end repeat
-        end try
-      end if
-    end repeat
-    if chosen is missing value then
+    if actualName is labelText then
+      set matched to true
+    else
       try
-        repeat with mb in menu bars
-          if chosen is missing value then
-            try
-              repeat with el in entire contents of mb
-                if my matchesElement(el, ident, labelText, valueText, useValue, roleNames) then
-                  set chosen to el
-                  exit repeat
-                end if
-              end repeat
-            end try
-          end if
-        end repeat
+        if actualName contains labelText then set matched to true
       end try
     end if
-  end tell
-end tell
-if chosen is missing value then error "element not found"
+  else if useValue then
+    set actualValue to ""
+    try
+      set actualValue to value of {var} as text
+    end try
+    if actualValue is valueText then set matched to true
+  else
+    set matched to true
+  end if
+end if
 """
+
+
+def _search_act(process: str, action_for: Callable[[str], str]) -> str:
+    """Find the element and run ``action_for(var)`` on that loop variable.
+
+    The action runs inside the repeat so System Events still has the reference.
+    """
+    proc = _as_string(process)
+
+    def once(var: str) -> str:
+        return _match_lines(var) + (
+            "if matched and didAct is false then\n"
+            + action_for(var)
+            + "\nset didAct to true\n"
+            "end if\n"
+        )
+
+    return (
+        "set didAct to false\n"
+        'tell application "System Events"\n'
+        f"  tell process {proc}\n"
+        "    set frontmost to true\n"
+        "    repeat with w in windows\n"
+        "      if didAct is false then\n"
+        + once("w")
+        + "      end if\n"
+        "      if didAct is false then\n"
+        "        try\n"
+        "          repeat with el in entire contents of w\n"
+        "            if didAct is false then\n"
+        + once("el")
+        + "            end if\n"
+        "          end repeat\n"
+        "        end try\n"
+        "      end if\n"
+        "    end repeat\n"
+        "    if didAct is false then\n"
+        "      try\n"
+        "        repeat with mb in menu bars\n"
+        "          if didAct is false then\n"
+        "            try\n"
+        "              repeat with el in entire contents of mb\n"
+        "                if didAct is false then\n"
+        + once("el")
+        + "                end if\n"
+        "              end repeat\n"
+        "            end try\n"
+        "          end if\n"
+        "        end repeat\n"
+        "      end try\n"
+        "    end if\n"
+        "  end tell\n"
+        "end tell\n"
+        'if didAct is false then error "element not found"\n'
+    )
 
 
 def _click_script(process: str, element: UIElement) -> str:
@@ -518,33 +544,23 @@ def _click_script(process: str, element: UIElement) -> str:
     return (
         "-- SWARMQA_CLICK\n"
         f"-- role={element.role} label={element.label} identifier={ident}\n"
-        + _MATCH_HANDLER
         + _match_helpers(element)
-        + _choose_block(process)
-        + f"""tell application "System Events"
-  tell process {_as_string(process)}
-    perform action "AXPress" of chosen
-  end tell
-end tell
-"""
+        + _search_act(process, lambda var: f'perform action "AXPress" of {var}')
     )
 
 
 def _type_script(process: str, element: UIElement, text: str) -> str:
     ident = element.identifier or ""
+    quoted = _as_string(text)
+
+    def action(var: str) -> str:
+        return "set focused of " + var + " to true\nset value of " + var + " to " + quoted
+
     return (
         "-- SWARMQA_TYPE\n"
         f"-- role={element.role} label={element.label} identifier={ident}\n"
-        + _MATCH_HANDLER
         + _match_helpers(element)
-        + _choose_block(process)
-        + f"""tell application "System Events"
-  tell process {_as_string(process)}
-    set focused of chosen to true
-    set value of chosen to {_as_string(text)}
-  end tell
-end tell
-"""
+        + _search_act(process, action)
     )
 
 
