@@ -42,7 +42,7 @@ def test_identical_images_pass(tmp_path: Path):
     with Image.open(diff_out) as diff:
         assert diff.format == "PNG"
         assert diff.size == (12, 8)
-        assert all(pixel[:3] == color for pixel in diff.getdata())
+        assert all(pixel[:3] == color for pixel in diff.get_flattened_data())
     assert baseline.read_bytes() == before
 
 
@@ -63,7 +63,7 @@ def test_recolored_image_fails_with_reviewable_diff(tmp_path: Path):
     with Image.open(diff_out) as diff:
         assert diff.format == "PNG"
         assert diff.size == (16, 16)
-        pixels = list(diff.convert("RGB").getdata())
+        pixels = list(diff.convert("RGB").get_flattened_data())
     assert pixels
     assert all(pixel[0] == 255 and pixel[1] < 40 and pixel[2] < 40 for pixel in pixels)
     assert baseline.read_bytes() == before
