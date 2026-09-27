@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -104,12 +105,14 @@ def test_human_skips_pr_when_gh_is_missing(tmp_path: Path, monkeypatch):
     report = tmp_path / "reports" / "camp-7"
     result = _campaign(report, [_worker("w1", "s-save", "save", "failed", "scripted", [_finding("f1")])])
 
+    real_which = shutil.which
+
     def which(name: str):
         if name == "gh":
             return None
-        return shutil_which(name)
+        return real_which(name)
 
-    monkeypatch.setattr("swarmqa.prloop.loop.shutil.which", which)
+    monkeypatch.setattr(shutil, "which", which)
     loop = run_fix_loop(result, sample_config(), repo=repo)
 
     assert loop.pr_url is None
@@ -503,9 +506,3 @@ def _branch(repo: Path) -> str:
 
 def _subject(repo: Path) -> str:
     return subprocess.check_output(["git", "log", "-1", "--format=%s"], cwd=repo, text=True).strip()
-
-
-def shutil_which(name: str) -> str | None:
-    import shutil
-
-    return shutil.which(name)
