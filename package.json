@@ -1,0 +1,29 @@
+{
+  "name": "aqa",
+  "version": "0.1.0",
+  "description": "Autonomous QA (SwarmQA) — CLI skeleton",
+  "type": "module",
+  "bin": {
+    "aqa": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "aqa": "node dist/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ]
+}
