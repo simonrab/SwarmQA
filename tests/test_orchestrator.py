@@ -54,15 +54,15 @@ def test_two_shards_overlap_under_worker_cap(tmp_path: Path, capsys: pytest.Capt
         with lock:
             state["current"] += 1
             state["max"] = max(state["max"], state["current"])
-            if state["current"] >= 2:
+            if state["current"] >= 2 and not state["seen_active"]:
                 state["overlapped"] = True
+                status_files = list(Path(config.report_root).glob("*/status.json"))
+                assert status_files
+                payload = json.loads(status_files[0].read_text(encoding="utf-8"))
+                state["seen_active"].append(len(payload["active_workers"]))
                 release.set()
         assert release.wait(timeout=5)
-        status_files = list(Path(config.report_root).glob("*/status.json"))
-        assert status_files
-        payload = json.loads(status_files[0].read_text(encoding="utf-8"))
         with lock:
-            state["seen_active"].append(len(payload["active_workers"]))
             state["current"] -= 1
         return _passed(shard, worker_id)
 
