@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "name": "toggle-dark-mode",
+  "steps": [
+    {"action": "click", "target": {"role": "button", "label": "Sign In"}},
+    {"action": "type", "target": {"role": "textfield", "label": "Email"}, "text": "a@b.c"},
+    {"action": "key", "keys": ["cmd", "return"]},
+    {"action": "click", "target": {"role": "button", "label": "Dark Mode"}},
+    {"action": "assert", "target": {"role": "button", "label": "Dark Mode"}, "exists": true},
+    {"action": "screenshot", "name": "after-dark-mode"}
+  ]
+}

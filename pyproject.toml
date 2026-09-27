@@ -1,0 +1,28 @@
+[project]
+name = "swarmqa"
+version = "0.1.0"
+description = "Autonomous QA — parallel QA campaigns for macOS apps"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["pillow"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+aqa = "swarmqa.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["swarmqa*"]
+
+[tool.setuptools.package-data]
+swarmqa = ["templates/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
