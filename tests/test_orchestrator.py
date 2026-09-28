@@ -491,6 +491,32 @@ def test_gui_warning_mentions_vm_or_cloud(tmp_path: Path, capsys: pytest.Capture
     assert "isolated GUI" in err
 
 
+def test_ios_warning_asks_for_one_simulator_per_worker(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    config = _config(tmp_path)
+    config.app.platform = "ios"
+    config.workers = 2
+    run_campaign(
+        config,
+        [_shard("s-1")],
+        executor=lambda shard, worker_id, work_dir, _config: _passed(shard, worker_id),
+    )
+    err = capsys.readouterr().err
+    assert "app.simulators" in err
+    assert "isolated GUI" not in err
+
+    covered = _config(tmp_path / "covered")
+    covered.app.platform = "ios"
+    covered.app.simulators = ["iPhone 16", "iPhone 16 Pro"]
+    covered.workers = 2
+    run_campaign(
+        covered,
+        [_shard("s-1")],
+        executor=lambda shard, worker_id, work_dir, _config: _passed(shard, worker_id),
+    )
+    err = capsys.readouterr().err
+    assert "app.simulators" not in err
+
+
 def test_no_gui_warning_for_suite_only_or_small_fleet(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     config = _config(tmp_path)
     config.workers = 4

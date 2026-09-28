@@ -259,6 +259,35 @@ Document that a future paid Mac host implements `RunnerBackend` and is selected 
 
 The orchestrator already refuses to schedule when the next estimated shard would exceed `max_spend`. Tests for C9 should show two simulator shards with a cap that allows only one, `stop_reason == "spend_cap"`, and in-flight policy `drain` versus `cancel`. If orchestrator spend checks are not landed yet, implement the cap check inside the cloud backend's campaign helper only as a fallback function `plan_affordable(shards, meter, rate, minutes) -> (runnable, stopped)` in `swarmqa/backends/cloud.py` and unit-test that function so the cap math is proven without waiting on C8. Prefer calling `SpendMeter` rather than a second implementation.
 
+## C10 — iOS Simulator driver
+
+Implement `IOSSimulatorDriver` so it satisfies `AppDriver`. On non-darwin platforms, `launch` raises `BackendUnavailable` whose message tells the caller to use the fake driver or a Mac with Xcode. Importing the module on Linux must succeed.
+
+`app.platform` is `macos` (default) or `ios`. `app.simulator` is one device name or UDID. `app.simulators` is a list of those, one per concurrent worker. `create_driver` selects `IOSSimulatorDriver` when `kind="ios"` or `app.platform` is `ios`.
+
+On a Mac the driver:
+
+- resolves a Simulator with `xcrun simctl list`, or uses a UDID from `udid=`, `SWARMQA_SIMULATOR_UDID`, `app.simulator`, or the default name `iPhone 17`
+- when `app.simulators` lists more than one device, claims a free entry with a lock under the worker parent directory and releases it on `close`; a dead lock pid is reclaimed
+- boots the Simulator (`boot` that reports the device is already booted is success), installs the `.app`, and launches `app.bundle_id` or `CFBundleIdentifier` from `Info.plist` (bundle root, or `Contents/Info.plist`)
+- passes `launch_args` to `simctl launch` and `app.env` as `SIMCTL_CHILD_*`
+- raises `AppMissingError` when the bundle is missing, install fails, or no bundle id is available
+- raises `AppCrashedError` when launch crashes or the pid is gone
+- reads the accessibility tree from `idb ui describe-all` into `UIElement` nodes
+- performs click, type, keychord, scroll, and menu select through `idb` (`tap`, `text`, `key`, `swipe`); menu select taps each label in order; modifier keys in a chord are dropped and the remaining HID key is sent
+- `wait_for` polls until `timeout_s` and then raises `UITimeoutError`
+- writes a PNG screenshot with `simctl io screenshot` under the worker media directory
+- starts and stops session video with `simctl io recordVideo`; if recording exits immediately, `start_video` writes `session.txt` noting that video is unavailable and `stop_video` returns that path
+- `metadata()` fills path, bundle id, and `CFBundleShortVersionString` and sets `backend="ios"`
+- `relaunch` terminates and launches again
+- `close` is safe to call more than once; it stops video, terminates the app, and does not shut the Simulator down
+- when `idb` is missing, UI actions raise `BackendUnavailable` and name `brew tap facebook/fb` plus `brew install facebook/fb/idb`. `simctl ui` is not a substitute: it only sets appearance, contrast, and content size
+- when `xcrun` is missing, `launch` raises `BackendUnavailable` and names Xcode
+
+Inject subprocess calls behind an instance attribute so tests can fake simctl and idb output on Linux. Tests must pass without a display or a booted Simulator.
+
+A local campaign with `platform = ios`, more than one worker, and fewer `app.simulators` entries than workers warns on stderr that each worker needs its own Simulator. A pool that covers the worker count does not warn. macOS campaigns keep the existing shared-display warning.
+
 ## Progress log
 
 stderr lines are part of the contract for C8. Other chunks write findings to disk and return structured results.

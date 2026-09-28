@@ -11,6 +11,12 @@ intents = ["intents/"]
 launch_args = []
 # prototype = looser exploration; shipped = stricter pass/fail
 maturity = "shipped"
+# macos drives a Mac .app. ios drives an iOS Simulator .app.
+platform = "macos"
+# simulator = "iPhone 17"
+# One device name or UDID per concurrent worker. Used when platform = ios.
+# Names must match `xcrun simctl list devices available` (iOS 26.5 has iPhone 17, not iPhone 16).
+# simulators = ["iPhone 17", "iPhone 17 Pro"]
 
 [campaign]
 # local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter

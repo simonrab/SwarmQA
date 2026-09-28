@@ -87,3 +87,5 @@ warning: local backend has N workers, above the GUI threshold of T. Scripted, ex
 ```
 
 Suite-only campaigns do not warn. Local workers share one display; `vm` or `cloud` gives each worker its own session.
+
+When `app.platform` is `ios`, that display warning is replaced. If `workers` is greater than 1 and `app.simulators` has fewer entries than `workers`, stderr says each worker needs its own Simulator. A pool with one device name or UDID per worker does not warn. See [driver.md](driver.md).

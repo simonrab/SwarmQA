@@ -49,6 +49,7 @@ ActionType = Literal[
 StepFailurePolicy = Literal["stop", "continue"]
 FailOn = Literal["scripted", "any", "never"]
 LocalIsolation = Literal["thread", "subprocess"]
+TargetPlatform = Literal["macos", "ios"]
 
 
 @dataclass
@@ -59,6 +60,9 @@ class AppTarget:
     launch_args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     maturity: Maturity = "shipped"
+    platform: TargetPlatform = "macos"
+    simulator: str | None = None
+    simulators: list[str] = field(default_factory=list)
 
 
 @dataclass

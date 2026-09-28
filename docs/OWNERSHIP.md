@@ -20,9 +20,10 @@ Pull requests target `cursor/aqa-foundation-d827`.
 | C7 | `swarmqa/prloop/loop.py`, `tests/test_prloop.py`, `docs/agents.md` |
 | C8 | `swarmqa/orchestrator/campaign.py`, `swarmqa/orchestrator/status.py`, `swarmqa/backends/local.py`, `swarmqa/worker.py`, `tests/test_orchestrator.py`, `docs/orchestrator.md` |
 | C9 | `swarmqa/backends/tart.py`, `swarmqa/backends/cloud.py`, `tests/test_backends.py`, `docs/backends.md` |
+| C10 | `swarmqa/driver/ios.py`, `tests/test_ios_driver.py`, `docs/driver.md`; `app.platform` / `app.simulator` / `app.simulators` on `AppTarget` |
 
-Do not edit `swarmqa/cli.py`, `swarmqa/errors.py`, `pyproject.toml`, or another chunk's files unless your chunk row lists them. Shared types live in `swarmqa/models.py` — extend them only when the field is campaign-wide (C12/C13 did this for `decision` / `friction` / `friction_path`); keep chunk-local types local otherwise. If a signature in your stub cannot express the behavior, keep the signature and add optional keyword-only arguments.
+Do not edit `swarmqa/cli.py`, `swarmqa/errors.py`, `pyproject.toml`, or another chunk's files unless your chunk row lists them. Shared types live in `swarmqa/models.py` — extend them only when the field is campaign-wide (C12/C13 did this for `decision` / `friction` / `friction_path`; C10 did this for `app.platform`); keep chunk-local types local otherwise. If a signature in your stub cannot express the behavior, keep the signature and add optional keyword-only arguments.
 
 Construct `CampaignConfig` in tests with `swarmqa.testing.sample_config`. Call `swarmqa.config.load_config` only from C1 tests.
 
-iOS (C10) and web targets (C11) are out of this delivery.
+Web targets (C11) are out of this delivery.

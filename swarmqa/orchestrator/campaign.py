@@ -393,7 +393,23 @@ def _open_meter(config: CampaignConfig, rate: float) -> tuple[SpendMeter, bool, 
 
 def _warn_gui(config: CampaignConfig, queue: list[Shard]) -> None:
     interactive = any(shard.kind in _INTERACTIVE for shard in queue)
-    if config.backend == "local" and config.workers > config.gui_worker_warn_threshold and interactive:
+    if config.backend != "local" or not interactive:
+        return
+    if config.app.platform == "ios":
+        pool = len(config.app.simulators)
+        if config.workers > 1 and pool < config.workers:
+            print(
+                (
+                    f"warning: local backend has {config.workers} iOS workers and "
+                    f"{pool} entry(s) in app.simulators. Each worker needs its own "
+                    "Simulator. Set app.simulators to one device name or UDID per "
+                    "worker, or pin a device with SWARMQA_SIMULATOR_UDID."
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+        return
+    if config.workers > config.gui_worker_warn_threshold:
         print(
             (
                 f"warning: local backend has {config.workers} workers, above the GUI "

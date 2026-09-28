@@ -641,6 +641,29 @@ max_wall_time = "nope"
     assert config.budgets.max_wall_time_s == parse_duration("5m")
 
 
+def test_ios_platform_and_simulator_pool(tmp_path: Path):
+    path = _write(
+        tmp_path,
+        """
+[app]
+platform = "ios"
+simulator = "iPhone 16"
+simulators = ["iPhone 16", "iPhone 16 Pro"]
+""",
+    )
+    config = load_config(path)
+    assert config.app.platform == "ios"
+    assert config.app.simulator == "iPhone 16"
+    assert config.app.simulators == ["iPhone 16", "iPhone 16 Pro"]
+
+    bad_dir = tmp_path / "bad"
+    bad_dir.mkdir()
+    broken = _write(bad_dir, '[app]\nplatform = "android"\n')
+    with pytest.raises(ConfigError) as exc:
+        load_config(broken)
+    assert exc.value.errors == ["app.platform: must be one of macos, ios"]
+
+
 def test_unknown_enum_values_from_toml(tmp_path: Path):
     path = _write(
         tmp_path,

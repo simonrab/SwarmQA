@@ -20,6 +20,7 @@ _BACKENDS = ("local", "vm", "cloud")
 _VIDEO_MODES = ("always", "on_failure", "exploratory_only")
 _PR_MODES = ("human", "autonomous")
 _MATURITIES = ("prototype", "shipped")
+_PLATFORMS = ("macos", "ios")
 _SHARD_STRATEGIES = ("intent", "suite", "exploratory_seed")
 _OVERRUN = ("drain", "cancel")
 _FAIL_ON = ("scripted", "any", "never")
@@ -63,6 +64,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "video.mode", config.video.mode, _VIDEO_MODES)
     _enum(errors, "pr.mode", config.pr.mode, _PR_MODES)
     _enum(errors, "app.maturity", config.app.maturity, _MATURITIES)
+    _enum(errors, "app.platform", config.app.platform, _PLATFORMS)
     _number_between(errors, "visual.threshold", config.visual.threshold, 0, 1)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
@@ -91,11 +93,13 @@ def validate_config(config: CampaignConfig) -> list[str]:
 
     _string_list(errors, "intents", config.intents, allow_blank=False)
     _string_list(errors, "app.launch_args", config.app.launch_args, allow_blank=True)
+    _string_list(errors, "app.simulators", config.app.simulators, allow_blank=False)
     _string_table(errors, "app.env", config.app.env)
     for field, value in (
         ("app.path", config.app.path),
         ("app.build_command", config.app.build_command),
         ("app.bundle_id", config.app.bundle_id),
+        ("app.simulator", config.app.simulator),
         ("vm.image", config.vm.image),
         ("cloud.endpoint_env", config.cloud.endpoint_env),
         ("cloud.token_env", config.cloud.token_env),
@@ -160,6 +164,9 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(app, "launch_args", config.app, "launch_args")
     _assign(app, "env", config.app, "env")
     _assign(app, "maturity", config.app, "maturity")
+    _assign(app, "platform", config.app, "platform")
+    _assign(app, "simulator", config.app, "simulator")
+    _assign(app, "simulators", config.app, "simulators")
 
     campaign = _section(document, "campaign", errors)
     _assign(campaign, "backend", config, "backend")

@@ -1,46 +1,96 @@
 # SwarmQA
 
-Autonomous QA runs campaigns against a macOS app: scripted flows, exploratory hunting, and visual diffs, spread across a small fleet of workers. It writes one merged report with screenshots, session video, replay JSON, and ticket drafts. Human-in-the-loop mode (the default) stops at a draft pull request. Autonomous mode retries failing intents until the run is green or a safety cap hits.
+SwarmQA is a command-line tool. It runs a QA campaign against a Mac app or an iOS Simulator app and writes one report.
 
-The product plan is in [docs/autonomous-qa-plan.md](docs/autonomous-qa-plan.md). Module contracts are in [docs/CONTRACTS.md](docs/CONTRACTS.md). Chunk ownership is in [docs/OWNERSHIP.md](docs/OWNERSHIP.md).
+A campaign can replay written steps. It can hunt toward a goal by clicking labeled controls. It can run a test command you already have. It can compare new screenshots with saved PNG baselines.
 
-Exploratory hunting defaults to a fast heuristic. Optional smarter backends and advisory UX friction metering:
+## iOS Simulator
 
-| Topic | Doc |
-| --- | --- |
-| Decision backends (heuristic → System One → computer use) | [docs/decision.md](docs/decision.md) |
-| UX friction (`friction_path`, gold-relative metrics) | [docs/friction.md](docs/friction.md) |
-| Exploratory budgets and findings | [docs/exploratory.md](docs/exploratory.md) |
-| Config fields | [docs/config.md](docs/config.md) |
+Set `app.platform` to `ios` and `app.simulator` to a device name. On a Mac with Xcode 26, this machine has iPhone 17, not iPhone 16. Check the names on your Mac with `xcrun simctl list devices available`.
 
-## Install
+```toml
+[app]
+platform = "ios"
+simulator = "iPhone 17"
+```
+
+The driver uses `xcrun simctl` to boot, install, launch, and screenshot. Taps and the accessibility tree use the `idb` command. `idb` is a separate install:
+
+```bash
+brew tap facebook/fb
+brew install facebook/fb/idb
+```
+
+Without `idb`, launch and screenshots can run, and the first tap stops.
+
+## Several workers
+
+The default is 2 workers on this machine. Mac workers on one desktop share one screen. iOS workers each need their own Simulator name in `app.simulators`.
+
+```toml
+[app]
+platform = "ios"
+simulators = ["iPhone 17", "iPhone 17 Pro"]
+
+[campaign]
+workers = 2
+```
+
+## Install and run
+
+You need Python 3.11 or newer.
 
 ```bash
 python -m pip install -e ".[dev]"
 aqa init
 ```
 
-`aqa init` writes `aqa.config.toml`, `templates/issue.md`, and `intents/` plus `reports/` directories.
-
-## Commands
+`aqa init` writes `aqa.config.toml`, `templates/issue.md`, and empty `intents/` and `reports/` directories. Pass `--dir` to choose a different directory.
 
 ```bash
 aqa run --app /path/to/MyApp.app --intent intents/smoke.md
-aqa run --app /path/to/MyApp.app --intent intents/ --backend cloud --workers 12 --max-spend 10 --spend-currency USD
-aqa record --app /path/to/MyApp.app --out intents/flow.json --interactive
-aqa report
-aqa status
-aqa baseline update --from-dir reports/<id>/media --baseline-dir baselines
 ```
 
-Locked defaults: two local workers, human PR mode, video always on. A cloud backend requires `max_spend` greater than zero. The sample cap is 10 USD.
+That command reads `aqa.config.toml`. The defaults are a local backend, 2 workers, video on, and human PR mode. It prints the report directory, `reports/<campaign-id>/`.
 
-Default `explorer.decision.mode = heuristic` keeps CI on FakeDriver with no model calls. Enable `cascade` (or `system_one` / `computer_use`) only when you have endpoints/commands configured — see [docs/decision.md](docs/decision.md) for privacy notes. Friction findings are advisory under `fail_on = scripted` (`explorer.friction.fail_ci` stays false by default).
+```bash
+aqa report
+aqa status
+aqa record --app /path/to/MyApp.app --out intents/flow.json --interactive
+```
 
-Off macOS, the driver factory uses the fake driver so tests and dry runs have a session without Accessibility permission.
+`aqa report` prints the latest `summary.md`. `aqa status` prints campaign progress. `aqa record --interactive` saves a flow you click through. `examples/intents/smoke.md` is a short scripted intent you can copy.
+
+A live Mac session needs Accessibility permission for the process that starts the app. Video also needs Screen Recording permission. Details are in [docs/driver.md](docs/driver.md).
+
+To copy screenshots into the baseline directory:
+
+```bash
+aqa baseline update --from-dir reports/<campaign-id>/media --baseline-dir baselines
+```
+
+## Reports and the PR loop
+
+Each campaign writes one report under `reports/<campaign-id>/`. Start with `summary.md`. Screenshots and video, when recorded, are under `media/`. A finding can include a replay JSON file.
+
+When the campaign has results, human mode writes one draft pull request and stops. It does not change the app under test. If the `gh` command is available, that draft is opened with `gh pr create --draft`. The draft file is still written when `gh` is missing.
+
+Screenshot checks compare pixels with saved baselines. See [docs/visual.md](docs/visual.md).
 
 ## Tests
 
 ```bash
 python -m pytest
 ```
+
+Tests use the fake driver. They do not need a Mac, Xcode, or `idb`.
+
+## More detail
+
+| Topic | Doc |
+| --- | --- |
+| Config fields | [docs/config.md](docs/config.md) |
+| macOS and iOS drivers | [docs/driver.md](docs/driver.md) |
+| Orchestrator | [docs/orchestrator.md](docs/orchestrator.md) |
+| Visual baselines | [docs/visual.md](docs/visual.md) |
+| PR loop | [docs/agents.md](docs/agents.md) |

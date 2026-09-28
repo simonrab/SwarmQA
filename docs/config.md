@@ -15,6 +15,7 @@
 | `spend.currency` | `USD` |
 | `gui_worker_warn_threshold` | `2` |
 | `app.maturity` | `shipped` |
+| `app.platform` | `macos` |
 | `budgets.on_budget` / `spend.overrun` | `drain` |
 | `fail_on` | `scripted` |
 | `pr.max_iterations` | `3` |
@@ -40,6 +41,9 @@ build_command = ""
 bundle_id = ""
 launch_args = []
 maturity = "shipped" # prototype | shipped
+platform = "macos" # macos | ios
+simulator = "iPhone 17" # name or UDID; used when platform = ios
+simulators = ["iPhone 17", "iPhone 17 Pro"] # one per concurrent iOS worker
 
 [app.env]
 FEATURE = "1"
@@ -225,6 +229,7 @@ Every message starts with its field path. `load_config` collects them and raises
 | `video.mode` is `always`, `on_failure`, or `exploratory_only` | `video.mode:` |
 | `pr.mode` is `human` or `autonomous` | `pr.mode:` |
 | `app.maturity` is `prototype` or `shipped` | `app.maturity:` |
+| `app.platform` is `macos` or `ios` | `app.platform:` |
 | `visual.threshold` is from 0 to 1 inclusive | `visual.threshold:` |
 | `spend.currency` is a non-empty string | `spend.currency:` |
 | cloud `spend.max_spend` is present and `> 0` | `spend.max_spend:` |
@@ -236,7 +241,7 @@ Every message starts with its field path. `load_config` collects them and raises
 | `computer_use.provider` is `command` or `fake`; `max_calls` `>= 0` | `explorer.decision.computer_use.*:` |
 | `explorer.friction.compare_to` is `gold` or `prior_p50`; `emit_threshold` 0..100 | `explorer.friction.*:` |
 
-The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, PR mode, or decision mode.
+The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, PR mode, platform, or decision mode. `app.simulators` is an array of non-empty strings. `app.simulator` is an optional string.
 
 A missing file, including a path that is a directory, raises `ConfigError(["config: not found"])`. Unreadable bytes and TOML syntax errors raise `ConfigError(["config: invalid toml"])`. A bad duration raises a field error on `budgets.max_wall_time_s` or `pr.max_wall_time_s` and includes the `parse_duration` reason. `90s` and `2h` load. `30` and `soon` fail. A table written as a scalar (`campaign = "local"`) is `campaign: must be a table`.
 
