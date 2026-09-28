@@ -33,6 +33,8 @@ class Observation:
     tried_menus: frozenset[tuple[str, ...]] = field(default_factory=frozenset)
     tree_summary: list[dict] = field(default_factory=list)
     screenshot_path: str | None = None
+    persona: str | None = None
+    friction_score_hint: int | None = None
 
 
 @dataclass

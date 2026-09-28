@@ -237,6 +237,10 @@ personas = ["expert", "first_time"]
 fail_ci = false
 compare_to = "gold"
 klm = true
+
+[explorer.friction.allow_step_ratio]
+"export-wizard" = 3.5
+s1 = 2.0
 """,
         encoding="utf-8",
     )
@@ -245,6 +249,160 @@ klm = true
     assert config.explorer.friction.min_extra_steps == 5
     assert config.explorer.friction.personas == ["expert", "first_time"]
     assert config.explorer.friction.fail_ci is False
+    assert config.explorer.friction.allow_step_ratio == {
+        "export-wizard": 3.5,
+        "s1": 2.0,
+    }
+
+
+def _backtrack_session() -> FrictionSession:
+    """Session with backtracks + enough steps to clear structural gates."""
+    session = FrictionSession(persona="expert")
+    path = [
+        _window("A", title="S0"),
+        _window("B", title="S1"),
+        _window("A", title="S0"),
+        _window("B", title="S1"),
+        _window("C", title="S2"),
+        _window("D", title="S3"),
+        _window("E", title="S4"),
+    ]
+    for index, tree in enumerate(path):
+        session.observe(tree, "click" if index else "search", f"k{index}", True)
+    return session
+
+
+def test_allow_step_ratio_blocks_emit():
+    from swarmqa.friction.emit import allow_ratio_from_tags, resolve_allow_ratio
+
+    assert allow_ratio_from_tags(["gold_steps:2", "allow_step_ratio:4.0"]) == 4.0
+    assert allow_ratio_from_tags(["other"]) is None
+
+    config = FrictionConfig(
+        emit_threshold=50,
+        min_extra_steps=3,
+        allow_step_ratio={"s1": 10.0},
+    )
+    session = _backtrack_session()
+    gold = resolve_gold(gold_steps=1, expected_controls=1)
+    assert gates_pass(session, gold, config, goal_directed=True, intent_id="s1") is False
+    assert (
+        gates_pass(
+            session,
+            gold,
+            config,
+            goal_directed=True,
+            intent_id="other",
+            tags=["allow_step_ratio:10"],
+        )
+        is False
+    )
+    assert gates_pass(session, gold, config, goal_directed=True, intent_id="other")
+    assert resolve_allow_ratio(config, intent_id="s1") == 10.0
+    assert resolve_allow_ratio(config, intent_id="s1", tags=["allow_step_ratio:2.5"]) == 2.5
+
+
+def test_wizard_discount_raises_threshold_and_halves_backtrack():
+    from swarmqa.friction.emit import metrics_for, suggests_wizard
+
+    assert suggests_wizard(locus="Export wizard")
+    assert suggests_wizard(tags=["onboarding"])
+    assert not suggests_wizard(locus="Export PDF")
+
+    config = FrictionConfig(emit_threshold=50, min_extra_steps=3)
+    session = _backtrack_session()
+    gold = resolve_gold(gold_steps=1, expected_controls=1)
+    plain = metrics_for(session, gold, klm=True, wizard_discount=False)
+    discounted = metrics_for(session, gold, klm=True, wizard_discount=True)
+    assert session.backtrack_rate > 0
+    assert int(discounted["score"]) < int(plain["score"])
+
+    assert gates_pass(session, gold, config, goal_directed=True, locus="Export")
+    # +10 threshold bump: raise base threshold so plain still emits but wizard may not.
+    high = FrictionConfig(emit_threshold=int(plain["score"]) - 5, min_extra_steps=3)
+    assert gates_pass(session, gold, high, goal_directed=True, locus="Export")
+    wizard_blocked = not gates_pass(
+        session,
+        gold,
+        high,
+        goal_directed=True,
+        locus="Export wizard",
+        tags=["wizard"],
+    )
+    # Either the +10 bump or the discounted score (or both) must change the gate.
+    assert wizard_blocked or int(discounted["score"]) < high.emit_threshold + 10
+
+
+def test_friction_fingerprint_stable_across_titles():
+    from swarmqa.reporter.findings import fingerprint_for
+
+    config = FrictionConfig(emit_threshold=50, min_extra_steps=3)
+    session = _backtrack_session()
+    gold = resolve_gold(gold_steps=1, expected_controls=1)
+    first = maybe_emit_friction(
+        session=session,
+        config=config,
+        gold=gold,
+        worker_id="w1",
+        backend="local",
+        shard_id="s1",
+        finding_id="f-1",
+        steps=["search", "click"],
+        environment={},
+        intent_id="export",
+        locus="Export PDF",
+        fingerprint_fn=fingerprint_for,
+    )
+    # Bump counters so the numeric title / details change while identity stays the same.
+    session.observe(_window("F", title="S5"), "click", "k5", True)
+    second = maybe_emit_friction(
+        session=session,
+        config=config,
+        gold=gold,
+        worker_id="w1",
+        backend="local",
+        shard_id="s1",
+        finding_id="f-2",
+        steps=["search", "click", "more"],
+        environment={},
+        intent_id="export",
+        locus="Export PDF",
+        fingerprint_fn=fingerprint_for,
+    )
+    assert first is not None and second is not None
+    assert first.fingerprint == second.fingerprint
+    identity = "export\nExport PDF\nexpert"
+    assert first.fingerprint == fingerprint_for("friction_path", identity, identity)
+
+
+def test_goal_reached_set_by_exploratory_hunt(tmp_path: Path):
+    """Happy-path hunt marks friction.goal_reached when evaluator returns done."""
+    app = make_app(tmp_path)
+    config = sample_config(app)
+    root = tmp_path / "reports" / "goal2"
+    work = root / "workers" / "w1"
+    driver = FakeDriver(app, work)
+    driver.set_tree(_window("Save"))
+    shard = Shard(id="s-goal2", kind="exploratory", name="save", goal="Save")
+
+    from swarmqa.explorer import exploratory as exploratory_mod
+
+    captured: list[FrictionSession] = []
+    original = exploratory_mod.FrictionSession
+
+    class _Capture(FrictionSession):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            captured.append(self)
+
+    exploratory_mod.FrictionSession = _Capture  # type: ignore[misc,assignment]
+    try:
+        result = run_exploratory(shard, driver, config, worker_id="w1", work_dir=work)
+    finally:
+        exploratory_mod.FrictionSession = original  # type: ignore[misc,assignment]
+    assert result.status == "passed"
+    assert captured, "expected FrictionSession to be constructed"
+    assert captured[0].goal_reached is True
 
 
 class _WizardDriver(FakeDriver):

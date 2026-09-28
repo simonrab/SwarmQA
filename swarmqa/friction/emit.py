@@ -7,6 +7,8 @@ from swarmqa.friction.score import friction_score
 from swarmqa.friction.session import FrictionSession
 from swarmqa.models import Finding, FrictionConfig
 
+_WIZARD_MARKERS = ("wizard", "form", "onboarding")
+
 
 def _severity_for(score: int) -> str:
     if score >= 80:
@@ -26,19 +28,68 @@ def _title(session: FrictionSession, gold: GoldResolution, score: int, step_rati
     return f"{step_ratio:.1f}× gold path (score {score})"
 
 
+def allow_ratio_from_tags(tags: list[str] | None) -> float | None:
+    """Parse ``allow_step_ratio:N`` from shard tags (first valid wins)."""
+    for tag in tags or []:
+        text = str(tag).strip().lower()
+        if not text.startswith("allow_step_ratio:"):
+            continue
+        raw = text.split(":", 1)[1].strip()
+        try:
+            return float(raw)
+        except ValueError:
+            continue
+    return None
+
+
+def resolve_allow_ratio(
+    config: FrictionConfig,
+    *,
+    intent_id: str = "",
+    tags: list[str] | None = None,
+) -> float | None:
+    """Shard tag overrides config table; both are inclusive ceilings."""
+    tagged = allow_ratio_from_tags(tags)
+    if tagged is not None:
+        return tagged
+    if intent_id and intent_id in config.allow_step_ratio:
+        return float(config.allow_step_ratio[intent_id])
+    return None
+
+
+def suggests_wizard(
+    *,
+    intent_id: str = "",
+    locus: str = "",
+    tags: list[str] | None = None,
+) -> bool:
+    """True when intent/locus/tags look like a wizard, form, or onboarding flow."""
+    haystacks = [intent_id, locus, *(tags or [])]
+    for item in haystacks:
+        lowered = str(item).strip().lower()
+        if any(marker in lowered for marker in _WIZARD_MARKERS):
+            return True
+    return False
+
+
 def metrics_for(
     session: FrictionSession,
     gold: GoldResolution,
     *,
     klm: bool = True,
+    wizard_discount: bool = False,
 ) -> dict[str, float | int | str | bool]:
     steps_gold = max(1, gold.steps_gold)
     step_ratio = session.steps_observed / float(steps_gold)
     # Simple KLM proxy: each observed step ≈ one operator act; ratio tracks path length.
     klm_ratio = step_ratio if klm else 1.0
+    backtrack_rate = session.backtrack_rate
+    if wizard_discount:
+        # Field-to-field wizard transitions backtrack often; discount for gates/score.
+        backtrack_rate = backtrack_rate * 0.5
     score = friction_score(
         step_ratio=step_ratio,
-        backtrack_rate=session.backtrack_rate,
+        backtrack_rate=backtrack_rate,
         recovery_loops=session.recovery_loops,
         dead_end_count=session.dead_end_count,
         klm_ratio=klm_ratio,
@@ -62,6 +113,8 @@ def metrics_for(
         "max_actionable_count": session.max_actionable_count,
         "gold_source": gold.source,
         "persona": session.persona.name,
+        "goal_reached": session.goal_reached,
+        "wizard_discount": wizard_discount,
         "score": score,
     }
 
@@ -74,6 +127,10 @@ def gates_pass(
     goal_directed: bool,
     score: int | None = None,
     step_ratio: float | None = None,
+    allow_ratio: float | None = None,
+    intent_id: str = "",
+    locus: str = "",
+    tags: list[str] | None = None,
 ) -> bool:
     """Return True when an advisory friction finding should be emitted."""
     if not config.enabled:
@@ -83,10 +140,16 @@ def gates_pass(
     if session.steps_observed <= 0:
         return False
 
-    metrics = metrics_for(session, gold, klm=config.klm)
+    wizard = suggests_wizard(intent_id=intent_id, locus=locus, tags=tags)
+    metrics = metrics_for(session, gold, klm=config.klm, wizard_discount=wizard)
     resolved_score = score if score is not None else int(metrics["score"])
     resolved_ratio = step_ratio if step_ratio is not None else float(metrics["step_ratio"])
     extra_steps = session.steps_observed - gold.steps_gold
+
+    if allow_ratio is None:
+        allow_ratio = resolve_allow_ratio(config, intent_id=intent_id, tags=tags)
+    if allow_ratio is not None and resolved_ratio <= allow_ratio:
+        return False
 
     structural_extra = extra_steps >= config.min_extra_steps
     structural_dead_end = session.dead_end_count >= 1
@@ -107,6 +170,8 @@ def gates_pass(
         return False
 
     threshold = config.emit_threshold
+    if wizard:
+        threshold = threshold + 10
     if gold.source == "synthesized":
         threshold = max(threshold, 65)
         # Synthesized gold without pathology still needs the step gate.
@@ -135,13 +200,18 @@ def build_friction_finding(
     environment: dict[str, str],
     intent_id: str = "",
     locus: str = "",
+    tags: list[str] | None = None,
+    allow_ratio: float | None = None,
     fingerprint_fn,
 ) -> Finding | None:
     """Construct a ``friction_path`` finding when gates pass, else ``None``."""
     goal_directed = bool(intent_id or locus or steps)
-    metrics = metrics_for(session, gold, klm=config.klm)
+    wizard = suggests_wizard(intent_id=intent_id, locus=locus, tags=tags)
+    metrics = metrics_for(session, gold, klm=config.klm, wizard_discount=wizard)
     score = int(metrics["score"])
     step_ratio = float(metrics["step_ratio"])
+    if allow_ratio is None:
+        allow_ratio = resolve_allow_ratio(config, intent_id=intent_id, tags=tags)
     if not gates_pass(
         session,
         gold,
@@ -149,11 +219,16 @@ def build_friction_finding(
         goal_directed=goal_directed,
         score=score,
         step_ratio=step_ratio,
+        allow_ratio=allow_ratio,
+        intent_id=intent_id,
+        locus=locus,
+        tags=tags,
     ):
         return None
 
     title = _title(session, gold, score, step_ratio)
-    target = f"{intent_id}|{locus}|{session.persona.name}"
+    # Dedup identity excludes the numeric title so score drift does not fork issues.
+    identity = f"{intent_id}\n{locus}\n{session.persona.name}"
     details = (
         f"Friction score {score}: {session.steps_observed} steps vs gold "
         f"{gold.steps_gold} ({gold.source}); backtrack_rate="
@@ -168,7 +243,7 @@ def build_friction_finding(
         severity=_severity_for(score),  # type: ignore[arg-type]
         kind="friction_path",
         steps=list(steps),
-        fingerprint=fingerprint_fn("friction_path", title, target),
+        fingerprint=fingerprint_fn("friction_path", identity, identity),
         worker_id=worker_id,
         backend=backend,
         shard_id=shard_id,
@@ -194,6 +269,8 @@ def maybe_emit_friction(
     environment: dict[str, str],
     intent_id: str = "",
     locus: str = "",
+    tags: list[str] | None = None,
+    allow_ratio: float | None = None,
     fingerprint_fn,
 ) -> Finding | None:
     if session is None or not config.enabled:
@@ -204,6 +281,8 @@ def maybe_emit_friction(
         shortest_success=shortest_success,
         expected_controls=expected_controls,
     )
+    if allow_ratio is None:
+        allow_ratio = resolve_allow_ratio(config, intent_id=intent_id, tags=tags)
     return build_friction_finding(
         session=session,
         gold=resolved,
@@ -216,6 +295,8 @@ def maybe_emit_friction(
         environment=environment,
         intent_id=intent_id,
         locus=locus,
+        tags=tags,
+        allow_ratio=allow_ratio,
         fingerprint_fn=fingerprint_fn,
     )
 
@@ -223,8 +304,11 @@ def maybe_emit_friction(
 # Re-export for callers that type-check gold sources beside emit.
 __all__ = [
     "GoldSource",
+    "allow_ratio_from_tags",
     "build_friction_finding",
     "gates_pass",
     "maybe_emit_friction",
     "metrics_for",
+    "resolve_allow_ratio",
+    "suggests_wizard",
 ]

@@ -23,7 +23,9 @@ __all__ = [
 def build_evaluator(config: CampaignConfig) -> DecisionEvaluator:
     """Build the DecisionEvaluator for ``config.explorer.decision``."""
     decision = config.explorer.decision
-    heuristic = HeuristicEvaluator()
+    # Default heuristic mode keeps classic button→menu order (exploratory parity).
+    # Cascade / system_one may reorder by persona when Observation.persona is set.
+    heuristic = HeuristicEvaluator(respect_persona=(decision.mode != "heuristic"))
 
     system_one = None
     if decision.mode in ("system_one", "cascade"):

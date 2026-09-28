@@ -295,6 +295,19 @@ def _apply_friction(
     _assign(friction, "fail_ci", config.explorer.friction, "fail_ci")
     _assign(friction, "compare_to", config.explorer.friction, "compare_to")
     _assign(friction, "klm", config.explorer.friction, "klm")
+    if "allow_step_ratio" in friction:
+        raw = friction["allow_step_ratio"]
+        if isinstance(raw, dict):
+            # Coerce numeric values to float; validation catches bad shapes.
+            coerced: dict[str, float] = {}
+            for key, item in raw.items():
+                if isinstance(key, str) and isinstance(item, (int, float)) and type(item) is not bool:
+                    coerced[key] = float(item)
+                else:
+                    coerced[key] = item  # type: ignore[assignment]
+            config.explorer.friction.allow_step_ratio = coerced
+        else:
+            config.explorer.friction.allow_step_ratio = raw  # type: ignore[assignment]
 
 
 def _validate_friction(errors: list[str], config: CampaignConfig) -> None:
@@ -315,6 +328,7 @@ def _validate_friction(errors: list[str], config: CampaignConfig) -> None:
     _bool_field(errors, "explorer.friction.fail_ci", friction.fail_ci)
     _enum(errors, "explorer.friction.compare_to", friction.compare_to, _FRICTION_COMPARE)
     _bool_field(errors, "explorer.friction.klm", friction.klm)
+    _float_table(errors, "explorer.friction.allow_step_ratio", friction.allow_step_ratio)
 
 
 def _validate_decision(errors: list[str], config: CampaignConfig) -> None:
@@ -547,3 +561,14 @@ def _string_table(errors: list[str], field: str, value: object) -> None:
     ):
         return
     errors.append(f"{field}: must be a table of strings")
+
+
+def _float_table(errors: list[str], field: str, value: object) -> None:
+    if isinstance(value, dict) and all(
+        isinstance(key, str)
+        and isinstance(item, (int, float))
+        and type(item) is not bool
+        for key, item in value.items()
+    ):
+        return
+    errors.append(f"{field}: must be a table of numbers")

@@ -142,6 +142,10 @@ class FrictionConfig:
     ``fail_ci`` is reserved and not wired to ``fail_on`` yet (default false).
     Under ``fail_on=scripted``, exploratory ``friction_path`` findings stay
     exit 0 like other exploratory findings.
+
+    ``allow_step_ratio`` maps intent_id → max allowed ``step_ratio`` (inclusive);
+    hunts at or below that ratio do not emit. Shard tags may override via
+    ``allow_step_ratio:N``.
     """
 
     enabled: bool = True
@@ -152,6 +156,7 @@ class FrictionConfig:
     fail_ci: bool = False
     compare_to: FrictionCompareTo = "gold"
     klm: bool = True
+    allow_step_ratio: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass

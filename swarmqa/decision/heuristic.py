@@ -374,44 +374,48 @@ def collect_candidates(obs: Observation) -> list[Candidate]:
 class HeuristicEvaluator:
     """Encode the pre-decision-backend exploratory strategy order.
 
+    Default (``respect_persona=False``) — parity with classic exploratory:
+
     1. Prefer clicking enabled buttons that share goal words (tree order).
     2. Else menu paths that share goal words / one-item paths for absent names.
     3. Else if prototype and expected still absent → missing.
     4. Else done.
+
+    When ``respect_persona=True`` and ``obs.persona`` is set:
+
+    - ``expert``: try menus before clicks when both exist.
+    - ``first_time``: clicks first (same as default); optionally one deliberate
+      near-miss click when ≥2 matching buttons exist.
     """
 
+    def __init__(self, *, respect_persona: bool = False):
+        self.respect_persona = respect_persona
+        self._wrong_picks_used = 0
+
     def decide(self, obs: Observation) -> DecisionAction:
-        for element in walk(obs.elements):
-            if element.role.lower() != "button" or not element.enabled:
-                continue
-            names = element_names(element)
-            if not any(shares(name, obs.tokens) for name in names):
-                continue
-            key = click_key(element)
-            if key in obs.tried_clicks:
-                continue
-            label = element.label or element.identifier or element.role
-            return DecisionAction(
-                kind="click",
-                query=query_for(element),
-                label=label,
-                rationale=f"click enabled button sharing goal words: {label}",
-            )
+        persona = (obs.persona or "").strip().lower() if self.respect_persona else ""
+        expert = persona == "expert"
+        first_time = persona == "first_time"
+
+        if expert:
+            menu = self._first_menu(obs)
+            if menu is not None:
+                return menu
+            click = self._first_click(obs, first_time=False)
+            if click is not None:
+                return click
+        else:
+            click = self._first_click(obs, first_time=first_time)
+            if click is not None:
+                return click
+            if goal_satisfied(obs.elements, obs.expected):
+                return DecisionAction(kind="done", rationale="expected controls present")
+            menu = self._first_menu(obs)
+            if menu is not None:
+                return menu
 
         if goal_satisfied(obs.elements, obs.expected):
             return DecisionAction(kind="done", rationale="expected controls present")
-
-        for path in exploration_menu_paths(obs.elements, obs.tokens, obs.expected):
-            key = tuple(path)
-            if key in obs.tried_menus:
-                continue
-            label = " > ".join(path)
-            return DecisionAction(
-                kind="menu",
-                menu_path=list(path),
-                label=label,
-                rationale=f"try menu path: {label}",
-            )
 
         if obs.maturity == "prototype":
             absent = absent_expected(obs.elements, obs.expected)
@@ -424,6 +428,60 @@ class HeuristicEvaluator:
                 )
 
         return DecisionAction(kind="done", rationale="no remaining exploratory work")
+
+    def _click_candidates(self, obs: Observation) -> list[tuple[UIElement, str]]:
+        found: list[tuple[UIElement, str]] = []
+        for element in walk(obs.elements):
+            if element.role.lower() != "button" or not element.enabled:
+                continue
+            names = element_names(element)
+            if not any(shares(name, obs.tokens) for name in names):
+                continue
+            key = click_key(element)
+            if key in obs.tried_clicks:
+                continue
+            label = element.label or element.identifier or element.role
+            found.append((element, label))
+        return found
+
+    def _first_click(
+        self, obs: Observation, *, first_time: bool
+    ) -> DecisionAction | None:
+        candidates = self._click_candidates(obs)
+        if not candidates:
+            return None
+        index = 0
+        rationale_prefix = "click enabled button sharing goal words"
+        if (
+            first_time
+            and self._wrong_picks_used < 1
+            and len(candidates) >= 2
+        ):
+            # Deliberate near-miss: second matching button (shares a token).
+            index = 1
+            self._wrong_picks_used += 1
+            rationale_prefix = "first_time near-miss click"
+        element, label = candidates[index]
+        return DecisionAction(
+            kind="click",
+            query=query_for(element),
+            label=label,
+            rationale=f"{rationale_prefix}: {label}",
+        )
+
+    def _first_menu(self, obs: Observation) -> DecisionAction | None:
+        for path in exploration_menu_paths(obs.elements, obs.tokens, obs.expected):
+            key = tuple(path)
+            if key in obs.tried_menus:
+                continue
+            label = " > ".join(path)
+            return DecisionAction(
+                kind="menu",
+                menu_path=list(path),
+                label=label,
+                rationale=f"try menu path: {label}",
+            )
+        return None
 
 
 # Private aliases matching exploratory.py historical names.

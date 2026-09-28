@@ -10,7 +10,7 @@ from `explorer.decision`, or inject `evaluator=` in tests.
 | --- | --- |
 | `heuristic` (default) | Classic button → menu → missing/done order. CI / FakeDriver unchanged. |
 | `system_one` | Try System One first (escalate threshold 0). Fail-open to heuristic on errors, low confidence, or exhausted `max_model_calls`. |
-| `cascade` | Heuristic first; System One when `stall_count >= escalate_after`; computer-use if System One is missing/failed and still stalled. Fail-open to heuristic. |
+| `cascade` | Heuristic first; System One when `stall_count >= escalate_after`; computer-use if System One is missing/failed, still stalled, **and** `friction_score_hint >= 50`. Fail-open to heuristic. |
 | `computer_use` | After `stall_count >= escalate_after`, shell-out (or fake) backend. Fail-open to heuristic. |
 
 System One is a typed chooser over a **finite** candidate list (enabled buttons that share goal words, then goal-related menu paths — the same pool the heuristic considers). It does not free-form drive the mouse.
@@ -74,6 +74,9 @@ sends UI text off-box.
 - Timeout: `decision.model_timeout_s`. Stdlib `subprocess` only.
 - CI: set `computer_use.provider = "fake"` (see `swarmqa.decision.providers.fake`).
   Default mode stays `heuristic` so no live commands run in CI.
+- In **cascade** mode, stage 3 waits for `Observation.friction_score_hint >= 50`
+  (live rough score from the friction session) in addition to the stall gate.
+  Explicit `computer_use` mode stays stall-only.
 
 ## Cascade fail-open
 

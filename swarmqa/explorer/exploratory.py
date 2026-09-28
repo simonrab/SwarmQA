@@ -19,6 +19,7 @@ from swarmqa.decision.heuristic import (
     click_key,
     click_key_from_query,
     element_names as _element_names,
+    goal_satisfied,
     matches_name as _matches_name,
     menu_paths as _menu_paths,
     parse_goal as _parse_goal,
@@ -37,7 +38,7 @@ from swarmqa.errors import (
     ElementNotFoundError,
     UITimeoutError,
 )
-from swarmqa.friction.emit import maybe_emit_friction
+from swarmqa.friction.emit import metrics_for, maybe_emit_friction, resolve_allow_ratio
 from swarmqa.friction.gold import resolve_gold, scripted_steps_from_shard
 from swarmqa.friction.session import FrictionSession
 from swarmqa.models import (
@@ -261,6 +262,7 @@ class _Session:
         while not self.abort:
             action = self.evaluator.decide(self._observation(tree))
             if action.kind in ("done", "noop"):
+                self._mark_goal_reached(tree)
                 return
             if action.kind == "missing":
                 self._emit_missing(tree)
@@ -276,6 +278,7 @@ class _Session:
             return
 
     def finish(self, started_at: str, started_mono: float) -> WorkerResult:
+        self._mark_goal_reached_on_finish()
         self._maybe_emit_friction()
         video_path = self._stop_video()
         status = self._status()
@@ -308,6 +311,33 @@ class _Session:
             shard_kind=self.shard.kind,
         )
 
+    def _mark_goal_reached(self, tree: list[UIElement] | None) -> None:
+        """Set friction.goal_reached when done/noop and the goal looks satisfied."""
+        if self.friction is None or self.friction.goal_reached:
+            return
+        if any(item.kind == "missing_control" for item in self.findings):
+            return
+        if tree is not None and self.expected and goal_satisfied(tree, self.expected):
+            self.friction.goal_reached = True
+            return
+        # done/noop after at least one tree observe / act, with no missing finding.
+        if self.friction.steps_observed > 0:
+            self.friction.goal_reached = True
+
+    def _mark_goal_reached_on_finish(self) -> None:
+        if self.friction is None or self.friction.goal_reached:
+            return
+        if self.fatal:
+            return
+        if any(
+            item.kind in ("crash", "missing_control", "launch", "unresponsive")
+            for item in self.findings
+        ):
+            return
+        # Passed-looking hunt with progress and no functional findings.
+        if not self.findings and self.friction.steps_observed > 0:
+            self.friction.goal_reached = True
+
     def _maybe_emit_friction(self) -> None:
         if self.friction is None:
             return
@@ -316,6 +346,11 @@ class _Session:
         gold = resolve_gold(
             scripted_steps=scripted,
             expected_controls=len(self.expected),
+        )
+        intent_id = self.shard.id or self.shard.name or ""
+        tags = list(self.shard.tags or [])
+        allow_ratio = resolve_allow_ratio(
+            friction_cfg, intent_id=intent_id, tags=tags
         )
         finding = maybe_emit_friction(
             session=self.friction,
@@ -328,8 +363,10 @@ class _Session:
             finding_id=f"f-{len(self.findings) + 1}",
             steps=list(self.narrative),
             environment=dict(self.environment),
-            intent_id=self.shard.id or self.shard.name or "",
+            intent_id=intent_id,
             locus=self.goal,
+            tags=tags,
+            allow_ratio=allow_ratio,
             fingerprint_fn=_fingerprint,
         )
         if finding is None:
@@ -355,7 +392,21 @@ class _Session:
         except Exception:
             return None
 
+    def _friction_score_hint(self) -> int | None:
+        if self.friction is None or self.friction.steps_observed <= 0:
+            return None
+        scripted = scripted_steps_from_shard(self.shard)
+        gold = resolve_gold(
+            scripted_steps=scripted,
+            expected_controls=len(self.expected),
+        )
+        metrics = metrics_for(
+            self.friction, gold, klm=self.config.explorer.friction.klm
+        )
+        return int(metrics["score"])
+
     def _observation(self, tree: list[UIElement]) -> Observation:
+        persona = self.friction.persona.name if self.friction is not None else None
         return Observation(
             goal=self.goal,
             tokens=list(self.tokens),
@@ -367,6 +418,8 @@ class _Session:
             tried_clicks=frozenset(self._tried_clicks),
             tried_menus=frozenset(self._tried_menus),
             tree_summary=summarize_tree(tree),
+            persona=persona,
+            friction_score_hint=self._friction_score_hint(),
         )
 
     def _act_click(self, tree: list[UIElement], action: DecisionAction) -> bool:

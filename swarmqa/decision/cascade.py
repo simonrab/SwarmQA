@@ -8,6 +8,9 @@ from swarmqa.decision.heuristic import HeuristicEvaluator
 from swarmqa.decision.protocol import DecisionAction, DecisionEvaluator, Observation
 from swarmqa.models import DecisionConfig
 
+# Cascade mode only probes computer-use once friction is already high.
+_CASCADE_CU_FRICTION_FLOOR = 50
+
 
 def _load_system_one():
     """Import System One when PR2 has landed; otherwise ``None``."""
@@ -40,8 +43,10 @@ class CascadeEvaluator:
       Cached by tree fingerprint when ``cache_observations`` is true.
       Fail-open: ``system_one`` mode returns heuristic; ``cascade`` continues.
 
-    Stage 3 — computer-use when ``mode`` is ``computer_use`` / ``cascade``
-      and ``stall_count >= escalate_after``.
+    Stage 3 — computer-use:
+      - ``computer_use`` mode: stall-only (``stall_count >= escalate_after``).
+      - ``cascade`` mode: stall **and** ``friction_score_hint >= 50`` so CU
+        confirms high-friction loci rather than fishing for findings.
 
     Shared ``max_model_calls`` meters both model stages; computer-use also
     respects ``computer_use.max_calls``.
@@ -56,7 +61,8 @@ class CascadeEvaluator:
         computer_use: ComputerUseEvaluator | None = None,
     ):
         self.config = config or DecisionConfig()
-        self._fallback = fallback or HeuristicEvaluator()
+        respect = self.config.mode != "heuristic"
+        self._fallback = fallback or HeuristicEvaluator(respect_persona=respect)
         self._model_calls = 0
         self._cache = (
             ObservationCache() if self.config.cache_observations else None
@@ -80,7 +86,8 @@ class CascadeEvaluator:
         try:
             base = self._fallback.decide(obs)
         except Exception:
-            base = HeuristicEvaluator().decide(obs)
+            respect = self.config.mode != "heuristic"
+            base = HeuristicEvaluator(respect_persona=respect).decide(obs)
 
         mode = self.config.mode
         if mode == "heuristic":
@@ -103,6 +110,10 @@ class CascadeEvaluator:
         if mode in ("computer_use", "cascade"):
             if obs.stall_count < self.config.escalate_after:
                 return base
+            if mode == "cascade":
+                hint = obs.friction_score_hint
+                if hint is None or hint < _CASCADE_CU_FRICTION_FLOOR:
+                    return base
             self._computer_use.set_model_calls_used(self._model_calls)
             if self._computer_use.remaining_calls() <= 0:
                 return base

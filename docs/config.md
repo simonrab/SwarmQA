@@ -140,6 +140,7 @@ personas = ["expert", "first_time"]
 fail_ci = false
 compare_to = "gold" # gold | prior_p50
 klm = true
+# Optional: [explorer.friction.allow_step_ratio] intent_id = 3.5
 
 [suite]
 command = "xcodebuild test -scheme MyApp"

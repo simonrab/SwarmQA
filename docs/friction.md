@@ -16,7 +16,10 @@ Emit only when all of these hold:
 1. Friction is enabled (`explorer.friction.enabled`, default true).
 2. The hunt is goal-directed (has a goal / intent locus).
 3. Score ≥ `emit_threshold` (default **50**). If gold is **synthesized**
-   (no scripted sibling / provided gold), the floor is **65**.
+   (no scripted sibling / provided gold), the floor is **65**. Wizard / form /
+   onboarding flows (substring match on intent id, locus, or tags) raise the
+   effective threshold by **+10**, and gate scoring discounts `backtrack_rate`
+   by half (`backtrack_rate * 0.5`) so field-to-field transitions stay quieter.
 4. At least one structural signal:
    - `steps_observed - steps_gold ≥ min_extra_steps` (default **3**), or
    - `dead_end_count ≥ 1`, or
@@ -24,9 +27,19 @@ Emit only when all of these hold:
    - `backtrack_rate ≥ min_backtrack_rate` (default **0.15**) *and* the hunt
      also has extra steps or dead-end/recovery pathology (short happy paths
      stay silent).
+5. `step_ratio` is above any per-intent allow ceiling (see
+   `allow_step_ratio` below). Ratios at or below the ceiling do **not** emit.
 
 Titles always lead with a number, for example `3.2× gold path (score 72)` or
 `4 backtracks (score 55)`.
+
+Dedup fingerprint identity is `friction_path` + `intent_id` + `locus` +
+`persona` (not the numeric title), so score drift does not fork duplicate
+issues. `Finding.title` still carries the numeric headline.
+
+`FrictionSession.goal_reached` is set when the evaluator returns `done`/`noop`
+with expected controls present (or after at least one observe with no missing
+finding), and reinforced on finish for passed-looking hunts.
 
 ## Gold path
 
@@ -64,14 +77,20 @@ change), dead clicks, stall length, choice entropy, and actionable counts.
 ## Personas
 
 `explorer.friction.personas` defaults to `["expert", "first_time"]`. The hunt
-records the first persona on `FrictionSession` (policy hints in
-`swarmqa.friction.personas`). Decision backends may consume those hints later;
-metering works without them.
+records the first persona on `FrictionSession` and stamps `Observation.persona`
+for decision backends.
 
 | Persona | Hint |
 | --- | --- |
 | `first_time` | Prefer visible labels; at most one wrong-label pick then recover; prefer Back/Cancel on dead ends |
 | `expert` | Prefer menus / gold-biased shortcuts |
+
+**Heuristic parity:** default `explorer.decision.mode = heuristic` keeps classic
+button → menu order (`respect_persona=False`) so FakeDriver exploratory tests
+stay green even though `personas[0]` is `expert`. When mode is `cascade` or
+`system_one`, `HeuristicEvaluator(respect_persona=True)` applies the table
+above (expert: menus before clicks; first_time: clicks first + optional one
+near-miss).
 
 ## Config
 
@@ -85,6 +104,10 @@ personas = ["expert", "first_time"]
 fail_ci = false
 compare_to = "gold"   # gold | prior_p50
 klm = true
+
+# Optional per-intent ceilings (inclusive). Shard tag allow_step_ratio:N overrides.
+[explorer.friction.allow_step_ratio]
+"export-wizard" = 3.5
 ```
 
 ### Advisory posture and `fail_ci`
@@ -105,5 +128,6 @@ only. Functional findings stay under **## Findings**.
 ## Tests
 
 `tests/test_friction.py` covers score math, backtrack detection, emit gates,
+`allow_step_ratio`, wizard discount, fingerprint stability, `goal_reached`,
 summary sectioning, config load, a dedicated FakeDriver wizard that **does**
 emit, and a short happy-path hunt that stays quiet.

@@ -432,7 +432,7 @@ def test_computer_use_skips_when_not_stalled():
 
 
 def test_cascade_heuristic_to_computer_use_when_system_one_missing(monkeypatch):
-    """If System One is unavailable, cascade still escalates to CU."""
+    """If System One is unavailable, cascade still escalates to CU when friction is high."""
     from swarmqa.decision.cascade import CascadeEvaluator
     from swarmqa.decision.computer_use import ComputerUseEvaluator
     from swarmqa.decision.providers.fake import FakeComputerUseProvider
@@ -463,11 +463,161 @@ def test_cascade_heuristic_to_computer_use_when_system_one_missing(monkeypatch):
         stall_count=1,
         tried_menus=frozenset({("Export",)}),
         screenshot_path="/tmp/unused.png",
+        friction_score_hint=55,
     )
     action = cascade.decide(obs)
     assert action.kind == "menu"
     assert action.menu_path == ["File", "Export"]
     assert fake.calls == 1
+
+
+def test_cascade_cu_requires_friction_score_hint():
+    from swarmqa.decision.cascade import CascadeEvaluator
+    from swarmqa.decision.computer_use import ComputerUseEvaluator
+    from swarmqa.decision.providers.fake import FakeComputerUseProvider
+    from swarmqa.models import ComputerUseConfig
+
+    fake = FakeComputerUseProvider(
+        script=[{"action": "menu", "path": ["File", "Export"]}]
+    )
+    decision = DecisionConfig(
+        mode="cascade",
+        escalate_after=1,
+        computer_use=ComputerUseConfig(provider="fake", max_calls=3),
+    )
+    cu = ComputerUseEvaluator(decision, provider=fake)
+    cascade = CascadeEvaluator(decision, computer_use=cu, system_one=None)
+    cascade._system_one = None
+    tokens, expected = parse_goal("Export")
+    low = Observation(
+        goal="Export",
+        tokens=tokens,
+        expected=expected,
+        elements=_framed_tree(),
+        maturity="shipped",
+        stall_count=1,
+        tried_menus=frozenset({("Export",)}),
+        screenshot_path="/tmp/unused.png",
+        friction_score_hint=40,
+    )
+    blocked = cascade.decide(low)
+    assert fake.calls == 0
+    assert blocked.kind == "done"
+
+    none_hint = Observation(
+        goal="Export",
+        tokens=tokens,
+        expected=expected,
+        elements=_framed_tree(),
+        maturity="shipped",
+        stall_count=1,
+        tried_menus=frozenset({("Export",)}),
+        screenshot_path="/tmp/unused.png",
+        friction_score_hint=None,
+    )
+    assert cascade.decide(none_hint).kind == "done"
+    assert fake.calls == 0
+
+
+def test_computer_use_mode_ignores_friction_hint():
+    """Explicit computer_use mode stays stall-only (no friction_score_hint gate)."""
+    from swarmqa.decision.cascade import CascadeEvaluator
+    from swarmqa.decision.computer_use import ComputerUseEvaluator
+    from swarmqa.decision.providers.fake import FakeComputerUseProvider
+    from swarmqa.models import ComputerUseConfig
+
+    fake = FakeComputerUseProvider(
+        script=[{"action": "click", "x": 120, "y": 50}]
+    )
+    decision = DecisionConfig(
+        mode="computer_use",
+        escalate_after=1,
+        computer_use=ComputerUseConfig(provider="fake", max_calls=3),
+    )
+    cu = ComputerUseEvaluator(decision, provider=fake)
+    cascade = CascadeEvaluator(decision, computer_use=cu)
+    tokens, expected = parse_goal("Export")
+    obs = Observation(
+        goal="Export",
+        tokens=tokens,
+        expected=expected,
+        elements=_framed_tree(),
+        maturity="shipped",
+        stall_count=1,
+        tried_menus=frozenset({("Export",)}),
+        screenshot_path="/tmp/unused.png",
+        friction_score_hint=None,
+    )
+    action = cascade.decide(obs)
+    assert action.kind == "click"
+    assert fake.calls == 1
+
+
+def test_persona_menu_first_only_when_respect_persona():
+    tree = [
+        UIElement(
+            role="window",
+            label="Sample",
+            children=[
+                UIElement(role="button", label="Export"),
+                UIElement(
+                    role="menubar",
+                    label="Menu",
+                    children=[
+                        UIElement(
+                            role="menu",
+                            label="File",
+                            children=[UIElement(role="menuitem", label="Export")],
+                        )
+                    ],
+                ),
+            ],
+        )
+    ]
+    default = HeuristicEvaluator().decide(
+        _obs(goal="Export", tree=tree, stall_count=0)
+    )
+    assert default.kind == "click"
+    assert default.query is not None
+    assert default.query.label == "Export"
+
+    expert = HeuristicEvaluator(respect_persona=True).decide(
+        Observation(
+            goal="Export",
+            tokens=parse_goal("Export")[0],
+            expected=parse_goal("Export")[1],
+            elements=tree,
+            maturity="shipped",
+            persona="expert",
+        )
+    )
+    assert expert.kind == "menu"
+    assert expert.menu_path == ["File", "Export"]
+
+    first_time = HeuristicEvaluator(respect_persona=True).decide(
+        Observation(
+            goal="Export",
+            tokens=parse_goal("Export")[0],
+            expected=parse_goal("Export")[1],
+            elements=tree,
+            maturity="shipped",
+            persona="first_time",
+        )
+    )
+    assert first_time.kind == "click"
+
+    # Without respect_persona, persona stamp must not reorder.
+    stamped = HeuristicEvaluator(respect_persona=False).decide(
+        Observation(
+            goal="Export",
+            tokens=parse_goal("Export")[0],
+            expected=parse_goal("Export")[1],
+            elements=tree,
+            maturity="shipped",
+            persona="expert",
+        )
+    )
+    assert stamped.kind == "click"
 
 
 def test_fake_system_one_returns_chosen_click():
