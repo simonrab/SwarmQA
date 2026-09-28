@@ -161,7 +161,8 @@ Markdown step grammar (one action per bullet):
 `run_exploratory(...) -> WorkerResult` within `explorer.max_steps` and `explorer.max_time_s`:
 
 - Launch the app. A crash or missing bundle is a finding, same severity rules as C4.
-- Strategies, in order, stopping when the goal tokens are satisfied or the budget ends: search the accessibility tree for labels that share a word with the goal; click enabled buttons in that set; try menu bar paths that match goal words; if `maturity == "prototype"` and an expected-looking control from the goal is absent, emit `missing_control` (a finding, not a silent skip).
+- Hunt loop is observe → decide → act. `swarmqa.decision.build_evaluator(config)` supplies the `DecisionEvaluator`; tests may pass `evaluator=` to inject one. Default `explorer.decision.mode = heuristic` preserves the classic strategy order.
+- Heuristic strategies, in order, stopping when the evaluator returns done or the budget ends: search the accessibility tree for labels that share a word with the goal; click enabled buttons in that set; try menu bar paths that match goal words; if `maturity == "prototype"` and an expected-looking control from the goal is absent, emit `missing_control` (a finding, not a silent skip).
 - Detect `AppCrashedError` (`crash`), `UITimeoutError` (`unresponsive`), and elements whose label or value contains `error` or `empty` (`error_state`).
 - Record a short hypothesis string in `finding.details` (for example `Settings gear missing — trying menu bar`).
 - Status is `passed` when no findings were recorded, `failed` when findings exist.

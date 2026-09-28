@@ -28,7 +28,11 @@ FindingKind = Literal[
     "unresponsive",
     "error_state",
     "launch",
+    "friction_path",
 ]
+DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
+SystemOneProvider = Literal["http", "fake"]
+ComputerUseProvider = Literal["command", "fake"]
 ActionType = Literal[
     "click",
     "type",
@@ -103,10 +107,39 @@ class VisualConfig:
 
 
 @dataclass
+class SystemOneConfig:
+    provider: SystemOneProvider = "http"
+    endpoint_env: str = "AQA_SYSTEM_ONE_ENDPOINT"
+    api_key_env: str = "AQA_SYSTEM_ONE_API_KEY"
+    min_confidence: float = 0.55
+    include_tree_depth: int = 4
+
+
+@dataclass
+class ComputerUseConfig:
+    provider: ComputerUseProvider = "command"
+    command_env: str = "AQA_COMPUTER_USE_COMMAND"
+    max_calls: int = 3
+    include_a11y_hint: bool = True
+
+
+@dataclass
+class DecisionConfig:
+    mode: DecisionMode = "heuristic"
+    escalate_after: int = 3
+    max_model_calls: int = 8
+    model_timeout_s: float = 30.0
+    cache_observations: bool = True
+    system_one: SystemOneConfig = field(default_factory=SystemOneConfig)
+    computer_use: ComputerUseConfig = field(default_factory=ComputerUseConfig)
+
+
+@dataclass
 class ExplorerConfig:
     max_steps: int = 40
     max_time_s: float = 120
     on_step_failure: StepFailurePolicy = "stop"
+    decision: DecisionConfig = field(default_factory=DecisionConfig)
 
 
 @dataclass

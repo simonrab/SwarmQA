@@ -11,6 +11,24 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from swarmqa.decision import build_evaluator
+from swarmqa.decision.heuristic import (
+    MENU_ROLES as _MENU_ROLES,
+    STOPWORDS as _STOPWORDS,
+    absent_expected,
+    click_key,
+    click_key_from_query,
+    element_names as _element_names,
+    matches_name as _matches_name,
+    menu_paths as _menu_paths,
+    parse_goal as _parse_goal,
+    query_for as _query_for,
+    role_kind as _role_kind,
+    shares as _shares,
+    words as _words,
+)
+from swarmqa.decision.protocol import DecisionAction, DecisionEvaluator, Observation
+from swarmqa.decision.serialize_tree import summarize_tree
 from swarmqa.driver.query import walk
 from swarmqa.errors import (
     AppCrashedError,
@@ -31,162 +49,7 @@ from swarmqa.models import (
 from swarmqa.serialize import dump_json
 from swarmqa.video_policy import keep_video, should_start_video
 
-# Glue words and common verbs. Remaining words are treated as control names
-# when the goal does not quote a control.
-_STOPWORDS = frozenset(
-    {
-        "a",
-        "an",
-        "the",
-        "to",
-        "of",
-        "and",
-        "or",
-        "in",
-        "on",
-        "for",
-        "with",
-        "from",
-        "into",
-        "via",
-        "near",
-        "within",
-        "without",
-        "over",
-        "under",
-        "open",
-        "click",
-        "press",
-        "tap",
-        "find",
-        "check",
-        "verify",
-        "confirm",
-        "that",
-        "this",
-        "these",
-        "those",
-        "is",
-        "be",
-        "are",
-        "was",
-        "were",
-        "button",
-        "buttons",
-        "menu",
-        "menus",
-        "control",
-        "controls",
-        "try",
-        "using",
-        "use",
-        "app",
-        "when",
-        "then",
-        "should",
-        "can",
-        "it",
-        "its",
-        "by",
-        "at",
-        "as",
-        "if",
-        "we",
-        "user",
-        "please",
-        "just",
-        "any",
-        "all",
-        "show",
-        "see",
-        "look",
-        "around",
-        "else",
-        "broken",
-        "toggle",
-        "turn",
-        "switch",
-        "enable",
-        "disable",
-        "make",
-        "sure",
-        "does",
-        "did",
-        "not",
-        "dont",
-        "stay",
-        "finish",
-        "area",
-        "window",
-        "title",
-        "updates",
-        "update",
-        "panel",
-        "screen",
-        "page",
-        "view",
-        "item",
-        "once",
-        "after",
-        "before",
-        "while",
-        "have",
-        "has",
-        "had",
-        "will",
-        "would",
-        "could",
-        "about",
-        "there",
-        "their",
-        "them",
-        "they",
-        "you",
-        "your",
-        "our",
-        "out",
-        "off",
-        "how",
-        "what",
-        "which",
-        "who",
-        "where",
-        "why",
-        "also",
-        "only",
-        "than",
-        "per",
-        "etc",
-        "something",
-        "anything",
-        "everything",
-        "nothing",
-        "here",
-        "back",
-        "again",
-        "still",
-        "already",
-        "another",
-        "other",
-        "explore",
-        "search",
-        "navigate",
-        "reach",
-        "visit",
-        "ensure",
-        "validate",
-        "given",
-        "scenario",
-        "label",
-        "field",
-        "text",
-    }
-)
-_MENU_ROLES = frozenset({"menu", "menuitem", "menubaritem", "menubar", "menu bar"})
-_QUOTE = re.compile(r'"([^"]+)"|\'([^\']+)\'')
-_TEMPLATE = (
-    Path(__file__).resolve().parent.parent / "templates" / "issue.md"
-)
+_TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "issue.md"
 
 
 def _monotonic() -> float:
@@ -196,77 +59,6 @@ def _monotonic() -> float:
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _words(text: str) -> set[str]:
-    return {word.lower() for word in re.findall(r"[A-Za-z0-9]+", text or "")}
-
-
-def _shares(text: str, tokens: list[str]) -> bool:
-    words = _words(text)
-    return any(token.lower() in words for token in tokens)
-
-
-def _parse_goal(text: str) -> tuple[list[str], list[str]]:
-    """Return search tokens and the control names the goal expects to find.
-
-    Quoted phrases are the expected controls. Otherwise every significant
-    word is an expected control name (``Settings gear`` → Settings, gear).
-    """
-    quoted: list[str] = []
-    for match in _QUOTE.finditer(text or ""):
-        phrase = (match.group(1) or match.group(2) or "").strip()
-        if phrase:
-            quoted.append(phrase)
-    seen: set[str] = set()
-    tokens: list[str] = []
-    for word in re.findall(r"[A-Za-z0-9]+", (text or "").replace("'", "")):
-        key = word.lower()
-        if len(key) < 3 or key in _STOPWORDS or key in seen:
-            continue
-        seen.add(key)
-        tokens.append(word)
-    for phrase in quoted:
-        for word in re.findall(r"[A-Za-z0-9]+", phrase.replace("'", "")):
-            key = word.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            tokens.append(word)
-    expected = quoted if quoted else list(tokens)
-    return tokens, expected
-
-
-def _element_names(element: UIElement) -> list[str]:
-    names: list[str] = []
-    if element.label:
-        names.append(element.label)
-    if element.identifier:
-        names.append(element.identifier)
-    return names
-
-
-def _matches_name(element: UIElement, name: str) -> bool:
-    target = name.strip()
-    if not target:
-        return False
-    for label in _element_names(element):
-        if " " in target:
-            if target.lower() in label.lower() or _words(target) <= _words(label):
-                return True
-            continue
-        if target.lower() in _words(label):
-            return True
-    return False
-
-
-def _role_kind(role: str) -> str:
-    lowered = role.lower()
-    if lowered == "button":
-        return "button"
-    if lowered in _MENU_ROLES:
-        return "menu"
-    return "other"
 
 
 def _fault_text(element: UIElement) -> tuple[str, str] | None:
@@ -280,14 +72,6 @@ def _fault_text(element: UIElement) -> tuple[str, str] | None:
     return None
 
 
-def _query_for(element: UIElement) -> ElementQuery:
-    return ElementQuery(
-        role=element.role,
-        label=element.label or None,
-        identifier=element.identifier,
-    )
-
-
 def _target_dict(element: UIElement) -> dict:
     payload: dict[str, str] = {"role": element.role}
     if element.label:
@@ -295,38 +79,6 @@ def _target_dict(element: UIElement) -> dict:
     if element.identifier:
         payload["identifier"] = element.identifier
     return payload
-
-
-def _menu_paths(elements: list[UIElement], tokens: list[str]) -> list[list[str]]:
-    found: list[list[str]] = []
-
-    def walk_menus(nodes: list[UIElement], prefix: list[str]) -> None:
-        for element in nodes:
-            role = element.role.lower()
-            label = (element.label or "").strip()
-            path = prefix
-            if role in _MENU_ROLES and label:
-                candidate = prefix + [label]
-                if _shares(label, tokens) or any(
-                    _matches_name(element, token) for token in tokens
-                ):
-                    found.append(candidate)
-                if role in {"menu", "menuitem", "menubaritem"}:
-                    path = candidate
-            child_prefix = path if role in {"menubar", "menu bar", "menu"} else prefix
-            if element.children:
-                walk_menus(element.children, child_prefix)
-
-    walk_menus(elements, [])
-    unique: list[list[str]] = []
-    seen: set[tuple[str, ...]] = set()
-    for path in found:
-        key = tuple(path)
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(path)
-    return unique
 
 
 def _fingerprint(kind: str, title: str, target: str) -> str:
@@ -439,6 +191,10 @@ class _Budget:
         self.used += 1
         return True
 
+    @property
+    def steps_left(self) -> int:
+        return max(0, self.max_steps - self.used)
+
 
 class _Session:
     def __init__(
@@ -449,6 +205,7 @@ class _Session:
         *,
         worker_id: str,
         work_dir: Path,
+        evaluator: DecisionEvaluator | None = None,
     ):
         self.shard = shard
         self.driver = driver
@@ -457,8 +214,10 @@ class _Session:
         self.work_dir = work_dir
         self.campaign = _campaign_dir(work_dir)
         goal_text = (shard.goal or "").strip() or (shard.name or "").strip()
+        self.goal = goal_text
         self.tokens, self.expected = _parse_goal(goal_text)
         self.budget = _Budget(config.explorer.max_steps, config.explorer.max_time_s)
+        self.evaluator = evaluator if evaluator is not None else build_evaluator(config)
         self.findings: list[Finding] = []
         self.replays: list[list[dict]] = []
         self.steps: list[StepResult] = []
@@ -473,6 +232,9 @@ class _Session:
         self.abort = False
         self.fatal: str | None = None
         self._reported_missing: set[str] = set()
+        self._tried_clicks: set[str] = set()
+        self._tried_menus: set[tuple[str, ...]] = set()
+        self._stall_count = 0
 
     def hunt(self) -> None:
         if not self._launch():
@@ -484,13 +246,27 @@ class _Session:
         if tree is None or self.abort:
             return
         self._scan_faults(tree)
-        if self.abort or not self._click_buttons(tree):
+        if self.abort:
             return
-        if self._goal_satisfied(tree):
+        # Observe once (budget already spent on the tree read), then decide→act
+        # until the evaluator is done. Re-reading after every action would change
+        # step accounting relative to the pre-decision hunt.
+        while not self.abort:
+            action = self.evaluator.decide(self._observation(tree))
+            if action.kind in ("done", "noop"):
+                return
+            if action.kind == "missing":
+                self._emit_missing(tree)
+                return
+            if action.kind == "click":
+                if not self._act_click(tree, action):
+                    return
+                continue
+            if action.kind == "menu":
+                if not self._act_menu(action):
+                    return
+                continue
             return
-        if not self._try_menus(tree):
-            return
-        self._emit_missing(tree)
 
     def finish(self, started_at: str, started_mono: float) -> WorkerResult:
         video_path = self._stop_video()
@@ -523,6 +299,59 @@ class _Session:
             shard_name=self.shard.name,
             shard_kind=self.shard.kind,
         )
+
+    def _observation(self, tree: list[UIElement]) -> Observation:
+        return Observation(
+            goal=self.goal,
+            tokens=list(self.tokens),
+            expected=list(self.expected),
+            elements=tree,
+            maturity=self.config.app.maturity,
+            stall_count=self._stall_count,
+            steps_left=self.budget.steps_left,
+            tried_clicks=frozenset(self._tried_clicks),
+            tried_menus=frozenset(self._tried_menus),
+            tree_summary=summarize_tree(tree),
+        )
+
+    def _act_click(self, tree: list[UIElement], action: DecisionAction) -> bool:
+        query = action.query
+        if query is None:
+            self._stall_count += 1
+            return True
+        key = click_key_from_query(query)
+        self._tried_clicks.add(key)
+        element = self._find_element(tree, query)
+        if element is None:
+            self._stall_count += 1
+            return True
+        if not self.budget.consume():
+            return False
+        return self._click(element)
+
+    def _act_menu(self, action: DecisionAction) -> bool:
+        path = list(action.menu_path or [])
+        if not path:
+            self._stall_count += 1
+            return True
+        self._tried_menus.add(tuple(path))
+        if not self.budget.consume():
+            return False
+        return self._select_menu(path)
+
+    def _find_element(self, tree: list[UIElement], query: ElementQuery) -> UIElement | None:
+        for element in walk(tree):
+            if click_key(element) == click_key_from_query(query):
+                return element
+        for element in walk(tree):
+            if query.role and element.role.lower() != query.role.lower():
+                continue
+            if query.label and query.label.lower() not in (element.label or "").lower():
+                continue
+            if query.identifier is not None and element.identifier != query.identifier:
+                continue
+            return element
+        return None
 
     def _status(self) -> str:
         if self.fatal and not self.findings:
@@ -633,19 +462,6 @@ class _Session:
                 details=f"{display} shows an {reason} state",
             )
 
-    def _click_buttons(self, tree: list[UIElement]) -> bool:
-        for element in walk(tree):
-            if element.role.lower() != "button" or not element.enabled:
-                continue
-            names = _element_names(element)
-            if not any(_shares(name, self.tokens) for name in names):
-                continue
-            if not self.budget.consume():
-                return False
-            if not self._click(element):
-                return False
-        return True
-
     def _click(self, element: UIElement) -> bool:
         label = element.label or element.identifier or element.role
         self.narrative.append(f"click {label}")
@@ -680,37 +496,7 @@ class _Session:
                 self._add_missing([label])
             return not self._stop_for_policy()
         self._note("click", "passed", label)
-        return True
-
-    def _goal_satisfied(self, tree: list[UIElement]) -> bool:
-        if not self.expected:
-            return True
-        for name in self.expected:
-            kinds = {
-                _role_kind(element.role)
-                for element in walk(tree)
-                if _matches_name(element, name)
-            }
-            if not kinds or kinds == {"menu"}:
-                return False
-        return True
-
-    def _try_menus(self, tree: list[UIElement]) -> bool:
-        paths = _menu_paths(tree, self.tokens)
-        covered = {tuple(path) for path in paths}
-        for name in self._absent(tree):
-            synthetic = (name,)
-            if synthetic in covered:
-                continue
-            if any(name.lower() == part.lower() for path in paths for part in path):
-                continue
-            paths.append([name])
-            covered.add(synthetic)
-        for path in paths:
-            if not self.budget.consume():
-                return False
-            if not self._select_menu(path):
-                return False
+        self._stall_count = 0
         return True
 
     def _select_menu(self, path: list[str]) -> bool:
@@ -740,6 +526,7 @@ class _Session:
             )
             return not self._stop_for_policy()
         self._note("menu", "passed", label)
+        self._stall_count = 0
         return True
 
     def _emit_missing(self, tree: list[UIElement]) -> None:
@@ -747,19 +534,11 @@ class _Session:
             return
         absent = [
             name
-            for name in self._absent(tree)
+            for name in absent_expected(tree, self.expected)
             if name.strip().lower() not in self._reported_missing
         ]
         if absent:
             self._add_missing(absent)
-
-    def _absent(self, tree: list[UIElement]) -> list[str]:
-        missing: list[str] = []
-        for name in self.expected:
-            if any(_matches_name(element, name) for element in walk(tree)):
-                continue
-            missing.append(name)
-        return missing
 
     def _add_missing(self, names: list[str]) -> None:
         fresh = [name for name in names if name.strip().lower() not in self._reported_missing]
@@ -868,13 +647,15 @@ def run_exploratory(
     *,
     worker_id: str,
     work_dir: Path,
+    evaluator: DecisionEvaluator | None = None,
 ) -> WorkerResult:
     """Hunt within explorer.max_steps and explorer.max_time_s.
 
-    Strategies run in order until the goal controls are satisfied or the
-    budget ends: search the accessibility tree, click enabled buttons that
-    share a goal word, try matching menu paths, then emit ``missing_control``
-    on prototype builds when an expected control is still absent.
+    The loop is observe → decide → act. The default heuristic evaluator
+    preserves the classic strategy order: search the accessibility tree,
+    click enabled buttons that share a goal word, try matching menu paths,
+    then emit ``missing_control`` on prototype builds when an expected
+    control is still absent.
     """
     started_at = _iso_now()
     started_mono = time.monotonic()
@@ -884,6 +665,7 @@ def run_exploratory(
         config,
         worker_id=worker_id,
         work_dir=Path(work_dir),
+        evaluator=evaluator,
     )
     try:
         session.hunt()

@@ -14,6 +14,7 @@ Pull requests target `cursor/aqa-foundation-d827`.
 | C3 | `swarmqa/intent/ingest.py`, `swarmqa/intent/record.py`, `tests/test_intent.py`, `docs/intents.md` |
 | C4 | `swarmqa/explorer/scripted.py`, `swarmqa/reporter/findings.py`, `swarmqa/reporter/issues.py`, `tests/test_scripted.py`, `tests/test_reporter.py`, `docs/reporter.md` |
 | C5 | `swarmqa/explorer/exploratory.py`, `tests/test_exploratory.py`, `docs/exploratory.md` |
+| C12 | `swarmqa/decision/` (`protocol`, `heuristic`, `cascade`, …), `tests/test_decision.py`; extends C5 observe→decide→act |
 | C6 | `swarmqa/visual/diff.py`, `swarmqa/visual/baseline.py`, `tests/test_visual.py`, `docs/visual.md` |
 | C7 | `swarmqa/prloop/loop.py`, `tests/test_prloop.py`, `docs/agents.md` |
 | C8 | `swarmqa/orchestrator/campaign.py`, `swarmqa/orchestrator/status.py`, `swarmqa/backends/local.py`, `swarmqa/worker.py`, `tests/test_orchestrator.py`, `docs/orchestrator.md` |
