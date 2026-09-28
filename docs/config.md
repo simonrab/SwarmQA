@@ -1,0 +1,199 @@
+# Campaign configuration
+
+`aqa init` writes `aqa.config.toml` from `swarmqa/templates/aqa.config.toml`. One file describes the app, the intent set, coverage, budgets, video, issue trackers, and how hard the fleet should push: backend, worker count, and the cloud spend cap. CLI flags replace those values for a single run.
+
+`swarmqa.config.load_config(path, overrides)` reads that file, applies `CliOverrides`, and returns a `CampaignConfig`. `validate_config(config)` returns field-level messages. An empty list means the config can run. `load_config` raises `ConfigError` with those messages instead of starting a campaign. `str(error)` is the messages joined by newlines. `aqa` exits `2` on `ConfigError`.
+
+## Locked defaults
+
+| Knob | Default |
+| --- | --- |
+| `backend` | `local` |
+| `workers` | `2` |
+| `pr.mode` | `human` |
+| `video.mode` | `always` |
+| `spend.currency` | `USD` |
+| `gui_worker_warn_threshold` | `2` |
+| `app.maturity` | `shipped` |
+| `budgets.on_budget` / `spend.overrun` | `drain` |
+| `fail_on` | `scripted` |
+| `pr.max_iterations` | `3` |
+| `pr.max_wall_time` | `1h` (3600 seconds) |
+| `pr.max_pr_updates` | `5` |
+| `explorer.max_steps` / `max_time_s` | `40` / `120` |
+| `visual.threshold` | `0.01` |
+
+`spend.max_spend` stays unset until the file or `--max-spend` sets it. The template comment suggests `10` USD when you turn on `backend = cloud`. Set that cap yourself. A cloud campaign without a positive cap fails fast.
+
+## TOML shape
+
+Top-level `intents` is an array of strings. Each entry is a markdown intent file, a JSON recorded flow, or a directory of those files. Paths are stored as written, whether they point at a file or a directory. The queue builder is what checks that those paths exist.
+
+```toml
+intents = ["intents/smoke.md", "intents/"]
+
+[app]
+path = "/path/to/MyApp.app"
+build_command = ""
+bundle_id = ""
+launch_args = []
+maturity = "shipped" # prototype | shipped
+
+[app.env]
+FEATURE = "1"
+
+[campaign]
+backend = "local" # local | vm | cloud
+workers = 2
+shard_strategy = "intent" # intent | suite | exploratory_seed
+max_wall_time = "2h"
+max_worker_minutes = 60
+on_budget = "drain" # drain | cancel
+fail_on = "scripted" # scripted | any | never
+report_root = "reports"
+gui_worker_warn_threshold = 2
+
+[local]
+isolation = "thread" # thread | subprocess
+
+[vm]
+provider = "tart"
+image = "ghcr.io/cirruslabs/macos-sonoma-base:latest"
+tart_bin = "tart"
+recycle = true
+cost_per_worker_minute = 0.0
+
+[cloud]
+adapter = "simulator"
+cost_per_worker_minute = 0.05
+estimated_shard_minutes = 1.0
+endpoint_env = "AQA_CLOUD_ENDPOINT"
+token_env = "AQA_CLOUD_TOKEN"
+
+[spend]
+max_spend = 10.0
+currency = "USD"
+overrun = "drain" # drain | cancel
+
+[video]
+mode = "always" # always | on_failure | exploratory_only
+
+[pr]
+mode = "human" # human | autonomous
+max_iterations = 3
+max_wall_time = "1h"
+max_pr_updates = 5
+fix_command = ""
+
+[issues]
+github = false
+linear = false
+template = "templates/issue.md"
+github_repo = "owner/name"
+github_token_env = "GH_TOKEN"
+linear_api_key_env = "LINEAR_API_KEY"
+linear_team = "TEAMID"
+
+[visual]
+enabled = false
+baseline_dir = "baselines"
+threshold = 0.01
+
+[coverage]
+scripted = true
+exploratory = true
+visual = false
+
+[explorer]
+max_steps = 40
+max_time_s = 120
+on_step_failure = "stop" # stop | continue
+
+[suite]
+command = "xcodebuild test -scheme MyApp"
+```
+
+Unknown keys are ignored. Credentials are environment variable names (`endpoint_env`, `token_env`, `github_token_env`, `linear_api_key_env`).
+
+### Where keys land
+
+| TOML | `CampaignConfig` |
+| --- | --- |
+| `intents` | `intents` |
+| `[app]` | `app` (`AppTarget`) |
+| `campaign.backend`, `workers`, `shard_strategy`, `fail_on`, `report_root`, `gui_worker_warn_threshold` | the same fields |
+| `campaign.max_wall_time` | `budgets.max_wall_time_s` |
+| `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
+| `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+
+`max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional. The PR loop wall time defaults to one hour.
+
+### Maturity
+
+`app.maturity` is `prototype` or `shipped` (the default). Prototype is a hint that exploration may wander and that failures are advisory. Shipped is the stricter pass/fail posture for scripted intents. The explorer reads this hint when it decides how aggressive to be. The config loader only checks that the value is one of those two names.
+
+### Spend cap
+
+`spend.max_spend` is the currency ceiling for a campaign. `spend.currency` is a non-empty code such as `USD`.
+
+- `backend = cloud` requires `max_spend` to be present and greater than 0. Missing, zero, and negative caps fail fast with `spend.max_spend: required and must be > 0 when backend is cloud`.
+- `backend = local` may set `max_spend`. The number stays on the config. The local runner keeps scheduling, and the campaign report notes `max_spend is ignored on the local backend`.
+- `backend = vm` may set `max_spend`. It is enforced when `vm.cost_per_worker_minute` is non-zero. A zero VM rate with no cap is unmetered.
+
+`overrun` and `on_budget` are `drain` (let the current shards finish) or `cancel` (stop them). `drain` is the default.
+
+Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (default `2`) is the local worker count above which the orchestrator warns and points you at `vm` or `cloud`, where each worker has its own machine.
+
+### Video, coverage, issues
+
+`video.mode` is `always` (default), `on_failure`, or `exploratory_only`.
+
+`coverage.scripted`, `coverage.exploratory`, and `coverage.visual` toggle those passes. Visual comparison uses `visual.baseline_dir` and `visual.threshold` (0 through 1 inclusive).
+
+`issues.github` and `issues.linear` enable trackers. `issues.template` is the markdown ticket body. When it is unset, reporters use `swarmqa/templates/issue.md`. Tokens stay in the environment variables named by the config.
+
+## CLI overrides
+
+Flags on `aqa run` replace the file for that invocation. Omitted flags leave the file value in place. Repeated `--intent` replaces the whole `intents` array.
+
+| Flag | Replaces |
+| --- | --- |
+| `--app` | `app.path` |
+| `--intent` (repeatable) | `intents` |
+| `--backend` | `backend` (`local`, `vm`, `cloud`) |
+| `--workers` | `workers` |
+| `--max-wall-time` | `budgets.max_wall_time_s` |
+| `--max-spend` | `spend.max_spend` |
+| `--spend-currency` | `spend.currency` |
+| `--video-mode` | `video.mode` |
+| `--pr-mode` | `pr.mode` |
+
+```bash
+aqa run --config aqa.config.toml --app /path/to/MyApp.app --intent intents/smoke.md --intent intents/
+aqa run --backend cloud --workers 12 --max-wall-time 2h --max-spend 10 --spend-currency USD --video-mode on_failure --pr-mode human
+```
+
+An agent can invoke the same command. Raise `--workers` and `--max-spend` to test more. Lower `--max-spend` to stay inside a currency ceiling. `--backend vm` or `--backend cloud` isolates GUI sessions.
+
+## Validation
+
+Every message starts with its field path. `load_config` collects them and raises one `ConfigError`.
+
+| Check | Message prefix |
+| --- | --- |
+| `backend` is `local`, `vm`, or `cloud` | `backend:` |
+| `workers` is an integer `>= 1` | `workers:` |
+| `video.mode` is `always`, `on_failure`, or `exploratory_only` | `video.mode:` |
+| `pr.mode` is `human` or `autonomous` | `pr.mode:` |
+| `app.maturity` is `prototype` or `shipped` | `app.maturity:` |
+| `visual.threshold` is from 0 to 1 inclusive | `visual.threshold:` |
+| `spend.currency` is a non-empty string | `spend.currency:` |
+| cloud `spend.max_spend` is present and `> 0` | `spend.max_spend:` |
+| `pr.max_iterations` and `pr.max_pr_updates` are integers `>= 1` | `pr.max_iterations:`, `pr.max_pr_updates:` |
+| `explorer.max_steps` is an integer `>= 1` and `explorer.max_time_s` is `> 0` | `explorer.max_steps:`, `explorer.max_time_s:` |
+
+The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, or PR mode.
+
+A missing file, including a path that is a directory, raises `ConfigError(["config: not found"])`. Unreadable bytes and TOML syntax errors raise `ConfigError(["config: invalid toml"])`. A bad duration raises a field error on `budgets.max_wall_time_s` or `pr.max_wall_time_s` and includes the `parse_duration` reason. `90s` and `2h` load. `30` and `soon` fail. A table written as a scalar (`campaign = "local"`) is `campaign: must be a table`.
+
+`max_spend` on `backend = local` is valid. The loaded config still has that number.

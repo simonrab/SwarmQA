@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarmqa.dev/flow-v1.schema.json",
+  "title": "Autonomous QA recorded flow",
+  "type": "object",
+  "required": ["version", "name", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "name": {"type": "string", "minLength": 1},
+    "steps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/step"}
+    }
+  },
+  "$defs": {
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {"type": "string"},
+        "label": {"type": "string"},
+        "identifier": {"type": "string"},
+        "value": {"type": "string"}
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["action"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "enum": ["click", "type", "key", "scroll", "menu", "wait", "screenshot", "assert", "launch", "relaunch"]
+        },
+        "target": {"$ref": "#/$defs/query"},
+        "text": {"type": "string"},
+        "keys": {"type": "array", "items": {"type": "string"}},
+        "delta": {"type": "integer"},
+        "path": {"type": "array", "items": {"type": "string"}},
+        "timeout_s": {"type": "number"},
+        "name": {"type": "string"},
+        "exists": {"type": "boolean"}
+      }
+    }
+  }
+}

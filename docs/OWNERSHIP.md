@@ -1,0 +1,26 @@
+# Chunk ownership
+
+Cloud agents implement one chunk at a time on top of `cursor/aqa-foundation-d827`.
+Edit only the files listed for your chunk. Shared modules already implement
+campaign types, spend and budget clocks, report layout, summary format,
+finding dedup, the fake app driver, video policy, and the CLI dispatcher.
+
+Pull requests target `cursor/aqa-foundation-d827`.
+
+| Chunk | Owns |
+| --- | --- |
+| C1 | `swarmqa/config.py`, `tests/test_config.py`, `docs/config.md` |
+| C2 | `swarmqa/driver/macos.py`, `tests/test_macos_driver.py`, `docs/driver.md` |
+| C3 | `swarmqa/intent/ingest.py`, `swarmqa/intent/record.py`, `tests/test_intent.py`, `docs/intents.md` |
+| C4 | `swarmqa/explorer/scripted.py`, `swarmqa/reporter/findings.py`, `swarmqa/reporter/issues.py`, `tests/test_scripted.py`, `tests/test_reporter.py`, `docs/reporter.md` |
+| C5 | `swarmqa/explorer/exploratory.py`, `tests/test_exploratory.py`, `docs/exploratory.md` |
+| C6 | `swarmqa/visual/diff.py`, `swarmqa/visual/baseline.py`, `tests/test_visual.py`, `docs/visual.md` |
+| C7 | `swarmqa/prloop/loop.py`, `tests/test_prloop.py`, `docs/agents.md` |
+| C8 | `swarmqa/orchestrator/campaign.py`, `swarmqa/orchestrator/status.py`, `swarmqa/backends/local.py`, `swarmqa/worker.py`, `tests/test_orchestrator.py`, `docs/orchestrator.md` |
+| C9 | `swarmqa/backends/tart.py`, `swarmqa/backends/cloud.py`, `tests/test_backends.py`, `docs/backends.md` |
+
+Do not edit `swarmqa/models.py`, `swarmqa/cli.py`, `swarmqa/errors.py`, `pyproject.toml`, `README.md`, or another chunk's files. If a signature in your stub cannot express the behavior, keep the signature and add optional keyword-only arguments.
+
+Construct `CampaignConfig` in tests with `swarmqa.testing.sample_config`. Call `swarmqa.config.load_config` only from C1 tests.
+
+iOS (C10) and web targets (C11) are out of this delivery.

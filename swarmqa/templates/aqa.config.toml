@@ -1,0 +1,93 @@
+# Autonomous QA campaign config.
+# CLI flags override these values for a single run.
+
+# Files or directories of markdown intents and JSON recorded flows.
+intents = ["intents/"]
+
+[app]
+# path = "/path/to/MyApp.app"
+# build_command = ""
+# bundle_id = ""
+launch_args = []
+# prototype = looser exploration; shipped = stricter pass/fail
+maturity = "shipped"
+
+[campaign]
+# local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter
+backend = "local"
+# Max concurrent sessions. Default 2. GUI sessions on one display get flaky
+# above gui_worker_warn_threshold; prefer vm or cloud for larger fleets.
+workers = 2
+shard_strategy = "intent" # intent | suite | exploratory_seed
+# max_wall_time = "2h"
+# max_worker_minutes = 60
+on_budget = "drain" # drain | cancel
+fail_on = "scripted" # scripted | any | never
+report_root = "reports"
+gui_worker_warn_threshold = 2
+
+[local]
+isolation = "thread" # thread | subprocess
+
+[vm]
+provider = "tart"
+# image = "ghcr.io/cirruslabs/macos-sonoma-base:latest"
+tart_bin = "tart"
+recycle = true
+cost_per_worker_minute = 0.0
+
+[cloud]
+# v1 ships a local cost simulator. A paid Mac host plugs in behind this name.
+adapter = "simulator"
+cost_per_worker_minute = 0.05
+estimated_shard_minutes = 1.0
+# endpoint_env = "AQA_CLOUD_ENDPOINT"
+# token_env = "AQA_CLOUD_TOKEN"
+
+[spend]
+# Required and must be > 0 when backend = cloud.
+# Ignored on pure local (the report notes that). Enforced for vm when the
+# adapter reports a non-zero cost_per_worker_minute and max_spend is set.
+# Suggested cloud default: 10 USD.
+# max_spend = 10.0
+currency = "USD"
+overrun = "drain" # drain | cancel
+
+[video]
+# always | on_failure | exploratory_only
+mode = "always"
+
+[pr]
+# human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
+mode = "human"
+max_iterations = 3
+max_wall_time = "1h"
+max_pr_updates = 5
+# fix_command = ""  # or set AQA_FIX_COMMAND
+
+[issues]
+github = false
+linear = false
+template = "templates/issue.md"
+# github_repo = "owner/name"
+github_token_env = "GH_TOKEN"
+linear_api_key_env = "LINEAR_API_KEY"
+# linear_team = "TEAMID"
+
+[visual]
+enabled = false
+baseline_dir = "baselines"
+threshold = 0.01
+
+[coverage]
+scripted = true
+exploratory = true
+visual = false
+
+[explorer]
+max_steps = 40
+max_time_s = 120
+on_step_failure = "stop" # stop | continue
+
+[suite]
+# command = "xcodebuild test -scheme MyApp"
