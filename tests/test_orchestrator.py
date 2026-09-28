@@ -212,7 +212,7 @@ def test_spend_cap_stops_metered_backend(tmp_path: Path):
     assert result.spend.estimated_spent == pytest.approx(1)
     assert result.coverage.not_started == 1
     assert len(result.results) == 1
-    assert result.results[0].status == "error"
+    assert result.results[0].status == "failed"
     assert result.results[0].shard_id == "s-1"
 
 
@@ -264,7 +264,7 @@ def test_fail_on_exit_code(tmp_path, kind, status, fail_on, with_finding, expect
     assert result.exit_code == expected
 
 
-def test_fake_driver_scripted_records_chunk_gap(tmp_path: Path):
+def test_fake_driver_scripted_shard_passes(tmp_path: Path):
     app = make_app(tmp_path)
     config = sample_config(app)
     config.report_root = str(tmp_path / "reports")
@@ -281,13 +281,13 @@ def test_fake_driver_scripted_records_chunk_gap(tmp_path: Path):
     result = run_campaign(config, [scripted_shard()], driver_factory=factory)
     assert seen
     assert "workers" in seen[0].parts
-    assert result.results[0].status == "error"
-    assert "C4 is not implemented" in (result.results[0].error or "")
+    assert result.results[0].status == "passed"
+    assert result.results[0].findings == []
     assert (Path(result.report_dir) / "summary.md").is_file()
-    assert result.exit_code == 1
+    assert result.exit_code == 0
 
 
-def test_exploratory_gap_does_not_stop_suite(tmp_path: Path):
+def test_exploratory_launch_failure_does_not_stop_suite(tmp_path: Path):
     config = _config(tmp_path)
     config.workers = 2
     shards = [
@@ -300,23 +300,25 @@ def test_exploratory_gap_does_not_stop_suite(tmp_path: Path):
     ]
     result = run_campaign(config, shards)
     by_id = {item.shard_id: item for item in result.results}
-    assert "C5 is not implemented" in (by_id["s-ex"].error or "")
-    assert by_id["s-ex"].status == "error"
+    assert by_id["s-ex"].status == "failed"
+    assert by_id["s-ex"].findings
     assert by_id["s-suite"].status == "passed"
     logs = list(Path(result.report_dir).glob("raw/*.log"))
     assert any("suite-ok" in path.read_text(encoding="utf-8") for path in logs)
     assert (Path(result.report_dir) / "summary.md").is_file()
 
 
-def test_visual_chunk_gap_records_error(tmp_path: Path):
+def test_visual_missing_baseline_fails_shard(tmp_path: Path):
     app = make_app(tmp_path)
     config = sample_config(app)
     config.report_root = str(tmp_path / "reports")
     config.workers = 1
     shard = _shard("s-vis", kind="visual", visual_names=["home"])
     result = run_campaign(config, [shard])
-    assert result.results[0].status == "error"
-    assert "C6 is not implemented" in (result.results[0].error or "")
+    assert result.results[0].status == "failed"
+    assert result.results[0].findings
+    assert result.results[0].findings[0].kind == "visual"
+    assert "baseline is missing" in result.results[0].findings[0].details
     assert (Path(result.report_dir) / "summary.md").is_file()
 
 
@@ -383,8 +385,8 @@ def test_worker_exit_codes(tmp_path: Path):
     )
     assert code == 0
     payload = json.loads((scripted_camp / "workers" / "w1" / "result.json").read_text(encoding="utf-8"))
-    assert payload["status"] == "error"
-    assert "C4" in payload["error"]
+    assert payload["status"] == "failed"
+    assert payload["findings"]
 
     blocker = tmp_path / "not-a-directory"
     blocker.write_text("x", encoding="utf-8")

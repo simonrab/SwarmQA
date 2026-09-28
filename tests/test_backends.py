@@ -304,10 +304,13 @@ def test_simulator_executor_failure_is_one_shard():
     )
 
 
-def test_simulator_without_executor_reports_the_local_stub():
-    with pytest.raises(ChunkNotReady) as exc:
-        SimulatedCloudBackend(sample_config()).run_shard(scripted_shard(), "c1")
-    assert "executor=" in str(exc.value)
+def test_simulator_without_executor_uses_local_backend():
+    shard = scripted_shard()
+    result = SimulatedCloudBackend(sample_config()).run_shard(shard, "c1")
+    assert result.backend == "cloud"
+    assert result.shard_id == shard.id
+    assert result.status == "failed"
+    assert result.estimated_cost >= 0
 
 
 def test_create_cloud_backend_returns_the_simulator():
