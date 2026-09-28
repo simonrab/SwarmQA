@@ -1,16 +1,16 @@
 # Exploratory hunting
 
-`swarmqa.explorer.exploratory.run_exploratory` drives one exploratory shard against a single app session. Scripted steps stay in `run_scripted`. This module owns the loose-goal hunt: it launches the app, tries a fixed set of strategies, and writes findings when the UI crashes, hangs, shows an error or empty state, or (on a prototype) is missing a control the goal named.
+`swarmqa.explorer.exploratory.run_exploratory` drives one exploratory shard against a single app session. Scripted steps stay in `run_scripted`. This module owns the loose-goal hunt: it launches the app, runs an observe→decide→act loop, and writes findings when the UI crashes, hangs, shows an error or empty state, or (on a prototype) is missing a control the goal named.
 
 ```python
-run_exploratory(shard, driver, config, *, worker_id, work_dir) -> WorkerResult
+run_exploratory(shard, driver, config, *, worker_id, work_dir, evaluator=None) -> WorkerResult
 ```
 
-The driver is anything that matches `AppDriver`. Tests use `FakeDriver`.
+The driver is anything that matches `AppDriver`. Tests use `FakeDriver`. Pass an optional `evaluator=` to inject a `DecisionEvaluator` (see `swarmqa.decision`); otherwise `build_evaluator(config)` builds one from `explorer.decision`.
 
 ## Budgets
 
-The hunt stops when `config.explorer.max_steps` or `config.explorer.max_time_s` is spent. It also stops early once every expected control from the goal is present and is not a menu that still needs to be opened.
+The hunt stops when `config.explorer.max_steps` or `config.explorer.max_time_s` is spent. It also stops early once the decision evaluator returns `done`/`noop` (default heuristic: every expected control from the goal is present and is not a menu that still needs to be opened).
 
 Each of these costs one step:
 
@@ -24,18 +24,52 @@ Recording start/stop does not cost a step. A step that would exceed either budge
 
 `explorer.on_step_failure` applies to crash and timeout actions. `stop` (the default) ends the hunt. `continue` keeps going until the goal is satisfied or the budget ends. Observations such as `error_state` and `missing_control` do not use that switch.
 
-## Strategies
+## Observe → decide → act
+
+After launch (and optional video start), the hunt:
+
+1. **Observe** — read the accessibility tree once (one budget step) and scan for `error` / `empty` fault labels.
+2. **Decide** — ask the `DecisionEvaluator` for the next `DecisionAction` given goal tokens, the tree, maturity, steps left, and which clicks/menus were already tried.
+3. **Act** — perform that click or menu (each costs a step), emit `missing_control` when asked, or stop on `done`/`noop`.
+
+Default `explorer.decision.mode = heuristic` keeps the classic strategy order below and is behavior-identical for existing FakeDriver tests. Opt-in `system_one` / `computer_use` / `cascade` escalate after `escalate_after` stalls and fail open to the heuristic. See `docs/decision.md`.
+
+## Strategies (heuristic)
 
 Goal text is `shard.goal`, or `shard.name` when the goal is blank. Quoted phrases (`"Dark Mode"`) are the expected controls. Otherwise every significant word is an expected control. Short tokens and glue words (`open`, `click`, `the`, `button`, `menu`, …) are ignored, so `Open the Settings gear` expects **Settings** and **gear**.
 
-Strategies run in this order:
+The heuristic evaluator chooses actions in this order:
 
-1. **Search** the accessibility tree for labels (or identifiers) that share a word with the goal.
-2. **Click** enabled `button` elements in that set, in tree order. Disabled buttons are left alone. A disabled control still counts as present.
-3. **Menus.** Open menu paths whose labels share a goal word (`File > Export` becomes `select_menu(["File", "Export"])`). For an expected name that is still nowhere in the tree, also try a one-item menu path of that name.
-4. **Prototype gap.** When `app.maturity == "prototype"` and an expected control is still absent after the menu attempts, emit one `missing_control` finding. Shipped builds do not get that finding; a missing control is skipped. The finding is a report, not a silent return.
+1. **Click** enabled `button` elements whose labels share a goal word, in tree order. Disabled buttons are left alone. A disabled control still counts as present.
+2. **Menus** (only when expected controls are still unsatisfied). Open menu paths whose labels share a goal word (`File > Export` becomes `select_menu(["File", "Export"])`). For an expected name that is still nowhere in the tree, also try a one-item menu path of that name.
+3. **Prototype gap.** When `app.maturity == "prototype"` and an expected control is still absent after the menu attempts, emit one `missing_control` finding. Shipped builds do not get that finding; a missing control is skipped. The finding is a report, not a silent return.
+4. Otherwise **done**.
 
-While searching, any element whose **label or value** contains `error` or `empty` (substring, case-insensitive) becomes an `error_state` finding. A blank value does not. The words have to appear in the text.
+While observing, any element whose **label or value** contains `error` or `empty` (substring, case-insensitive) becomes an `error_state` finding. A blank value does not. The words have to appear in the text.
+
+## Decision config
+
+```toml
+[explorer.decision]
+mode = "heuristic"       # heuristic | system_one | computer_use | cascade
+escalate_after = 3
+max_model_calls = 8
+model_timeout_s = 30.0
+cache_observations = true
+```
+
+Nested `[explorer.decision.system_one]` and `[explorer.decision.computer_use]` hold provider settings. Computer-use shells out via `AQA_COMPUTER_USE_COMMAND` (or `provider = "fake"` in CI). See `docs/config.md` and `docs/decision.md`.
+
+## UX friction (advisory)
+
+When `explorer.friction.enabled` is true (default), the session meters path
+cost after each tree read / click / menu and may emit an advisory
+`friction_path` finding at the end of the hunt. Gold-relative gates
+(`min_extra_steps = 3` by default) keep short FakeDriver happy paths silent.
+See `docs/friction.md`.
+
+`explorer.friction.fail_ci` is reserved and **not** wired to `fail_on` yet
+(default false). Under `fail_on=scripted`, exploratory friction stays exit 0.
 
 ## Findings
 
@@ -46,6 +80,7 @@ While searching, any element whose **label or value** contains `error` or `empty
 | `UITimeoutError` | `unresponsive` | `high` |
 | Label or value contains `error` or `empty` | `error_state` | `medium` |
 | Prototype goal control still absent | `missing_control` | `high` |
+| Costly path vs gold (advisory; see `docs/friction.md`) | `friction_path` | score-mapped |
 
 `WorkerResult.status` is `passed` when there are no findings, `failed` when there are, and `error` only when the driver raises something that is not one of those UI failures. The `error` string is that fault. Hypotheses are not copied there.
 

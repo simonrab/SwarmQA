@@ -25,6 +25,10 @@ _OVERRUN = ("drain", "cancel")
 _FAIL_ON = ("scripted", "any", "never")
 _ISOLATION = ("thread", "subprocess")
 _STEP_FAILURE = ("stop", "continue")
+_DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
+_SYSTEM_ONE_PROVIDERS = ("http", "fake")
+_COMPUTER_USE_PROVIDERS = ("command", "fake")
+_FRICTION_COMPARE = ("gold", "prior_p50")
 
 _NOT_FOUND = "config: not found"
 _INVALID_TOML = "config: invalid toml"
@@ -73,6 +77,8 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "local.isolation", config.local.isolation, _ISOLATION)
     _enum(errors, "spend.overrun", config.spend.overrun, _OVERRUN)
     _enum(errors, "explorer.on_step_failure", config.explorer.on_step_failure, _STEP_FAILURE)
+    _validate_decision(errors, config)
+    _validate_friction(errors, config)
 
     _optional_seconds(errors, "budgets.max_wall_time_s", config.budgets.max_wall_time_s)
     _required_seconds(errors, "pr.max_wall_time_s", config.pr.max_wall_time_s)
@@ -228,9 +234,160 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(explorer, "max_steps", config.explorer, "max_steps")
     _assign(explorer, "max_time_s", config.explorer, "max_time_s")
     _assign(explorer, "on_step_failure", config.explorer, "on_step_failure")
+    _apply_decision(explorer, config, errors)
+    _apply_friction(explorer, config, errors)
 
     suite = _section(document, "suite", errors)
     _assign(suite, "command", config.suite, "command")
+
+
+def _apply_decision(
+    explorer: dict[str, Any], config: CampaignConfig, errors: list[str]
+) -> None:
+    decision = _section(explorer, "decision", errors, path="explorer.decision")
+    _assign(decision, "mode", config.explorer.decision, "mode")
+    _assign(decision, "escalate_after", config.explorer.decision, "escalate_after")
+    _assign(decision, "max_model_calls", config.explorer.decision, "max_model_calls")
+    _assign(decision, "model_timeout_s", config.explorer.decision, "model_timeout_s")
+    _assign(decision, "cache_observations", config.explorer.decision, "cache_observations")
+
+    system_one = _section(
+        decision, "system_one", errors, path="explorer.decision.system_one"
+    )
+    _assign(system_one, "provider", config.explorer.decision.system_one, "provider")
+    _assign(system_one, "endpoint_env", config.explorer.decision.system_one, "endpoint_env")
+    _assign(system_one, "api_key_env", config.explorer.decision.system_one, "api_key_env")
+    _assign(
+        system_one, "min_confidence", config.explorer.decision.system_one, "min_confidence"
+    )
+    _assign(
+        system_one,
+        "include_tree_depth",
+        config.explorer.decision.system_one,
+        "include_tree_depth",
+    )
+
+    computer_use = _section(
+        decision, "computer_use", errors, path="explorer.decision.computer_use"
+    )
+    _assign(computer_use, "provider", config.explorer.decision.computer_use, "provider")
+    _assign(
+        computer_use, "command_env", config.explorer.decision.computer_use, "command_env"
+    )
+    _assign(computer_use, "max_calls", config.explorer.decision.computer_use, "max_calls")
+    _assign(
+        computer_use,
+        "include_a11y_hint",
+        config.explorer.decision.computer_use,
+        "include_a11y_hint",
+    )
+
+
+def _apply_friction(
+    explorer: dict[str, Any], config: CampaignConfig, errors: list[str]
+) -> None:
+    friction = _section(explorer, "friction", errors, path="explorer.friction")
+    _assign(friction, "enabled", config.explorer.friction, "enabled")
+    _assign(friction, "emit_threshold", config.explorer.friction, "emit_threshold")
+    _assign(friction, "min_extra_steps", config.explorer.friction, "min_extra_steps")
+    _assign(friction, "min_backtrack_rate", config.explorer.friction, "min_backtrack_rate")
+    _assign(friction, "personas", config.explorer.friction, "personas")
+    _assign(friction, "fail_ci", config.explorer.friction, "fail_ci")
+    _assign(friction, "compare_to", config.explorer.friction, "compare_to")
+    _assign(friction, "klm", config.explorer.friction, "klm")
+    if "allow_step_ratio" in friction:
+        raw = friction["allow_step_ratio"]
+        if isinstance(raw, dict):
+            # Coerce numeric values to float; validation catches bad shapes.
+            coerced: dict[str, float] = {}
+            for key, item in raw.items():
+                if isinstance(key, str) and isinstance(item, (int, float)) and type(item) is not bool:
+                    coerced[key] = float(item)
+                else:
+                    coerced[key] = item  # type: ignore[assignment]
+            config.explorer.friction.allow_step_ratio = coerced
+        else:
+            config.explorer.friction.allow_step_ratio = raw  # type: ignore[assignment]
+
+
+def _validate_friction(errors: list[str], config: CampaignConfig) -> None:
+    friction = config.explorer.friction
+    _bool_field(errors, "explorer.friction.enabled", friction.enabled)
+    _int_at_least(errors, "explorer.friction.emit_threshold", friction.emit_threshold, 0)
+    if type(friction.emit_threshold) is int and friction.emit_threshold > 100:
+        errors.append("explorer.friction.emit_threshold: must be an integer <= 100")
+    _int_at_least(errors, "explorer.friction.min_extra_steps", friction.min_extra_steps, 0)
+    _number_between(
+        errors,
+        "explorer.friction.min_backtrack_rate",
+        friction.min_backtrack_rate,
+        0,
+        1,
+    )
+    _string_list(errors, "explorer.friction.personas", friction.personas, allow_blank=False)
+    _bool_field(errors, "explorer.friction.fail_ci", friction.fail_ci)
+    _enum(errors, "explorer.friction.compare_to", friction.compare_to, _FRICTION_COMPARE)
+    _bool_field(errors, "explorer.friction.klm", friction.klm)
+    _float_table(errors, "explorer.friction.allow_step_ratio", friction.allow_step_ratio)
+
+
+def _validate_decision(errors: list[str], config: CampaignConfig) -> None:
+    decision = config.explorer.decision
+    _enum(errors, "explorer.decision.mode", decision.mode, _DECISION_MODES)
+    _int_at_least(errors, "explorer.decision.escalate_after", decision.escalate_after, 1)
+    _int_at_least(errors, "explorer.decision.max_model_calls", decision.max_model_calls, 0)
+    _number_above(errors, "explorer.decision.model_timeout_s", decision.model_timeout_s, 0)
+    _bool_field(
+        errors, "explorer.decision.cache_observations", decision.cache_observations
+    )
+
+    system_one = decision.system_one
+    _enum(
+        errors,
+        "explorer.decision.system_one.provider",
+        system_one.provider,
+        _SYSTEM_ONE_PROVIDERS,
+    )
+    _number_between(
+        errors,
+        "explorer.decision.system_one.min_confidence",
+        system_one.min_confidence,
+        0,
+        1,
+    )
+    _int_at_least(
+        errors,
+        "explorer.decision.system_one.include_tree_depth",
+        system_one.include_tree_depth,
+        1,
+    )
+    _nonempty_str(
+        errors, "explorer.decision.system_one.endpoint_env", system_one.endpoint_env
+    )
+    _nonempty_str(
+        errors, "explorer.decision.system_one.api_key_env", system_one.api_key_env
+    )
+
+    computer_use = decision.computer_use
+    _enum(
+        errors,
+        "explorer.decision.computer_use.provider",
+        computer_use.provider,
+        _COMPUTER_USE_PROVIDERS,
+    )
+    _int_at_least(
+        errors, "explorer.decision.computer_use.max_calls", computer_use.max_calls, 0
+    )
+    _bool_field(
+        errors,
+        "explorer.decision.computer_use.include_a11y_hint",
+        computer_use.include_a11y_hint,
+    )
+    _nonempty_str(
+        errors,
+        "explorer.decision.computer_use.command_env",
+        computer_use.command_env,
+    )
 
 
 def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: list[str]) -> None:
@@ -261,12 +418,19 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
         config.pr.mode = overrides.pr_mode  # type: ignore[assignment]
 
 
-def _section(document: dict[str, Any], name: str, errors: list[str]) -> dict[str, Any]:
+def _section(
+    document: dict[str, Any],
+    name: str,
+    errors: list[str],
+    *,
+    path: str | None = None,
+) -> dict[str, Any]:
     if name not in document:
         return {}
     value = document[name]
+    label = path or name
     if not isinstance(value, dict):
-        errors.append(f"{name}: must be a table")
+        errors.append(f"{label}: must be a table")
         return {}
     return value
 
@@ -397,3 +561,14 @@ def _string_table(errors: list[str], field: str, value: object) -> None:
     ):
         return
     errors.append(f"{field}: must be a table of strings")
+
+
+def _float_table(errors: list[str], field: str, value: object) -> None:
+    if isinstance(value, dict) and all(
+        isinstance(key, str)
+        and isinstance(item, (int, float))
+        and type(item) is not bool
+        for key, item in value.items()
+    ):
+        return
+    errors.append(f"{field}: must be a table of numbers")

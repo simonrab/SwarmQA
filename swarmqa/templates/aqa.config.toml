@@ -89,5 +89,43 @@ max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue
 
+# Decision backends for exploratory observe→decide→act.
+# Default heuristic keeps CI / FakeDriver behavior identical.
+# [explorer.decision]
+# mode = "heuristic" # heuristic | system_one | computer_use | cascade
+# escalate_after = 3
+# max_model_calls = 8
+# model_timeout_s = 30.0
+# cache_observations = true
+#
+# [explorer.decision.system_one]
+# provider = "http" # http | fake
+# endpoint_env = "AQA_SYSTEM_ONE_ENDPOINT"
+# api_key_env = "AQA_SYSTEM_ONE_API_KEY"
+# min_confidence = 0.55
+# include_tree_depth = 4
+#
+# [explorer.decision.computer_use]
+# provider = "command" # command | fake
+# command_env = "AQA_COMPUTER_USE_COMMAND"
+# max_calls = 3
+# include_a11y_hint = true
+
+# UX friction metering (advisory friction_path findings).
+# fail_ci is reserved and not wired to fail_on yet.
+[explorer.friction]
+enabled = true
+emit_threshold = 50
+min_extra_steps = 3
+min_backtrack_rate = 0.15
+personas = ["expert", "first_time"]
+fail_ci = false
+compare_to = "gold" # gold | prior_p50
+klm = true
+# Optional per-intent ceilings (inclusive). Hunts at or below the ratio stay quiet.
+# Shard tags may override: allow_step_ratio:3.5
+# [explorer.friction.allow_step_ratio]
+# "export-wizard" = 3.5
+
 [suite]
 # command = "xcodebuild test -scheme MyApp"

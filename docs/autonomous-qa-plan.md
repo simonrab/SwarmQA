@@ -505,6 +505,17 @@ Prefer **one agent per coherent chunk**, not per tiny task. Coordinator keeps cr
 
 **Recommendation (locked):** Include **Tart in v1**, sequenced **after** local single-worker + local fleet (C1–C8). Do **not** block the first green local path on Tart. Paid cloud host stays post-v1.
 
+### Decision backends + UX friction (locked)
+
+| Choice | Lock |
+| --- | --- |
+| Language | **Python** in `swarmqa/` — no Rust/PyO3 for decision or friction |
+| Default decide mode | `heuristic` (CI / FakeDriver unchanged) |
+| Opt-in cascade | `heuristic → system_one → computer_use` on stall; fail-open |
+| System One | Typed chooser over finite a11y candidates (HTTP or fake); labels leave the machine when HTTP is on — see `docs/decision.md` |
+| Computer use | Shell-out JSON command (or fake); act via `AppDriver` |
+| UX friction | Gold-relative session metrics → advisory `friction_path`; `fail_ci = false` default; see `docs/friction.md` |
+
 ## 7. Still open
 
 None blocking build. Target app for live runs will be chosen when integration testing starts.

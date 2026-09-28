@@ -57,11 +57,33 @@ def render_summary_md(result: CampaignResult) -> str:
             f"| {item.shard_name or item.shard_id} | {item.shard_kind or ''} | {item.status} | {evidence} |"
         )
     lines.extend(["", "## Findings", ""])
-    findings = [finding for item in result.results for finding in item.findings]
+    findings = [
+        finding
+        for item in result.results
+        for finding in item.findings
+        if finding.kind != "friction_path"
+    ]
     if not findings:
         lines.append("No findings.")
     else:
         for finding in findings:
+            workers = ", ".join(finding.worker_ids) or finding.worker_id
+            lines.append(
+                f"- [{finding.severity}] {finding.title} "
+                f"(worker {workers}, backend {finding.backend}) "
+                f"-> findings/{finding.id}.md"
+            )
+    friction = [
+        finding
+        for item in result.results
+        for finding in item.findings
+        if finding.kind == "friction_path"
+    ]
+    lines.extend(["", "## Friction (advisory)", ""])
+    if not friction:
+        lines.append("No friction findings.")
+    else:
+        for finding in friction:
             workers = ", ".join(finding.worker_ids) or finding.worker_id
             lines.append(
                 f"- [{finding.severity}] {finding.title} "

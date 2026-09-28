@@ -15,13 +15,17 @@ from swarmqa.models import (
     CampaignConfig,
     CliOverrides,
     CloudConfig,
+    ComputerUseConfig,
     CoverageConfig,
+    DecisionConfig,
     ExplorerConfig,
+    FrictionConfig,
     IssuesConfig,
     LocalConfig,
     PrConfig,
     SpendConfig,
     SuiteConfig,
+    SystemOneConfig,
     VideoConfig,
     VisualConfig,
     VmConfig,
@@ -58,6 +62,13 @@ def test_template_maps_onto_campaign_config():
     assert config.gui_worker_warn_threshold == 2
     assert config.explorer.max_steps == 40
     assert config.explorer.max_time_s == 120
+    assert config.explorer.decision == DecisionConfig()
+    assert config.explorer.decision.mode == "heuristic"
+    assert config.explorer.decision.system_one == SystemOneConfig()
+    assert config.explorer.decision.computer_use == ComputerUseConfig()
+    assert config.explorer.friction == FrictionConfig()
+    assert config.explorer.friction.enabled is True
+    assert config.explorer.friction.fail_ci is False
     assert config.visual.threshold == 0.01
     assert config.cloud.cost_per_worker_minute == 0.05
     assert validate_config(config) == []
@@ -155,6 +166,36 @@ max_steps = 10
 max_time_s = 30
 on_step_failure = "continue"
 
+[explorer.decision]
+mode = "cascade"
+escalate_after = 2
+max_model_calls = 4
+model_timeout_s = 15.0
+cache_observations = false
+
+[explorer.decision.system_one]
+provider = "fake"
+endpoint_env = "S1_URL"
+api_key_env = "S1_KEY"
+min_confidence = 0.7
+include_tree_depth = 2
+
+[explorer.decision.computer_use]
+provider = "fake"
+command_env = "CU_CMD"
+max_calls = 1
+include_a11y_hint = false
+
+[explorer.friction]
+enabled = true
+emit_threshold = 60
+min_extra_steps = 4
+min_backtrack_rate = 0.2
+personas = ["first_time"]
+fail_ci = false
+compare_to = "prior_p50"
+klm = false
+
 [suite]
 command = "xcodebuild test -scheme MyApp"
 """,
@@ -197,7 +238,41 @@ command = "xcodebuild test -scheme MyApp"
             linear_team="QA",
         ),
         visual=VisualConfig(enabled=True, baseline_dir="shots", threshold=0.2),
-        explorer=ExplorerConfig(max_steps=10, max_time_s=30, on_step_failure="continue"),
+        explorer=ExplorerConfig(
+            max_steps=10,
+            max_time_s=30,
+            on_step_failure="continue",
+            decision=DecisionConfig(
+                mode="cascade",
+                escalate_after=2,
+                max_model_calls=4,
+                model_timeout_s=15.0,
+                cache_observations=False,
+                system_one=SystemOneConfig(
+                    provider="fake",
+                    endpoint_env="S1_URL",
+                    api_key_env="S1_KEY",
+                    min_confidence=0.7,
+                    include_tree_depth=2,
+                ),
+                computer_use=ComputerUseConfig(
+                    provider="fake",
+                    command_env="CU_CMD",
+                    max_calls=1,
+                    include_a11y_hint=False,
+                ),
+            ),
+            friction=FrictionConfig(
+                enabled=True,
+                emit_threshold=60,
+                min_extra_steps=4,
+                min_backtrack_rate=0.2,
+                personas=["first_time"],
+                fail_ci=False,
+                compare_to="prior_p50",
+                klm=False,
+            ),
+        ),
         coverage=CoverageConfig(scripted=True, exploratory=False, visual=True),
         suite=SuiteConfig(command="xcodebuild test -scheme MyApp"),
         cloud=CloudConfig(
@@ -376,6 +451,60 @@ def test_section_must_be_a_table(tmp_path: Path):
         (
             lambda c: setattr(c.explorer, "on_step_failure", "skip"),
             ["explorer.on_step_failure: must be one of stop, continue"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision, "mode", "llm"),
+            [
+                "explorer.decision.mode: must be one of heuristic, system_one, "
+                "computer_use, cascade"
+            ],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision, "escalate_after", 0),
+            ["explorer.decision.escalate_after: must be an integer >= 1"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision, "max_model_calls", -1),
+            ["explorer.decision.max_model_calls: must be an integer >= 0"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision, "model_timeout_s", 0),
+            ["explorer.decision.model_timeout_s: must be > 0"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision.system_one, "provider", "grpc"),
+            ["explorer.decision.system_one.provider: must be one of http, fake"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision.system_one, "min_confidence", 1.5),
+            [
+                "explorer.decision.system_one.min_confidence: must be between 0 and 1 "
+                "inclusive"
+            ],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision.system_one, "include_tree_depth", 0),
+            ["explorer.decision.system_one.include_tree_depth: must be an integer >= 1"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision.computer_use, "provider", "sdk"),
+            ["explorer.decision.computer_use.provider: must be one of command, fake"],
+        ),
+        (
+            lambda c: setattr(c.explorer.decision.computer_use, "max_calls", -1),
+            ["explorer.decision.computer_use.max_calls: must be an integer >= 0"],
+        ),
+        (
+            lambda c: setattr(c.explorer.friction, "compare_to", "baseline"),
+            ["explorer.friction.compare_to: must be one of gold, prior_p50"],
+        ),
+        (
+            lambda c: setattr(c.explorer.friction, "emit_threshold", 101),
+            ["explorer.friction.emit_threshold: must be an integer <= 100"],
+        ),
+        (
+            lambda c: setattr(c.explorer.friction, "fail_ci", "yes"),  # type: ignore[arg-type]
+            ["explorer.friction.fail_ci: must be a boolean"],
         ),
     ],
 )

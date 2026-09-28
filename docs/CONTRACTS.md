@@ -161,14 +161,20 @@ Markdown step grammar (one action per bullet):
 `run_exploratory(...) -> WorkerResult` within `explorer.max_steps` and `explorer.max_time_s`:
 
 - Launch the app. A crash or missing bundle is a finding, same severity rules as C4.
-- Strategies, in order, stopping when the goal tokens are satisfied or the budget ends: search the accessibility tree for labels that share a word with the goal; click enabled buttons in that set; try menu bar paths that match goal words; if `maturity == "prototype"` and an expected-looking control from the goal is absent, emit `missing_control` (a finding, not a silent skip).
+- Hunt loop is observe → decide → act. `swarmqa.decision.build_evaluator(config)` supplies the `DecisionEvaluator`; tests may pass `evaluator=` to inject one. Default `explorer.decision.mode = heuristic` preserves the classic strategy order. Opt-in `system_one` / `cascade` escalate to System One on stall and fail open; see `docs/decision.md` (privacy: a11y labels leave the machine when System One HTTP is enabled).
+- Heuristic strategies, in order, stopping when the evaluator returns done or the budget ends: search the accessibility tree for labels that share a word with the goal; click enabled buttons in that set; try menu bar paths that match goal words; if `maturity == "prototype"` and an expected-looking control from the goal is absent, emit `missing_control` (a finding, not a silent skip).
 - Detect `AppCrashedError` (`crash`), `UITimeoutError` (`unresponsive`), and elements whose label or value contains `error` or `empty` (`error_state`).
 - Record a short hypothesis string in `finding.details` (for example `Settings gear missing — trying menu bar`).
+- When `explorer.friction.enabled`, meter path cost and may emit advisory `friction_path` (see C13 / `docs/friction.md`). `fail_ci` is reserved and not wired to `fail_on`.
 - Status is `passed` when no findings were recorded, `failed` when findings exist.
 - Exploratory shards still write finding files and a replay stub of the actions the explorer actually performed.
 - Log hypotheses to the worker result `error` field only for a fatal worker fault; hypotheses belong in finding details.
 
 Use the fake driver in tests. A half-wired tree that lacks a goal control must yield at least one finding.
+
+## C13 — UX friction (advisory)
+
+`swarmqa.friction` meters gold-relative session metrics on exploratory hunts and may emit `Finding.kind = friction_path`. Titles lead with a number. Default gates (`min_extra_steps = 3`, synthesized gold score ≥ 65) keep short happy-path FakeDriver hunts silent. Report summaries list friction under `## Friction (advisory)` only. Under `fail_on = scripted`, exploratory friction stays exit 0 like other exploratory findings. See `docs/friction.md`.
 
 ## C6 — Visual diff
 

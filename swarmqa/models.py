@@ -28,7 +28,12 @@ FindingKind = Literal[
     "unresponsive",
     "error_state",
     "launch",
+    "friction_path",
 ]
+DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
+SystemOneProvider = Literal["http", "fake"]
+ComputerUseProvider = Literal["command", "fake"]
+FrictionCompareTo = Literal["gold", "prior_p50"]
 ActionType = Literal[
     "click",
     "type",
@@ -103,10 +108,64 @@ class VisualConfig:
 
 
 @dataclass
+class SystemOneConfig:
+    provider: SystemOneProvider = "http"
+    endpoint_env: str = "AQA_SYSTEM_ONE_ENDPOINT"
+    api_key_env: str = "AQA_SYSTEM_ONE_API_KEY"
+    min_confidence: float = 0.55
+    include_tree_depth: int = 4
+
+
+@dataclass
+class ComputerUseConfig:
+    provider: ComputerUseProvider = "command"
+    command_env: str = "AQA_COMPUTER_USE_COMMAND"
+    max_calls: int = 3
+    include_a11y_hint: bool = True
+
+
+@dataclass
+class DecisionConfig:
+    mode: DecisionMode = "heuristic"
+    escalate_after: int = 3
+    max_model_calls: int = 8
+    model_timeout_s: float = 30.0
+    cache_observations: bool = True
+    system_one: SystemOneConfig = field(default_factory=SystemOneConfig)
+    computer_use: ComputerUseConfig = field(default_factory=ComputerUseConfig)
+
+
+@dataclass
+class FrictionConfig:
+    """Advisory UX friction metering for exploratory hunts.
+
+    ``fail_ci`` is reserved and not wired to ``fail_on`` yet (default false).
+    Under ``fail_on=scripted``, exploratory ``friction_path`` findings stay
+    exit 0 like other exploratory findings.
+
+    ``allow_step_ratio`` maps intent_id → max allowed ``step_ratio`` (inclusive);
+    hunts at or below that ratio do not emit. Shard tags may override via
+    ``allow_step_ratio:N``.
+    """
+
+    enabled: bool = True
+    emit_threshold: int = 50
+    min_extra_steps: int = 3
+    min_backtrack_rate: float = 0.15
+    personas: list[str] = field(default_factory=lambda: ["expert", "first_time"])
+    fail_ci: bool = False
+    compare_to: FrictionCompareTo = "gold"
+    klm: bool = True
+    allow_step_ratio: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class ExplorerConfig:
     max_steps: int = 40
     max_time_s: float = 120
     on_step_failure: StepFailurePolicy = "stop"
+    decision: DecisionConfig = field(default_factory=DecisionConfig)
+    friction: FrictionConfig = field(default_factory=FrictionConfig)
 
 
 @dataclass

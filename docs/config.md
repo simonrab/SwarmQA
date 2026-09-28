@@ -21,6 +21,8 @@
 | `pr.max_wall_time` | `1h` (3600 seconds) |
 | `pr.max_pr_updates` | `5` |
 | `explorer.max_steps` / `max_time_s` | `40` / `120` |
+| `explorer.decision.mode` | `heuristic` |
+| `explorer.friction.enabled` / `fail_ci` | `true` / `false` |
 | `visual.threshold` | `0.01` |
 
 `spend.max_spend` stays unset until the file or `--max-spend` sets it. The template comment suggests `10` USD when you turn on `backend = cloud`. Set that cap yourself. A cloud campaign without a positive cap fails fast.
@@ -109,9 +111,44 @@ max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue
 
+[explorer.decision]
+mode = "heuristic" # heuristic | system_one | computer_use | cascade
+escalate_after = 3
+max_model_calls = 8
+model_timeout_s = 30.0
+cache_observations = true
+
+[explorer.decision.system_one]
+provider = "http" # http | fake
+endpoint_env = "AQA_SYSTEM_ONE_ENDPOINT"
+api_key_env = "AQA_SYSTEM_ONE_API_KEY"
+min_confidence = 0.55
+include_tree_depth = 4
+
+[explorer.decision.computer_use]
+provider = "command" # command | fake
+command_env = "AQA_COMPUTER_USE_COMMAND"
+max_calls = 3
+include_a11y_hint = true
+
+[explorer.friction]
+enabled = true
+emit_threshold = 50
+min_extra_steps = 3
+min_backtrack_rate = 0.15
+personas = ["expert", "first_time"]
+fail_ci = false
+compare_to = "gold" # gold | prior_p50
+klm = true
+# Optional: [explorer.friction.allow_step_ratio] intent_id = 3.5
+
 [suite]
 command = "xcodebuild test -scheme MyApp"
 ```
+
+`explorer.decision.mode` defaults to `heuristic`. Computer-use (`provider = "command"`) reads the shell command from the env var named by `command_env`, passes the screenshot path as argv, optional a11y hint JSON on stdin, and expects one JSON action on stdout. Use `provider = "fake"` in CI so no live command runs. Call caps are `computer_use.max_calls` and shared `max_model_calls`; timeout is `model_timeout_s`. See `docs/decision.md`.
+
+`explorer.friction` meters advisory `friction_path` findings (gold-relative). `fail_ci` is reserved and not wired to `fail_on` yet. See `docs/friction.md`.
 
 Unknown keys are ignored. Credentials are environment variable names (`endpoint_env`, `token_env`, `github_token_env`, `linear_api_key_env`).
 
@@ -125,6 +162,8 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
 | `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+| `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
+| `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 
 `max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional. The PR loop wall time defaults to one hour.
 
@@ -191,8 +230,13 @@ Every message starts with its field path. `load_config` collects them and raises
 | cloud `spend.max_spend` is present and `> 0` | `spend.max_spend:` |
 | `pr.max_iterations` and `pr.max_pr_updates` are integers `>= 1` | `pr.max_iterations:`, `pr.max_pr_updates:` |
 | `explorer.max_steps` is an integer `>= 1` and `explorer.max_time_s` is `> 0` | `explorer.max_steps:`, `explorer.max_time_s:` |
+| `explorer.decision.mode` is `heuristic`, `system_one`, `computer_use`, or `cascade` | `explorer.decision.mode:` |
+| `explorer.decision.escalate_after` `>= 1`, `max_model_calls` `>= 0`, `model_timeout_s` `> 0` | `explorer.decision.escalate_after:`, … |
+| `system_one.provider` is `http` or `fake`; `min_confidence` in 0..1; `include_tree_depth` `>= 1` | `explorer.decision.system_one.*:` |
+| `computer_use.provider` is `command` or `fake`; `max_calls` `>= 0` | `explorer.decision.computer_use.*:` |
+| `explorer.friction.compare_to` is `gold` or `prior_p50`; `emit_threshold` 0..100 | `explorer.friction.*:` |
 
-The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, or PR mode.
+The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, PR mode, or decision mode.
 
 A missing file, including a path that is a directory, raises `ConfigError(["config: not found"])`. Unreadable bytes and TOML syntax errors raise `ConfigError(["config: invalid toml"])`. A bad duration raises a field error on `budgets.max_wall_time_s` or `pr.max_wall_time_s` and includes the `parse_duration` reason. `90s` and `2h` load. `30` and `soon` fail. A table written as a scalar (`campaign = "local"`) is `campaign: must be a table`.
 
