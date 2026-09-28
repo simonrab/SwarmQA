@@ -33,6 +33,7 @@ FindingKind = Literal[
 DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
 SystemOneProvider = Literal["http", "fake"]
 ComputerUseProvider = Literal["command", "fake"]
+FrictionCompareTo = Literal["gold", "prior_p50"]
 ActionType = Literal[
     "click",
     "type",
@@ -135,11 +136,31 @@ class DecisionConfig:
 
 
 @dataclass
+class FrictionConfig:
+    """Advisory UX friction metering for exploratory hunts.
+
+    ``fail_ci`` is reserved and not wired to ``fail_on`` yet (default false).
+    Under ``fail_on=scripted``, exploratory ``friction_path`` findings stay
+    exit 0 like other exploratory findings.
+    """
+
+    enabled: bool = True
+    emit_threshold: int = 50
+    min_extra_steps: int = 3
+    min_backtrack_rate: float = 0.15
+    personas: list[str] = field(default_factory=lambda: ["expert", "first_time"])
+    fail_ci: bool = False
+    compare_to: FrictionCompareTo = "gold"
+    klm: bool = True
+
+
+@dataclass
 class ExplorerConfig:
     max_steps: int = 40
     max_time_s: float = 120
     on_step_failure: StepFailurePolicy = "stop"
     decision: DecisionConfig = field(default_factory=DecisionConfig)
+    friction: FrictionConfig = field(default_factory=FrictionConfig)
 
 
 @dataclass

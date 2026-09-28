@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from swarmqa.decision.protocol import DecisionAction, Observation
+from swarmqa.decision.protocol import Candidate, DecisionAction, Observation
 from swarmqa.driver.query import walk
 from swarmqa.models import ElementQuery, UIElement
 
@@ -324,6 +324,51 @@ def exploration_menu_paths(
         paths.append([name])
         covered.add(synthetic)
     return paths
+
+
+def collect_candidates(obs: Observation) -> list[Candidate]:
+    """Finite click/menu options the heuristic would consider (untried only)."""
+    candidates: list[Candidate] = []
+    click_i = 0
+    for element in walk(obs.elements):
+        if element.role.lower() != "button" or not element.enabled:
+            continue
+        names = element_names(element)
+        if not any(shares(name, obs.tokens) for name in names):
+            continue
+        key = click_key(element)
+        if key in obs.tried_clicks:
+            continue
+        label = element.label or element.identifier or element.role
+        candidates.append(
+            Candidate(
+                kind="click",
+                query=query_for(element),
+                label=label,
+                choice_id=f"click:{click_i}",
+            )
+        )
+        click_i += 1
+
+    if goal_satisfied(obs.elements, obs.expected):
+        return candidates
+
+    menu_i = 0
+    for path in exploration_menu_paths(obs.elements, obs.tokens, obs.expected):
+        key = tuple(path)
+        if key in obs.tried_menus:
+            continue
+        label = " > ".join(path)
+        candidates.append(
+            Candidate(
+                kind="menu",
+                menu_path=list(path),
+                label=label,
+                choice_id=f"menu:{menu_i}",
+            )
+        )
+        menu_i += 1
+    return candidates
 
 
 class HeuristicEvaluator:

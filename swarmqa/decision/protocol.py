@@ -17,6 +17,7 @@ class Candidate:
     query: ElementQuery | None = None
     menu_path: list[str] | None = None
     label: str | None = None
+    choice_id: str = ""
 
 
 @dataclass
@@ -31,6 +32,7 @@ class Observation:
     tried_clicks: frozenset[str] = field(default_factory=frozenset)
     tried_menus: frozenset[tuple[str, ...]] = field(default_factory=frozenset)
     tree_summary: list[dict] = field(default_factory=list)
+    screenshot_path: str | None = None
 
 
 @dataclass

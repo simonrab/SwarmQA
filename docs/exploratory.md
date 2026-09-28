@@ -32,7 +32,7 @@ After launch (and optional video start), the hunt:
 2. **Decide** — ask the `DecisionEvaluator` for the next `DecisionAction` given goal tokens, the tree, maturity, steps left, and which clicks/menus were already tried.
 3. **Act** — perform that click or menu (each costs a step), emit `missing_control` when asked, or stop on `done`/`noop`.
 
-Default `explorer.decision.mode = heuristic` keeps the classic strategy order below and is behavior-identical for existing FakeDriver tests. `system_one`, `computer_use`, and `cascade` currently fall back to the same heuristic (model backends land in later PRs).
+Default `explorer.decision.mode = heuristic` keeps the classic strategy order below and is behavior-identical for existing FakeDriver tests. Opt-in `system_one` / `computer_use` / `cascade` escalate after `escalate_after` stalls and fail open to the heuristic. See `docs/decision.md`.
 
 ## Strategies (heuristic)
 
@@ -58,7 +58,18 @@ model_timeout_s = 30.0
 cache_observations = true
 ```
 
-Nested `[explorer.decision.system_one]` and `[explorer.decision.computer_use]` hold provider settings for later backends. See `docs/config.md`.
+Nested `[explorer.decision.system_one]` and `[explorer.decision.computer_use]` hold provider settings. Computer-use shells out via `AQA_COMPUTER_USE_COMMAND` (or `provider = "fake"` in CI). See `docs/config.md` and `docs/decision.md`.
+
+## UX friction (advisory)
+
+When `explorer.friction.enabled` is true (default), the session meters path
+cost after each tree read / click / menu and may emit an advisory
+`friction_path` finding at the end of the hunt. Gold-relative gates
+(`min_extra_steps = 3` by default) keep short FakeDriver happy paths silent.
+See `docs/friction.md`.
+
+`explorer.friction.fail_ci` is reserved and **not** wired to `fail_on` yet
+(default false). Under `fail_on=scripted`, exploratory friction stays exit 0.
 
 ## Findings
 
@@ -69,6 +80,7 @@ Nested `[explorer.decision.system_one]` and `[explorer.decision.computer_use]` h
 | `UITimeoutError` | `unresponsive` | `high` |
 | Label or value contains `error` or `empty` | `error_state` | `medium` |
 | Prototype goal control still absent | `missing_control` | `high` |
+| Costly path vs gold (advisory; see `docs/friction.md`) | `friction_path` | score-mapped |
 
 `WorkerResult.status` is `passed` when there are no findings, `failed` when there are, and `error` only when the driver raises something that is not one of those UI failures. The `error` string is that fault. Hypotheses are not copied there.
 

@@ -28,6 +28,7 @@ _STEP_FAILURE = ("stop", "continue")
 _DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
 _SYSTEM_ONE_PROVIDERS = ("http", "fake")
 _COMPUTER_USE_PROVIDERS = ("command", "fake")
+_FRICTION_COMPARE = ("gold", "prior_p50")
 
 _NOT_FOUND = "config: not found"
 _INVALID_TOML = "config: invalid toml"
@@ -77,6 +78,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "spend.overrun", config.spend.overrun, _OVERRUN)
     _enum(errors, "explorer.on_step_failure", config.explorer.on_step_failure, _STEP_FAILURE)
     _validate_decision(errors, config)
+    _validate_friction(errors, config)
 
     _optional_seconds(errors, "budgets.max_wall_time_s", config.budgets.max_wall_time_s)
     _required_seconds(errors, "pr.max_wall_time_s", config.pr.max_wall_time_s)
@@ -233,6 +235,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(explorer, "max_time_s", config.explorer, "max_time_s")
     _assign(explorer, "on_step_failure", config.explorer, "on_step_failure")
     _apply_decision(explorer, config, errors)
+    _apply_friction(explorer, config, errors)
 
     suite = _section(document, "suite", errors)
     _assign(suite, "command", config.suite, "command")
@@ -278,6 +281,40 @@ def _apply_decision(
         config.explorer.decision.computer_use,
         "include_a11y_hint",
     )
+
+
+def _apply_friction(
+    explorer: dict[str, Any], config: CampaignConfig, errors: list[str]
+) -> None:
+    friction = _section(explorer, "friction", errors, path="explorer.friction")
+    _assign(friction, "enabled", config.explorer.friction, "enabled")
+    _assign(friction, "emit_threshold", config.explorer.friction, "emit_threshold")
+    _assign(friction, "min_extra_steps", config.explorer.friction, "min_extra_steps")
+    _assign(friction, "min_backtrack_rate", config.explorer.friction, "min_backtrack_rate")
+    _assign(friction, "personas", config.explorer.friction, "personas")
+    _assign(friction, "fail_ci", config.explorer.friction, "fail_ci")
+    _assign(friction, "compare_to", config.explorer.friction, "compare_to")
+    _assign(friction, "klm", config.explorer.friction, "klm")
+
+
+def _validate_friction(errors: list[str], config: CampaignConfig) -> None:
+    friction = config.explorer.friction
+    _bool_field(errors, "explorer.friction.enabled", friction.enabled)
+    _int_at_least(errors, "explorer.friction.emit_threshold", friction.emit_threshold, 0)
+    if type(friction.emit_threshold) is int and friction.emit_threshold > 100:
+        errors.append("explorer.friction.emit_threshold: must be an integer <= 100")
+    _int_at_least(errors, "explorer.friction.min_extra_steps", friction.min_extra_steps, 0)
+    _number_between(
+        errors,
+        "explorer.friction.min_backtrack_rate",
+        friction.min_backtrack_rate,
+        0,
+        1,
+    )
+    _string_list(errors, "explorer.friction.personas", friction.personas, allow_blank=False)
+    _bool_field(errors, "explorer.friction.fail_ci", friction.fail_ci)
+    _enum(errors, "explorer.friction.compare_to", friction.compare_to, _FRICTION_COMPARE)
+    _bool_field(errors, "explorer.friction.klm", friction.klm)
 
 
 def _validate_decision(errors: list[str], config: CampaignConfig) -> None:

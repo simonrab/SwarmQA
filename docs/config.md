@@ -22,6 +22,7 @@
 | `pr.max_pr_updates` | `5` |
 | `explorer.max_steps` / `max_time_s` | `40` / `120` |
 | `explorer.decision.mode` | `heuristic` |
+| `explorer.friction.enabled` / `fail_ci` | `true` / `false` |
 | `visual.threshold` | `0.01` |
 
 `spend.max_spend` stays unset until the file or `--max-spend` sets it. The template comment suggests `10` USD when you turn on `backend = cloud`. Set that cap yourself. A cloud campaign without a positive cap fails fast.
@@ -130,9 +131,23 @@ command_env = "AQA_COMPUTER_USE_COMMAND"
 max_calls = 3
 include_a11y_hint = true
 
+[explorer.friction]
+enabled = true
+emit_threshold = 50
+min_extra_steps = 3
+min_backtrack_rate = 0.15
+personas = ["expert", "first_time"]
+fail_ci = false
+compare_to = "gold" # gold | prior_p50
+klm = true
+
 [suite]
 command = "xcodebuild test -scheme MyApp"
 ```
+
+`explorer.decision.mode` defaults to `heuristic`. Computer-use (`provider = "command"`) reads the shell command from the env var named by `command_env`, passes the screenshot path as argv, optional a11y hint JSON on stdin, and expects one JSON action on stdout. Use `provider = "fake"` in CI so no live command runs. Call caps are `computer_use.max_calls` and shared `max_model_calls`; timeout is `model_timeout_s`. See `docs/decision.md`.
+
+`explorer.friction` meters advisory `friction_path` findings (gold-relative). `fail_ci` is reserved and not wired to `fail_on` yet. See `docs/friction.md`.
 
 Unknown keys are ignored. Credentials are environment variable names (`endpoint_env`, `token_env`, `github_token_env`, `linear_api_key_env`).
 
@@ -147,6 +162,7 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
 | `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
+| `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 
 `max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional. The PR loop wall time defaults to one hour.
 
@@ -217,6 +233,7 @@ Every message starts with its field path. `load_config` collects them and raises
 | `explorer.decision.escalate_after` `>= 1`, `max_model_calls` `>= 0`, `model_timeout_s` `> 0` | `explorer.decision.escalate_after:`, … |
 | `system_one.provider` is `http` or `fake`; `min_confidence` in 0..1; `include_tree_depth` `>= 1` | `explorer.decision.system_one.*:` |
 | `computer_use.provider` is `command` or `fake`; `max_calls` `>= 0` | `explorer.decision.computer_use.*:` |
+| `explorer.friction.compare_to` is `gold` or `prior_p50`; `emit_threshold` 0..100 | `explorer.friction.*:` |
 
 The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, PR mode, or decision mode.
 

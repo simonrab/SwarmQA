@@ -1,12 +1,15 @@
-"""Optional observation cache stub (filled when model backends land)."""
+"""Optional observation cache for model decision backends."""
 
 from __future__ import annotations
+
+import hashlib
+import json
 
 from swarmqa.decision.protocol import DecisionAction, Observation
 
 
 class ObservationCache:
-    """No-op cache used when ``cache_observations`` is enabled."""
+    """Skip duplicate System One calls for the same tree fingerprint."""
 
     def __init__(self) -> None:
         self._store: dict[str, DecisionAction] = {}
@@ -19,4 +22,12 @@ class ObservationCache:
 
     @staticmethod
     def key_for(obs: Observation) -> str:
-        return f"{obs.goal}|{obs.stall_count}|{len(obs.elements)}"
+        payload = {
+            "goal": obs.goal,
+            "tree": obs.tree_summary,
+            "tried_clicks": sorted(obs.tried_clicks),
+            "tried_menus": [list(path) for path in sorted(obs.tried_menus)],
+            "expected": list(obs.expected),
+        }
+        raw = json.dumps(payload, sort_keys=True, default=str)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()

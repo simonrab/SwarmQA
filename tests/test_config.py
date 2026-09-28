@@ -19,6 +19,7 @@ from swarmqa.models import (
     CoverageConfig,
     DecisionConfig,
     ExplorerConfig,
+    FrictionConfig,
     IssuesConfig,
     LocalConfig,
     PrConfig,
@@ -65,6 +66,9 @@ def test_template_maps_onto_campaign_config():
     assert config.explorer.decision.mode == "heuristic"
     assert config.explorer.decision.system_one == SystemOneConfig()
     assert config.explorer.decision.computer_use == ComputerUseConfig()
+    assert config.explorer.friction == FrictionConfig()
+    assert config.explorer.friction.enabled is True
+    assert config.explorer.friction.fail_ci is False
     assert config.visual.threshold == 0.01
     assert config.cloud.cost_per_worker_minute == 0.05
     assert validate_config(config) == []
@@ -182,6 +186,16 @@ command_env = "CU_CMD"
 max_calls = 1
 include_a11y_hint = false
 
+[explorer.friction]
+enabled = true
+emit_threshold = 60
+min_extra_steps = 4
+min_backtrack_rate = 0.2
+personas = ["first_time"]
+fail_ci = false
+compare_to = "prior_p50"
+klm = false
+
 [suite]
 command = "xcodebuild test -scheme MyApp"
 """,
@@ -247,6 +261,16 @@ command = "xcodebuild test -scheme MyApp"
                     max_calls=1,
                     include_a11y_hint=False,
                 ),
+            ),
+            friction=FrictionConfig(
+                enabled=True,
+                emit_threshold=60,
+                min_extra_steps=4,
+                min_backtrack_rate=0.2,
+                personas=["first_time"],
+                fail_ci=False,
+                compare_to="prior_p50",
+                klm=False,
             ),
         ),
         coverage=CoverageConfig(scripted=True, exploratory=False, visual=True),
@@ -469,6 +493,18 @@ def test_section_must_be_a_table(tmp_path: Path):
         (
             lambda c: setattr(c.explorer.decision.computer_use, "max_calls", -1),
             ["explorer.decision.computer_use.max_calls: must be an integer >= 0"],
+        ),
+        (
+            lambda c: setattr(c.explorer.friction, "compare_to", "baseline"),
+            ["explorer.friction.compare_to: must be one of gold, prior_p50"],
+        ),
+        (
+            lambda c: setattr(c.explorer.friction, "emit_threshold", 101),
+            ["explorer.friction.emit_threshold: must be an integer <= 100"],
+        ),
+        (
+            lambda c: setattr(c.explorer.friction, "fail_ci", "yes"),  # type: ignore[arg-type]
+            ["explorer.friction.fail_ci: must be a boolean"],
         ),
     ],
 )

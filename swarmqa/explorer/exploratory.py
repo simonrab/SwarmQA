@@ -37,6 +37,9 @@ from swarmqa.errors import (
     ElementNotFoundError,
     UITimeoutError,
 )
+from swarmqa.friction.emit import maybe_emit_friction
+from swarmqa.friction.gold import resolve_gold, scripted_steps_from_shard
+from swarmqa.friction.session import FrictionSession
 from swarmqa.models import (
     CampaignConfig,
     ElementQuery,
@@ -235,6 +238,10 @@ class _Session:
         self._tried_clicks: set[str] = set()
         self._tried_menus: set[tuple[str, ...]] = set()
         self._stall_count = 0
+        self.friction: FrictionSession | None = None
+        if config.explorer.friction.enabled:
+            personas = config.explorer.friction.personas or ["expert"]
+            self.friction = FrictionSession(persona=personas[0])
 
     def hunt(self) -> None:
         if not self._launch():
@@ -269,6 +276,7 @@ class _Session:
             return
 
     def finish(self, started_at: str, started_mono: float) -> WorkerResult:
+        self._maybe_emit_friction()
         video_path = self._stop_video()
         status = self._status()
         if video_path is not None and not keep_video(
@@ -299,6 +307,53 @@ class _Session:
             shard_name=self.shard.name,
             shard_kind=self.shard.kind,
         )
+
+    def _maybe_emit_friction(self) -> None:
+        if self.friction is None:
+            return
+        friction_cfg = self.config.explorer.friction
+        scripted = scripted_steps_from_shard(self.shard)
+        gold = resolve_gold(
+            scripted_steps=scripted,
+            expected_controls=len(self.expected),
+        )
+        finding = maybe_emit_friction(
+            session=self.friction,
+            config=friction_cfg,
+            gold=gold,
+            expected_controls=len(self.expected),
+            worker_id=self.worker_id,
+            backend=self.config.backend,
+            shard_id=self.shard.id,
+            finding_id=f"f-{len(self.findings) + 1}",
+            steps=list(self.narrative),
+            environment=dict(self.environment),
+            intent_id=self.shard.id or self.shard.name or "",
+            locus=self.goal,
+            fingerprint_fn=_fingerprint,
+        )
+        if finding is None:
+            return
+        self.findings.append(finding)
+        self.replays.append([dict(step) for step in self.performed])
+
+    def _friction_observe(
+        self,
+        tree: list[UIElement] | None,
+        action_kind: str,
+        target_key: str | None,
+        success: bool,
+    ) -> None:
+        if self.friction is None or tree is None:
+            return
+        self.friction.observe(tree, action_kind, target_key, success)
+
+    def _peek_tree(self) -> list[UIElement] | None:
+        """Read the accessibility tree without consuming the hunt budget."""
+        try:
+            return list(self.driver.accessibility_tree())
+        except Exception:
+            return None
 
     def _observation(self, tree: list[UIElement]) -> Observation:
         return Observation(
@@ -446,6 +501,7 @@ class _Session:
             return None
         self.narrative.append("search accessibility tree")
         self._note("search", "passed", f"goal words: {', '.join(self.tokens) or 'none'}")
+        self._friction_observe(tree, "search", None, True)
         return tree
 
     def _scan_faults(self, tree: list[UIElement]) -> None:
@@ -479,6 +535,7 @@ class _Session:
                 target=label,
                 details=f"{label} crashed the app",
             )
+            self._friction_observe(self._peek_tree(), "click", click_key(element), False)
             return not self._stop_for_policy()
         except UITimeoutError as exc:
             self._note("click", "failed", str(exc))
@@ -489,14 +546,17 @@ class _Session:
                 target=label,
                 details=f"{label} timed out — control unresponsive",
             )
+            self._friction_observe(self._peek_tree(), "click", click_key(element), False)
             return not self._stop_for_policy()
         except ElementNotFoundError as exc:
             self._note("click", "failed", str(exc))
             if self.config.app.maturity == "prototype":
                 self._add_missing([label])
+            self._friction_observe(self._peek_tree(), "click", click_key(element), False)
             return not self._stop_for_policy()
         self._note("click", "passed", label)
         self._stall_count = 0
+        self._friction_observe(self._peek_tree(), "click", click_key(element), True)
         return True
 
     def _select_menu(self, path: list[str]) -> bool:
@@ -514,6 +574,7 @@ class _Session:
                 target=path[-1] if path else label,
                 details=f"{label} crashed the app",
             )
+            self._friction_observe(self._peek_tree(), "menu", label, False)
             return not self._stop_for_policy()
         except UITimeoutError as exc:
             self._note("menu", "failed", str(exc))
@@ -524,9 +585,11 @@ class _Session:
                 target=path[-1] if path else label,
                 details=f"{label} timed out — control unresponsive",
             )
+            self._friction_observe(self._peek_tree(), "menu", label, False)
             return not self._stop_for_policy()
         self._note("menu", "passed", label)
         self._stall_count = 0
+        self._friction_observe(self._peek_tree(), "menu", label, True)
         return True
 
     def _emit_missing(self, tree: list[UIElement]) -> None:
