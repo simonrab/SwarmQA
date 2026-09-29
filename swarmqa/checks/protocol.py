@@ -38,7 +38,9 @@ class StepContext:
     (None for the first screen). `since_ts` is when the action started, for
     `logs_since` and `crash_reports_since`. `screen_id` is the agent loop's
     fingerprint of `after`. `crashed` is set when the driver raised
-    AppCrashedError during the action.
+    AppCrashedError during the action; then `after` is an empty observation
+    (`tree=[]`, no screenshot) because there is no screen to read, and
+    `before` is the screen the action started on.
     """
 
     after: ScreenObservation
