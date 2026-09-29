@@ -49,6 +49,8 @@ ActionType = Literal[
     "assert",
     "launch",
     "relaunch",
+    "tap_point",
+    "swipe",
 ]
 StepFailurePolicy = Literal["stop", "continue"]
 FailOn = Literal["scripted", "any", "never"]
@@ -339,6 +341,8 @@ class Action:
     timeout_s: float | None = None
     name: str | None = None
     exists: bool | None = None
+    point: tuple[float, float] | None = None
+    end: tuple[float, float] | None = None
 
 
 @dataclass

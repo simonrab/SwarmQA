@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from swarmqa.driver.query import find_element
+from swarmqa.driver.v1_adapter import as_v2
 from swarmqa.errors import (
     AppCrashedError,
     AppMissingError,
@@ -283,6 +284,10 @@ def _execute(driver, action: Action, index: int) -> Path | None:
         return Path(driver.screenshot(_screenshot_name(action, index)))
     elif kind == "assert":
         _check_assert(driver, action)
+    elif kind == "tap_point":
+        as_v2(driver).tap_point(*action.point)
+    elif kind == "swipe":
+        as_v2(driver).swipe(action.point, action.end)
     else:
         raise ValueError(f"unknown action: {kind}")
     return None

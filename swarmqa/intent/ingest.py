@@ -25,6 +25,8 @@ _STEP_FIELDS = {
     "timeout_s",
     "name",
     "exists",
+    "point",
+    "end",
 }
 _QUERY_FIELDS = {"role", "label", "identifier", "value"}
 _ACTIONS = {
@@ -38,6 +40,8 @@ _ACTIONS = {
     "assert",
     "launch",
     "relaunch",
+    "tap_point",
+    "swipe",
 }
 
 _H1 = re.compile(r"^#\s+(.+?)\s*$")
@@ -163,8 +167,16 @@ def action_from_dict(data: object, *, origin: str) -> Action:
     action = data.get("action")
     if action not in _ACTIONS:
         raise IntentError(f"unknown action {action!r}: {origin}")
+    point = _optional_point(data.get("point"), "point", origin)
+    end = _optional_point(data.get("end"), "end", origin)
+    if action in ("tap_point", "swipe") and point is None:
+        raise IntentError(f"{action} needs point: {origin}")
+    if action == "swipe" and end is None:
+        raise IntentError(f"swipe needs end: {origin}")
     return Action(
         action=action,
+        point=point,
+        end=end,
         target=_target_from_dict(data.get("target"), origin=origin),
         text=_optional_str(data.get("text"), "text", origin),
         keys=_string_list(data.get("keys"), "keys", origin),
@@ -205,6 +217,10 @@ def action_to_dict(action: Action) -> dict:
         payload["name"] = action.name
     if action.exists is not None:
         payload["exists"] = action.exists
+    if action.point is not None:
+        payload["point"] = [float(action.point[0]), float(action.point[1])]
+    if action.end is not None:
+        payload["end"] = [float(action.end[0]), float(action.end[1])]
     return payload
 
 
@@ -536,6 +552,18 @@ def _optional_int(value: object, field: str, origin: str) -> int | None:
     if type(value) is not int:
         raise IntentError(f"step {field} must be an integer: {origin}")
     return value
+
+
+def _optional_point(value: object, field: str, origin: str) -> tuple[float, float] | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, list)
+        or len(value) != 2
+        or any(type(item) not in {int, float} for item in value)
+    ):
+        raise IntentError(f"{field} must be [x, y]: {origin}")
+    return (float(value[0]), float(value[1]))
 
 
 def _optional_number(value: object, field: str, origin: str) -> float | None:
