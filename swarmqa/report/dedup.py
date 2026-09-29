@@ -2,6 +2,8 @@
 
 Parallel workers keep every evidence link and every worker id. The first
 title, severity, and narrative stay; later duplicates contribute media.
+With `in_place=True` the first finding of each fingerprint is updated and
+returned instead of a copy, so callers holding it see the merge.
 """
 
 from __future__ import annotations
@@ -11,16 +13,17 @@ import copy
 from swarmqa.models import Finding
 
 
-def dedup_findings(findings: list[Finding]) -> list[Finding]:
+def dedup_findings(findings: list[Finding], *, in_place: bool = False) -> list[Finding]:
     merged: dict[str, Finding] = {}
     order: list[str] = []
     for finding in findings:
         key = finding.fingerprint
         current = merged.get(key)
         if current is None:
-            cloned = _clone(finding)
-            merged[key] = cloned
+            merged[key] = finding if in_place else _clone(finding)
             order.append(key)
+            continue
+        if finding is current:
             continue
         for worker_id in finding.worker_ids or [finding.worker_id]:
             if worker_id and worker_id not in current.worker_ids:

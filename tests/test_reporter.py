@@ -353,3 +353,22 @@ def _assert_token_absent(root: Path, token: str) -> None:
     for path in root.rglob("*"):
         if path.is_file():
             assert token not in path.read_text(encoding="utf-8")
+
+
+def test_v2_placeholders_and_triage_section(tmp_path: Path):
+    from swarmqa.models import Evidence
+
+    finding = _finding(
+        advisory=True,
+        confidence=0.4,
+        repro="findings/f1.replay.json",
+        suspected_sources=["App/Save.swift:3"],
+        evidence=Evidence(video_clip="media/f1.clip.mp4", frames=["media/a.png"]),
+    )
+    text = render_issue("{{category}}|{{confidence}}|{{advisory}}|{{repro}}|{{video_clip}}|{{frames}}|{{suspected_sources}}", finding)
+    assert text == "broken|0.40|true|findings/f1.replay.json|media/f1.clip.mp4|media/a.png|App/Save.swift:3"
+    markdown = write_finding(finding, tmp_path).read_text(encoding="utf-8")
+    assert "## Triage" in markdown
+    assert "Advisory: yes (model-only)" in markdown
+    assert "- App/Save.swift:3" in markdown
+    assert "Clip: media/f1.clip.mp4" in markdown
