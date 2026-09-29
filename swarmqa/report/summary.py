@@ -11,6 +11,9 @@ from pathlib import Path
 from swarmqa.models import CampaignResult, Finding
 from swarmqa.serialize import dump_json, to_plain
 
+# Pixel diffs and appearance judgments share the main findings list.
+_VISUAL_KINDS = frozenset({"visual", "visual_judgment"})
+
 
 def write_summary(result: CampaignResult, root: Path | None = None) -> Path:
     directory = root or Path(result.report_dir)
@@ -67,12 +70,7 @@ def render_summary_md(result: CampaignResult) -> str:
         lines.append("No findings.")
     else:
         for finding in findings:
-            workers = ", ".join(finding.worker_ids) or finding.worker_id
-            lines.append(
-                f"- [{finding.severity}] {finding.title} "
-                f"(worker {workers}, backend {finding.backend}) "
-                f"-> findings/{finding.id}.md"
-            )
+            lines.append(_bullet(finding))
     friction = [
         finding
         for item in result.results
@@ -115,6 +113,16 @@ def empty_result(campaign_id: str, report_dir: Path, backend: str = "local") -> 
 
 def summary_payload(result: CampaignResult) -> dict:
     return to_plain(result)
+
+
+def _bullet(finding: Finding) -> str:
+    workers = ", ".join(finding.worker_ids) or finding.worker_id
+    kind = f", {finding.kind}" if finding.kind in _VISUAL_KINDS else ""
+    return (
+        f"- [{finding.severity}] {finding.title} "
+        f"(worker {workers}, backend {finding.backend}{kind}) "
+        f"-> findings/{finding.id}.md"
+    )
 
 
 def _evidence(findings: list[Finding]) -> str:
