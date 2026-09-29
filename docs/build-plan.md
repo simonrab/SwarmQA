@@ -46,7 +46,7 @@ The orchestrator (scheduling, budgets, resume, dedup, reports) is solid. Little 
 4. Run pytest on `macos-latest` as well as `ubuntu-latest`.
 5. Gitignore local-only targets: `.aqa/` and `aqa.local.toml`.
 
-## Phase 1: Contracts (lead, sequential, before any fan-out)
+## Phase 1: Contracts (lead, sequential, before any fan-out) — done
 
 Define these interfaces with fakes so the Phase 2 and 3 subagents can build against them in parallel:
 
@@ -61,12 +61,12 @@ Define these interfaces with fakes so the Phase 2 and 3 subagents can build agai
 
 Update `driver/fake.py` and the fake decision provider to the new contracts.
 
-## Phase 2, Wave A: foundations (4 subagents)
+## Phase 2, Wave A: foundations (4 subagents) — A3 and A4 done; A1 and A2 need a Mac
 
 - **WP-A1: Swift runner.** Owns `agents/swarm-runner/**`. An Xcode project with iOS and macOS UI-test targets. Each hosts a small HTTP server inside the XCUITest process and drives any app through `XCUIApplication(bundleIdentifier:)`, serialising `snapshot()` to the protocol and handling taps, typing, swipes and screenshots. Build script `agents/swarm-runner/build.sh`. Acceptance: builds for both platforms with `xcodebuild`; `/observe` on the fixture app takes under 300 ms.
 - **WP-A2: Planted-bug fixture app.** Owns `fixtures/PlantedBugs/**`. A multiplatform SwiftUI app with bugs tagged by accessibility identifier: a dead button, clipped text, overlapping views, a crash on one path, an endless spinner, a confusing multi-step settings flow, a missing label, and a low-contrast element. Includes `bugs.json` (ground truth) and a `build.sh` that produces simulator and macOS `.app` files.
-- **WP-A3: Model providers.** Owns `swarmqa/llm/**` and the optional `anthropic` and `openai` extras. Anthropic adapter (a small fast model for steps, a larger model for judgments), OpenAI adapter, fake adapter, prompts in `swarmqa/llm/prompts/`. JSON-schema structured outputs, retries and timeouts. Token cost goes into `swarmqa/spend.py`. Tests use record/replay fixtures, not live calls.
-- **WP-A4: Device pools.** Owns `swarmqa/devices/**` and `swarmqa/backends/tart.py`. iOS: clone a golden simulator per worker, boot and wait on bootstatus, install the build, erase on release, host-wide locks in `~/.aqa/locks`, capacity from RAM and cores. Tart: poll `tart exec … true` for readiness, treat a missing `result.json` as an error, use the correct campaign directory, copy with `symlinks=True`, enforce the 2-VM-per-host cap. Reuse the command-runner seam.
+- **WP-A3: Model providers (done).** Not yet run against the live APIs; OpenAI prices and model names still to confirm; fixtures are hand-written and should be re-recorded. Owns `swarmqa/llm/**` and the optional `anthropic` and `openai` extras. Anthropic adapter (a small fast model for steps, a larger model for judgments), OpenAI adapter, fake adapter, prompts in `swarmqa/llm/prompts/`. JSON-schema structured outputs, retries and timeouts. Token cost goes into `swarmqa/spend.py`. Tests use record/replay fixtures, not live calls.
+- **WP-A4: Device pools (done).** The simctl and tart commands in `docs/devices.md` still need checking on a real Mac. Owns `swarmqa/devices/**` and `swarmqa/backends/tart.py`. iOS: clone a golden simulator per worker, boot and wait on bootstatus, install the build, erase on release, host-wide locks in `~/.aqa/locks`, capacity from RAM and cores. Tart: poll `tart exec … true` for readiness, treat a missing `result.json` as an error, use the correct campaign directory, copy with `symlinks=True`, enforce the 2-VM-per-host cap. Reuse the command-runner seam.
 
 ## Phase 3, Wave B: the QA loop (4 subagents)
 
