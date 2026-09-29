@@ -65,7 +65,9 @@ class IOSSimulatorPool:
         work_root: str | Path | None = None,
         name_prefix: str = "aqa-sim",
         erase_mode: EraseMode = "erase",
-        boot_timeout_s: float = 300.0,
+        # A clone's first boot after `simctl erase` measured 336 s on a loaded
+        # 8 GB Mac (Xcode 26.5, iOS 26.5); a warm boot took 87 s.
+        boot_timeout_s: float = 600.0,
         poll_s: float = 0.5,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,

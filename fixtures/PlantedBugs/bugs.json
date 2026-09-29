@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "app": "PlantedBugs",
+  "bundle_id": "dev.swarmqa.PlantedBugs",
+  "bugs": [
+    {
+      "id": "dead-button",
+      "identifier": "detail.shareButton",
+      "screen": "Task detail",
+      "path": ["home.row.report"],
+      "category": "broken",
+      "kind": "unresponsive",
+      "platforms": ["ios", "macos"],
+      "description": "The prominent Share button on the task detail screen is enabled but does nothing when pressed: no share sheet, no feedback."
+    },
+    {
+      "id": "clipped-text",
+      "identifier": "detail.notes",
+      "screen": "Task detail",
+      "path": ["home.row.report"],
+      "category": "visual",
+      "kind": "visual_judgment",
+      "platforms": ["ios", "macos"],
+      "description": "Long task notes are cut off mid-line by a fixed-height box, with no ellipsis and no way to read the rest. Visible on the 'Finish quarterly report' task."
+    },
+    {
+      "id": "overlapping-views",
+      "identifier": "detail.priorityBadge",
+      "screen": "Task detail",
+      "path": ["home.row.report"],
+      "category": "visual",
+      "kind": "visual_judgment",
+      "platforms": ["ios", "macos"],
+      "description": "The priority badge is drawn on top of the task title (detail.title), hiding part of it. Happens on every task."
+    },
+    {
+      "id": "crash-attachment",
+      "identifier": "attachments.row.scan",
+      "screen": "Attachments",
+      "path": ["home.row.report", "detail.attachmentsLink", "attachments.row.scan"],
+      "category": "crash",
+      "kind": "crash",
+      "platforms": ["ios", "macos"],
+      "description": "Opening the binary attachment 'expenses-scan.pdf' force-unwraps missing inline data and crashes the app. The text attachment next to it (attachments.row.summary) opens fine."
+    },
+    {
+      "id": "endless-spinner",
+      "identifier": "stats.loadingSpinner",
+      "screen": "Weekly stats",
+      "path": ["home.statsLink"],
+      "category": "broken",
+      "kind": "timeout",
+      "platforms": ["ios", "macos"],
+      "description": "The Weekly stats screen shows 'Loading weekly stats…' forever; the loader never calls back, and there is no error or retry."
+    },
+    {
+      "id": "confusing-sync-settings",
+      "identifier": "settings.sync.pauseToggle",
+      "screen": "Cloud (sync settings)",
+      "path": ["home.settingsButton", "settings.advancedLink", "advanced.dataStorageLink", "dataStorage.cloudLink", "settings.sync.pauseToggle", "settings.sync.applyButton", "settings.sync.confirmYes"],
+      "category": "confusing",
+      "kind": "friction_path",
+      "platforms": ["ios", "macos"],
+      "description": "Turning cloud sync on is buried four screens deep (Settings > Advanced > Data & Storage > Cloud) while Settings shows a non-interactive 'Cloud sync: Off' row (settings.syncStatus). The control is an inverted 'Pause sync' toggle that starts on, the change needs 'Apply' plus a vague 'Are you sure?' Yes/No alert, and leaving without applying silently discards it. It does work when done this way."
+    },
+    {
+      "id": "missing-label",
+      "identifier": "home.filterButton",
+      "screen": "Home",
+      "path": [],
+      "category": "confusing",
+      "kind": "friction_path",
+      "platforms": ["ios", "macos"],
+      "description": "The filter button in the Home toolbar is an icon drawn from three bars with no text and no accessibility label. It hides completed tasks, but nothing tells the user or VoiceOver what it does."
+    },
+    {
+      "id": "low-contrast",
+      "identifier": "home.tipLabel",
+      "screen": "Home",
+      "path": [],
+      "category": "visual",
+      "kind": "visual_judgment",
+      "platforms": ["ios", "macos"],
+      "description": "The tip card at the bottom of the Home list uses pale grey text on a near-white background (contrast about 1.5:1), in both light and dark mode."
+    }
+  ]
+}
