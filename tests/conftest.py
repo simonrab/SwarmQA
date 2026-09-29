@@ -9,3 +9,5 @@ import pytest
 def _isolated_host_locks(tmp_path_factory, monkeypatch):
     """Keep host-wide device locks out of the real ~/.aqa/locks."""
     monkeypatch.setenv("AQA_LOCK_DIR", str(tmp_path_factory.mktemp("locks")))
+    # Keep verify_fix's run index out of the real ~/.aqa/verify.
+    monkeypatch.setenv("AQA_VERIFY_INDEX", str(tmp_path_factory.mktemp("verify-index")))
