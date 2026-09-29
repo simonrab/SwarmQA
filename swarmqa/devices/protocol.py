@@ -24,6 +24,14 @@ class DeviceUnavailable(Exception):
     """No device of that platform could be leased in time."""
 
 
+class DeviceSetupError(DeviceUnavailable):
+    """A device was free but could not be prepared: clone, boot, or install failed.
+
+    Subclasses DeviceUnavailable so callers that only catch that still work.
+    Report it as a setup or build problem, not as a capacity shortage.
+    """
+
+
 @dataclass
 class Device:
     """One leased device.

@@ -63,16 +63,19 @@ The guest needs Python 3.11 or newer. SwarmQA copies its own package into the VM
 
 ### What one worker does
 
-`run_shard` owns a single VM named `aqa-<worker-id>`.
+`run_shard` owns a single VM named `aqa-<worker-id>`. Results and artifacts go to the campaign directory: the `campaign_dir` argument or constructor keyword when given, otherwise the running campaign under `report_root` that has `workers/<worker-id>`, otherwise `report_root/vm`.
 
+0. Take one of the host-wide Tart slots (`tart-vm-slot-0` or `-1` under `~/.aqa/locks`). Apple's macOS licence allows two macOS VMs per Mac, so a host never runs more than two, across every campaign and `TartVMPool`. A worker waits up to `slot_timeout_s` (default 30 minutes) and then ends `error`.
 1. `tart list`. An existing VM with that name is reused. Otherwise `tart clone <vm.image> aqa-<worker-id>`.
-2. The host writes the shard JSON, campaign config, a copy of the `swarmqa` package (the worker entry), and the app bundle when `app.path` is a directory. Those files live under the campaign's `raw/tart/<worker-id>/` directory.
-3. `tart run --dir=swarmqa:<that directory> aqa-<worker-id>` starts the guest in the background. macOS guests see the share at `/Volumes/My Shared Files/swarmqa`.
+2. The host writes the shard JSON, campaign config, a copy of the `swarmqa` package (the worker entry), and the app bundle when `app.path` is a directory. Those files live under the campaign's `raw/tart/<worker-id>/` directory. Copies keep symlinks as symlinks, so `.app` framework bundles stay intact.
+3. `tart run --dir=swarmqa:<that directory> aqa-<worker-id>` starts the guest in the background. macOS guests see the share at `/Volumes/My Shared Files/swarmqa`. SwarmQA then polls `tart ip aqa-<worker-id>` until the guest has an address, and `tart exec aqa-<worker-id> true` until the guest agent answers. If that takes longer than `boot_timeout_s` (default 300 s), the shard ends `error` and the VM is stopped.
 4. `tart exec` runs `python -m swarmqa.worker` with `--campaign-dir`, `--shard-file`, `--config-json`, and `--worker-id`. `PYTHONPATH` points at the copied package.
-5. After the guest exits, SwarmQA copies `workers/` and `media/` from the mounted share back to the campaign directory. The `--dir` mount is how the shard, the worker entry, and the artifacts move between host and guest.
+5. After the guest exits, SwarmQA copies `workers/` and `media/` from the mounted share back to the campaign directory. The `--dir` mount is how the shard, the worker entry, and the artifacts move between host and guest. A missing or unreadable `workers/<worker-id>/result.json` ends the shard `error`, never `passed`.
 6. `vm.recycle = true` (the default) runs `tart stop` and keeps the clone for the next shard. `vm.recycle = false` stops the VM and `tart delete`s it.
 
-A non-zero runner status or a runner exception marks that shard `error` and returns. The method does not stop any other `aqa-*` VM. `cancel(worker_id)` stops only `aqa-<worker-id>`, and only when `spend.overrun` or `budgets.on_budget` is `cancel`.
+A non-zero runner status or a runner exception marks that shard `error` and returns. The slot is released after the VM stops. The method does not stop any other `aqa-*` VM. `cancel(worker_id)` stops only `aqa-<worker-id>`, and only when `spend.overrun` or `budgets.on_budget` is `cancel`.
+
+Device pools, including `TartVMPool`, which leases Tart VMs to runner drivers, are described in `docs/devices.md`.
 
 `cost_per_worker_minute()` returns `vm.cost_per_worker_minute`. The shard result's `estimated_cost` is that rate times the measured minutes.
 

@@ -324,7 +324,7 @@ Findings v2:
 - `Finding.from_dict` loads v1 and v2 JSON. `findings.json` is `{"schema_version": 2, "campaign_id", "sha", "findings": [...]}`.
 - Dedup unions frames and suspected sources, keeps the first repro and clip, takes the highest confidence, and clears `advisory` when any duplicate is firm.
 
-DevicePool: `acquire(platform, build, *, timeout_s)` blocks until a device is free or raises `DeviceUnavailable`; leases are exclusive host-wide; `release(device, *, erase=True)` is idempotent. Prefer `with lease(pool, platform, build) as device:`.
+DevicePool: `acquire(platform, build, *, timeout_s)` blocks until a device is free or raises `DeviceUnavailable`; a device that was free but failed to clone, boot, or install raises `DeviceSetupError` (a `DeviceUnavailable` subclass), so a broken build is not reported as a capacity shortage; leases are exclusive host-wide; `release(device, *, erase=True)` is idempotent. Prefer `with lease(pool, platform, build) as device:`.
 
 MCP tools: `start_campaign`, `campaign_status`, `list_findings`, `get_finding`, `verify_fix`, `verify_status`, `cancel_campaign`. `start_campaign` and `verify_fix` return at once; `verify_status` polls a verify run.
 

@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from swarmqa.devices.locks import HostLock, simulator_lock_name, try_lock
 from swarmqa.driver.query import find_element
 from swarmqa.errors import (
     AQAError,
@@ -369,7 +370,7 @@ class IOSSimulatorDriver:
         self._video_on = False
         self._video_proc: Any = None
         self._video_path: Path | None = None
-        self._lock_path: Path | None = None
+        self._lock: HostLock | None = None
         self._command_timeout = 60.0
         self._poll_s = 0.05
         self.work_dir.mkdir(parents=True, exist_ok=True)
@@ -617,73 +618,49 @@ class IOSSimulatorDriver:
         pool = list(dict.fromkeys(item.strip() for item in self.target.simulators if item.strip()))
         if not pool:
             return (self.target.simulator or "").strip() or _DEFAULT_DEVICE
-        lock_dir = self.work_dir.parent / ".ios-simulators"
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        for index, name in enumerate(pool):
-            slot = lock_dir / f"{index}-{_safe_name(name)}.lock"
-            if slot.exists() and not self._steal_stale_lock(slot):
+        # Host-wide lease (flock under ~/.aqa/locks), shared with every
+        # campaign on this Mac and with IOSSimulatorPool. Locks are keyed by
+        # UDID, as the pool keys them, so a name and its UDID cannot be leased
+        # twice. It drops when this process exits, so a crashed worker never
+        # strands a simulator.
+        document: dict | None = None
+        for name in pool:
+            if _is_udid(name):
+                udid = name
+            else:
+                if document is None:
+                    document = self._available_devices()
+                udid = select_simulator(document, name)
+            lock = try_lock(simulator_lock_name(udid))
+            if lock is None:
                 continue
-            try:
-                fd = os.open(slot, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                continue
-            os.write(fd, f"{os.getpid()}\n".encode())
-            os.close(fd)
-            self._lock_path = slot
-            return name
+            self._lock = lock
+            return udid
         raise BackendUnavailable(
             "No free iOS Simulator in app.simulators. "
             "Add one device name or UDID per worker."
         )
 
-    def _steal_stale_lock(self, slot: Path) -> bool:
-        try:
-            text = slot.read_text(encoding="utf-8").strip().splitlines()
-            pid = int(text[0]) if text else -1
-        except (OSError, ValueError):
-            pid = -1
-        if pid > 0 and self._pid_alive(pid):
-            return False
-        try:
-            slot.unlink()
-        except OSError:
-            return False
-        return True
-
-    def _pid_alive(self, pid: int) -> bool:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return False
-        except PermissionError:
-            return True
-        except OSError:
-            return False
-        return True
-
     def _release_lock(self) -> None:
-        path = self._lock_path
-        self._lock_path = None
-        if path is None:
-            return
-        try:
-            path.unlink()
-        except OSError:
-            return
+        lock, self._lock = self._lock, None
+        if lock is not None:
+            lock.release()
 
     def _resolve_udid(self, token: str) -> str:
         if _is_udid(token):
             self.udid = token
             return token
+        udid = select_simulator(self._available_devices(), token)
+        self.udid = udid
+        return udid
+
+    def _available_devices(self) -> dict:
         result = self._simctl("list", "devices", "available", "-j")
         self._check_tool(result, "simctl list")
         try:
-            document = json.loads(_stdout(result) or "{}")
+            return json.loads(_stdout(result) or "{}")
         except json.JSONDecodeError as exc:
             raise BackendUnavailable("simctl list did not return a device list") from exc
-        udid = select_simulator(document, token)
-        self.udid = udid
-        return udid
 
     def _boot(self, udid: str) -> None:
         result = self._simctl("boot", udid)

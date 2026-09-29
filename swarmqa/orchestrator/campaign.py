@@ -82,7 +82,7 @@ def run_campaign(
             campaign_dir=root,
         )
     else:
-        backend = create_backend(config)
+        backend = create_backend(config, campaign_dir=root)
 
     status = CampaignStatus(
         campaign_id=campaign_id,
