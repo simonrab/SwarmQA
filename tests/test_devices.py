@@ -351,7 +351,8 @@ def _ios_harness(tmp_path: Path) -> Harness:
             golden="Golden iPhone", runner=runner, capacity=2, work_root=tmp_path / "work", poll_s=0.01
         )
 
-    return Harness(make, "ios", IOS_BUILD, runner, lambda call: call[2:3] == ["erase"], 2)
+    # The default release wipe is `simctl uninstall`; erase mode is tested below.
+    return Harness(make, "ios", IOS_BUILD, runner, lambda call: call[2:3] == ["uninstall"], 2)
 
 
 def _tart_harness(tmp_path: Path) -> Harness:
@@ -474,7 +475,9 @@ def test_conformance_waiter_gets_the_released_device(harness: Harness):
 
 def test_ios_pool_clones_boots_installs_and_reuses(tmp_path: Path):
     runner = FakeSimctl()
-    pool = IOSSimulatorPool(golden="Golden iPhone", runner=runner, capacity=2, work_root=tmp_path)
+    pool = IOSSimulatorPool(
+        golden="Golden iPhone", runner=runner, capacity=2, erase_mode="erase", work_root=tmp_path
+    )
     device = pool.acquire("ios", IOS_BUILD)
     assert device.kind == "simulator"
     assert device.address == ""
@@ -503,7 +506,7 @@ def test_ios_pool_clones_boots_installs_and_reuses(tmp_path: Path):
 
 def test_ios_pool_erase_tolerates_an_already_shut_down_clone(tmp_path: Path):
     runner = FakeSimctl()
-    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, work_root=tmp_path)
+    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, erase_mode="erase", work_root=tmp_path)
     device = pool.acquire("ios", None)
     runner.devices[device.id]["state"] = "Shutdown"
     pool.release(device)
@@ -513,7 +516,8 @@ def test_ios_pool_erase_tolerates_an_already_shut_down_clone(tmp_path: Path):
 
 def test_ios_pool_uninstall_mode_keeps_the_clone_booted(tmp_path: Path):
     runner = FakeSimctl()
-    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, erase_mode="uninstall", work_root=tmp_path)
+    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, work_root=tmp_path)
+    assert pool.erase_mode == "uninstall"  # the default
     device = pool.acquire("ios", IOS_BUILD)
     pool.release(device)
     assert runner.verbs("uninstall") == [["xcrun", "simctl", "uninstall", device.id, "dev.swarmqa.sample"]]
@@ -589,7 +593,7 @@ def test_ios_pool_skips_a_udid_the_driver_holds(tmp_path: Path):
 
 def test_ios_pool_erase_failure_retires_the_clone(tmp_path: Path):
     runner = FakeSimctl()
-    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, work_root=tmp_path)
+    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, erase_mode="erase", work_root=tmp_path)
     device = pool.acquire("ios", None)
     original = runner._handle
 

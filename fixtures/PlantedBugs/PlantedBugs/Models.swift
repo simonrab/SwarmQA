@@ -143,8 +143,6 @@ final class StatsService {
     static let shared = StatsService()
     private var cachedWeeks: [Int] = []
 
-    // PLANTED BUG (endless-spinner): when the cache is empty this returns
-    // without ever calling `completion`, so the caller waits forever.
     func fetchWeekly(completion: @escaping (String) -> Void) {
         guard let latest = cachedWeeks.last else { return }
         completion("\(latest) tasks completed this week")

@@ -76,11 +76,6 @@ struct DataStorageView: View {
     }
 }
 
-// PLANTED BUG (confusing-sync-settings): turning cloud sync on takes five
-// steps from Home (Settings > Advanced > Data & Storage > Cloud), the switch is
-// an inverted "Pause sync" toggle that starts ON while sync is off, the change
-// only sticks after "Apply" plus a vague "Are you sure?" confirmation, and
-// leaving without applying silently discards it. It does work when done right.
 struct CloudSyncView: View {
     @Environment(AppSettings.self) private var settings
     @State private var pauseDraft = true

@@ -19,8 +19,6 @@ struct TaskDetailView: View {
     private func content(_ task: TaskItem) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // PLANTED BUG (overlapping-views): the priority badge is
-                // offset on top of the title text.
                 Text(task.title)
                     .font(.title2.bold())
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -44,9 +42,6 @@ struct TaskDetailView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Notes")
                         .font(.headline)
-                    // PLANTED BUG (clipped-text): fixed-height box cuts long
-                    // notes off through the middle of the third line, with no
-                    // ellipsis and no way to expand.
                     Text(task.notes.isEmpty ? "No notes." : task.notes)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, maxHeight: 54, alignment: .topLeading)
@@ -77,8 +72,6 @@ struct TaskDetailView: View {
                 .accessibilityIdentifier("detail.attachmentsLink")
 
                 HStack(spacing: 12) {
-                    // PLANTED BUG (dead-button): enabled and styled as a
-                    // primary action, but the share text is never presented.
                     Button {
                         _ = shareText(task)
                     } label: {
@@ -160,8 +153,6 @@ struct AttachmentPreviewView: View {
 
     var body: some View {
         let attachment = store.attachment(taskID: taskID, attachmentID: attachmentID)
-        // PLANTED BUG (crash-attachment): binary attachments have no inline
-        // data, so this force unwrap traps when one is opened.
         let text = String(decoding: attachment!.inlineData!, as: UTF8.self)
         ScrollView {
             Text(text)

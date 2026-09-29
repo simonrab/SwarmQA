@@ -28,7 +28,7 @@ State lives in memory only, so every launch starts from the same seed data.
 | `missing-label` | `home.filterButton` | confusing | Home toolbar |
 | `low-contrast` | `home.tipLabel` | visual | Home |
 
-`bugs.json` has the full description and path for each. In the Swift sources, each bug is marked with a `PLANTED BUG (<id>)` comment.
+`bugs.json` has the full description and path for each. The Swift sources carry no comments marking the bugs, so an agent that reads the code cannot find them without testing; `bugs.json` is the only record.
 
 ## Building
 

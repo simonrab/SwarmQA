@@ -57,12 +57,14 @@ Slot `n` owns a clone named `aqa-sim-<source>-<n>`, where `<source>` is the gold
 
 Before step 3 the pool holds `ios-sim-slot-<n>` and `simulator-<udid>`. If another process holds that UDID it tries the next slot. With every slot busy it polls every `poll_s` until `timeout_s`, then raises `DeviceUnavailable`. Any failure in steps 2–4 releases both locks.
 
-**release** with `erase=True` and `erase_mode="erase"` (the default):
+**release** with `erase=True` and `erase_mode="uninstall"` (the default): `xcrun simctl uninstall <udid> <build.bundle_id>`. The clone stays booted, so the next lease skips the boot. Uninstalling removes the app's data container; the keychain and system settings survive.
+
+With `erase_mode="erase"`, for a fully clean device on every lease:
 
 1. `xcrun simctl shutdown <udid>` — `simctl erase` refuses a booted device. "Unable to shutdown device in current state: Shutdown" is treated as success.
 2. `xcrun simctl erase <udid>` — wipes all content and settings, including the app. The clone stays for the next lease, which boots it again. If erase fails, the clone is retired (`xcrun simctl delete <udid>` when this pool created it).
 
-With `erase_mode="uninstall"`: `xcrun simctl uninstall <udid> <build.bundle_id>`, and the clone stays booted. With `erase=False` nothing runs and the app stays installed.
+With `erase=False` nothing runs and the app stays installed.
 
 **close**: releases open leases, then for each clone this pool created, `xcrun simctl shutdown <udid>` and `xcrun simctl delete <udid>`.
 
@@ -123,7 +125,7 @@ Run by hand on an 8 GB, 8-core Apple Silicon Mac with Xcode 26.5 and the iOS 26.
 | `simctl delete` on a booted device | exit 0 |
 | `sysctl -n hw.memsize`, `sysctl -n hw.ncpu` | plain integers (`8589934592`, `8`) |
 
-Boot times: 221 s for a new clone's first boot, **336 s** for the boot after `simctl erase`, and 87 s for a warm reboot. An erased clone boots like a new one, so `erase_mode="erase"` makes every lease pay a cold boot. The 300 s default timeout was too short, so it is now 600 s. On a busy host, `erase_mode="uninstall"` is much faster.
+Boot times: 221 s for a new clone's first boot, **336 s** for the boot after `simctl erase`, and 87 s for a warm reboot. An erased clone boots like a new one, so `erase_mode="erase"` makes every lease pay a cold boot. The 300 s default timeout was too short, so it is now 600 s, and `erase_mode` now defaults to `"uninstall"`.
 
 ## Not yet verified on a Mac
 

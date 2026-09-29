@@ -37,7 +37,6 @@ struct HomeView: View {
             }
 
             Section {
-                // PLANTED BUG (low-contrast): pale grey text on a near-white card.
                 Text("Tip: open a task to mark it done or delete it.")
                     .font(.footnote)
                     .foregroundStyle(Color(red: 0.80, green: 0.80, blue: 0.82))
@@ -50,8 +49,6 @@ struct HomeView: View {
         .navigationTitle("Tasks")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                // PLANTED BUG (missing-label): icon-only button drawn from
-                // shapes, with no text and no accessibility label.
                 Button {
                     store.hideCompleted.toggle()
                 } label: {
