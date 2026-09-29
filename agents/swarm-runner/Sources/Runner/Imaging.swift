@@ -80,8 +80,15 @@ func encodeScreenshot(_ shot: XCUIScreenshot, format: ImageFormat, jpegQuality: 
         let pixelWidth = pngPixelWidth(data) ?? Double(points.width)
         return Capture(size: points, scale: scale(pixelWidth, points), format: "png", data: data)
     case .jpeg:
-        guard let image = PlatformBridge.cgImage(of: shot) else {
+        guard var image = PlatformBridge.cgImage(of: shot) else {
             throw RunnerFailure(.internal, "screenshot has no CGImage")
+        }
+        // Encoding a full Retina display dominates /observe on the Mac, so
+        // macOS JPEGs are scaled to one pixel per point; `scale` reports it.
+        if PlatformBridge.jpegAtPointResolution, !jpegFullResolution,
+           points.width > 0, Double(image.width) > Double(points.width) * 1.01,
+           let smaller = downscale(image, to: points) {
+            image = smaller
         }
         let out = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(out, UTType.jpeg.identifier as CFString, 1, nil) else {
@@ -94,6 +101,24 @@ func encodeScreenshot(_ shot: XCUIScreenshot, format: ImageFormat, jpegQuality: 
         }
         return Capture(size: points, scale: scale(Double(image.width), points), format: "jpeg", data: out as Data)
     }
+}
+
+/// SWARM_RUNNER_JPEG_FULL_RESOLUTION=1 keeps macOS JPEGs at display resolution.
+private let jpegFullResolution =
+    ProcessInfo.processInfo.environment["SWARM_RUNNER_JPEG_FULL_RESOLUTION"] == "1"
+
+private func downscale(_ image: CGImage, to points: CGSize) -> CGImage? {
+    let width = Int(points.width.rounded())
+    let height = Int((Double(image.height) * Double(width) / Double(image.width)).rounded())
+    guard width > 0, height > 0,
+          let context = CGContext(
+              data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+              space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+              bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
+    else { return nil }
+    context.interpolationQuality = .medium
+    context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    return context.makeImage()
 }
 
 private func scale(_ pixelWidth: Double, _ points: CGSize) -> Double {

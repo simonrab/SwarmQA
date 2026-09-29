@@ -6,6 +6,8 @@ import XCTest
 @MainActor
 enum PlatformBridge {
     static let platformName = "ios"
+    /// iOS screens are small enough to send JPEGs at full resolution.
+    static let jpegAtPointResolution = false
 
     /// The screen in points. The runner app has no launch screen, so iOS
     /// runs it in a legacy 320x480 compatibility mode and `UIScreen.bounds`

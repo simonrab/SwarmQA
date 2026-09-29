@@ -6,6 +6,8 @@ import XCTest
 @MainActor
 enum PlatformBridge {
     static let platformName = "macos"
+    /// A full Retina display is 4x the pixels of its points; see encodeScreenshot.
+    static let jpegAtPointResolution = true
 
     /// The main display, whose top-left corner is the protocol's origin.
     static func screenSizeInPoints(appFrame: CGRect?) -> CGSize {
