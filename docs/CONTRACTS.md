@@ -303,6 +303,7 @@ These are read-only for Wave A and Wave B work packages. A WP that needs a chang
 | Findings v2 | `swarmqa.models.Finding`, `Evidence`, `category_for_kind`; `swarmqa/schemas/findings.v2.json` | — |
 | Build artifact | `swarmqa.models.BuildArtifact` | — |
 | MCP tools | `swarmqa.mcp.tools` (stubs raising `NotImplementedError`) | — |
+| Checks | `swarmqa.checks.protocol` (`StepContext`, `CheckIssue`, `Check`; `CheckIssue.to_finding` is the only issue-to-finding path) | — |
 
 Driver v2:
 
