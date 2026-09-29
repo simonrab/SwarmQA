@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 BackendName = Literal["local", "vm", "cloud"]
-PrMode = Literal["human", "autonomous"]
+PrMode = Literal["off", "human", "autonomous"]
 VideoMode = Literal["always", "on_failure", "exploratory_only"]
 OverrunPolicy = Literal["drain", "cancel"]
 Maturity = Literal["prototype", "shipped"]
@@ -50,6 +50,7 @@ StepFailurePolicy = Literal["stop", "continue"]
 FailOn = Literal["scripted", "any", "never"]
 LocalIsolation = Literal["thread", "subprocess"]
 TargetPlatform = Literal["macos", "ios"]
+DriverKind = Literal["auto", "fake", "legacy", "runner"]
 
 
 @dataclass
@@ -81,7 +82,7 @@ class SpendConfig:
 
 @dataclass
 class PrConfig:
-    mode: PrMode = "human"
+    mode: PrMode = "off"
     max_iterations: int = 3
     max_wall_time_s: float = 3600
     max_pr_updates: int = 5
@@ -203,6 +204,17 @@ class VmConfig:
 
 
 @dataclass
+class DriverConfig:
+    """`auto` is legacy on darwin (or for `app.platform = "ios"`), else fake.
+
+    `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver,
+    chosen by `app.platform`. `runner` is reserved for the XCUITest runner.
+    """
+
+    kind: DriverKind = "auto"
+
+
+@dataclass
 class LocalConfig:
     isolation: LocalIsolation = "thread"
 
@@ -228,6 +240,7 @@ class CampaignConfig:
     cloud: CloudConfig = field(default_factory=CloudConfig)
     vm: VmConfig = field(default_factory=VmConfig)
     local: LocalConfig = field(default_factory=LocalConfig)
+    driver: DriverConfig = field(default_factory=DriverConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2

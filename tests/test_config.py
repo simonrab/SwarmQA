@@ -52,7 +52,7 @@ def test_template_maps_onto_campaign_config():
     )
     assert config.workers == 2
     assert config.backend == "local"
-    assert config.pr.mode == "human"
+    assert config.pr.mode == "off"
     assert config.pr.max_wall_time_s == parse_duration("1h")
     assert config.video.mode == "always"
     assert config.spend.currency == "USD"
@@ -79,7 +79,7 @@ def test_empty_file_uses_locked_defaults(tmp_path: Path):
     config = load_config(_write(tmp_path, ""))
     assert config == sample_config()
     assert config.workers == 2
-    assert config.pr.mode == "human"
+    assert config.pr.mode == "off"
     assert config.video.mode == "always"
 
 
@@ -365,7 +365,7 @@ def test_section_must_be_a_table(tmp_path: Path):
         ),
         (
             lambda c: setattr(c.pr, "mode", "robot"),
-            ["pr.mode: must be one of human, autonomous"],
+            ["pr.mode: must be one of off, human, autonomous"],
         ),
         (
             lambda c: setattr(c.app, "maturity", "beta"),
@@ -545,7 +545,7 @@ def test_validation_boundaries_and_combined_errors():
         "backend: must be one of local, vm, cloud",
         "workers: must be an integer >= 1",
         "video.mode: must be one of always, on_failure, exploratory_only",
-        "pr.mode: must be one of human, autonomous",
+        "pr.mode: must be one of off, human, autonomous",
         "app.maturity: must be one of prototype, shipped",
         "visual.threshold: must be between 0 and 1 inclusive",
         "spend.currency: must be a non-empty string",
@@ -686,10 +686,37 @@ mode = "robot"
     assert exc.value.errors == [
         "backend: must be one of local, vm, cloud",
         "video.mode: must be one of always, on_failure, exploratory_only",
-        "pr.mode: must be one of human, autonomous",
+        "pr.mode: must be one of off, human, autonomous",
         "app.maturity: must be one of prototype, shipped",
     ]
 
+
+def test_driver_kind_from_toml(tmp_path: Path):
+    assert load_config(_write(tmp_path, "")).driver.kind == "auto"
+    config = load_config(_write(tmp_path, "[driver]\nkind = \"fake\"\n"))
+    assert config.driver.kind == "fake"
+    with pytest.raises(ConfigError) as exc:
+        load_config(_write(tmp_path, "[driver]\nkind = \"android\"\n"))
+    assert exc.value.errors == ["driver.kind: must be one of auto, fake, legacy, runner"]
+
+
+def test_driver_kind_selects_local_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import swarmqa.driver as driver_mod
+    from swarmqa.backends.local import _default_driver_factory
+    from swarmqa.driver.fake import FakeDriver
+
+    monkeypatch.setattr(driver_mod.sys, "platform", "darwin")
+    config = CampaignConfig()
+    config.driver.kind = "fake"
+    driver = _default_driver_factory(config)(config.app, tmp_path)
+    assert isinstance(driver, FakeDriver)
+
+
+def test_pr_mode_off_skips_fix_loop(tmp_path: Path):
+    config = load_config(_write(tmp_path, "[pr]\nmode = \"off\"\n"))
+    assert config.pr.mode == "off"
+    args = build_parser().parse_args(["run", "--pr-mode", "off"])
+    assert overrides_from_namespace(args).pr_mode == "off"
 
 def test_cli_overrides_replace_file_values(tmp_path: Path):
     path = _write(
@@ -838,3 +865,16 @@ max_wall_time = "soon"
         _CLOUD_SPEND,
     ]
     assert str(exc.value) == "\n".join(exc.value.errors)
+
+
+def test_driver_kind_legacy_follows_platform(tmp_path: Path):
+    from swarmqa.backends.local import _default_driver_factory
+    from swarmqa.driver.ios import IOSSimulatorDriver
+    from swarmqa.driver.macos import MacOSDriver
+
+    config = CampaignConfig()
+    config.driver.kind = "legacy"
+    factory = _default_driver_factory(config)
+    assert isinstance(factory(config.app, tmp_path / "mac"), MacOSDriver)
+    config.app.platform = "ios"
+    assert isinstance(factory(config.app, tmp_path / "ios"), IOSSimulatorDriver)

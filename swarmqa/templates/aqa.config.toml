@@ -18,6 +18,11 @@ platform = "macos"
 # Names must match `xcrun simctl list devices available` (iOS 26.5 has iPhone 17, not iPhone 16).
 # simulators = ["iPhone 17", "iPhone 17 Pro"]
 
+[driver]
+# auto = legacy on a Mac or for platform = ios, else fake.
+# fake = scripted dry run, no Accessibility permission. legacy = AppleScript (macos) or simctl/idb (ios).
+kind = "auto" # auto | fake | legacy | runner
+
 [campaign]
 # local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter
 backend = "local"
@@ -64,8 +69,8 @@ overrun = "drain" # drain | cancel
 mode = "always"
 
 [pr]
-# human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
-mode = "human"
+# off = report only; human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
+mode = "off" # off | human | autonomous
 max_iterations = 3
 max_wall_time = "1h"
 max_pr_updates = 5

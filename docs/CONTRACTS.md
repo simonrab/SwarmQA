@@ -2,7 +2,8 @@
 
 Read `docs/autonomous-qa-plan.md` for product intent and `docs/OWNERSHIP.md` for file ownership. This file is the build contract. Locked defaults:
 
-- `pr.mode = human`
+- `pr.mode = off`
+- `driver.kind = auto`
 - `workers = 2`
 - `video.mode = always`
 - cloud sample cap `max_spend = 10`, `currency = USD`
@@ -57,7 +58,8 @@ Validation, each message prefixed with its field path:
 - `backend` is `local`, `vm`, or `cloud`
 - `workers` is an integer `>= 1`
 - `video.mode` is `always`, `on_failure`, or `exploratory_only`
-- `pr.mode` is `human` or `autonomous`
+- `pr.mode` is `off`, `human`, or `autonomous`
+- `driver.kind` is `auto`, `fake`, `legacy`, or `runner`
 - `app.maturity` is `prototype` or `shipped`
 - `visual.threshold` is between 0 and 1 inclusive
 - `spend.currency` is a non-empty string

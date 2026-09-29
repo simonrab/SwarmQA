@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-spend", type=float)
     run_p.add_argument("--spend-currency")
     run_p.add_argument("--video-mode", choices=["always", "on_failure", "exploratory_only"])
-    run_p.add_argument("--pr-mode", choices=["human", "autonomous"])
+    run_p.add_argument("--pr-mode", choices=["off", "human", "autonomous"])
     run_p.add_argument("--resume", help="Campaign id whose pending and failed shards should rerun")
     run_p.add_argument("--reset-spend", action="store_true")
     run_p.set_defaults(func=cmd_run)

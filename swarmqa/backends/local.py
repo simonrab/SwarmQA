@@ -376,7 +376,8 @@ def _default_driver_factory(config: CampaignConfig) -> Callable:
     def factory(target, work_dir):
         from swarmqa.driver import create_driver
 
-        return create_driver(target, work_dir, video_mode=config.video.mode)
+        kind = None if config.driver.kind == "auto" else config.driver.kind
+        return create_driver(target, work_dir, kind=kind, video_mode=config.video.mode)
 
     return factory
 

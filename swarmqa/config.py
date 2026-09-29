@@ -18,13 +18,14 @@ from swarmqa.util import parse_duration
 
 _BACKENDS = ("local", "vm", "cloud")
 _VIDEO_MODES = ("always", "on_failure", "exploratory_only")
-_PR_MODES = ("human", "autonomous")
+_PR_MODES = ("off", "human", "autonomous")
 _MATURITIES = ("prototype", "shipped")
 _PLATFORMS = ("macos", "ios")
 _SHARD_STRATEGIES = ("intent", "suite", "exploratory_seed")
 _OVERRUN = ("drain", "cancel")
 _FAIL_ON = ("scripted", "any", "never")
 _ISOLATION = ("thread", "subprocess")
+_DRIVER_KINDS = ("auto", "fake", "legacy", "runner")
 _STEP_FAILURE = ("stop", "continue")
 _DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
 _SYSTEM_ONE_PROVIDERS = ("http", "fake")
@@ -77,6 +78,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "budgets.on_budget", config.budgets.on_budget, _OVERRUN)
     _enum(errors, "fail_on", config.fail_on, _FAIL_ON)
     _enum(errors, "local.isolation", config.local.isolation, _ISOLATION)
+    _enum(errors, "driver.kind", config.driver.kind, _DRIVER_KINDS)
     _enum(errors, "spend.overrun", config.spend.overrun, _OVERRUN)
     _enum(errors, "explorer.on_step_failure", config.explorer.on_step_failure, _STEP_FAILURE)
     _validate_decision(errors, config)
@@ -188,6 +190,9 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
 
     local = _section(document, "local", errors)
     _assign(local, "isolation", config.local, "isolation")
+
+    driver = _section(document, "driver", errors)
+    _assign(driver, "kind", config.driver, "kind")
 
     vm = _section(document, "vm", errors)
     _assign(vm, "provider", config.vm, "provider")

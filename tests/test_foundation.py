@@ -35,7 +35,7 @@ def test_locked_defaults():
     config = CampaignConfig()
     assert config.workers == 2
     assert config.backend == "local"
-    assert config.pr.mode == "human"
+    assert config.pr.mode == "off"
     assert config.video.mode == "always"
     assert config.spend.currency == "USD"
     assert config.cloud.cost_per_worker_minute > 0
@@ -205,7 +205,7 @@ def test_cli_init_and_help(tmp_path: Path):
     assert parsed["campaign"]["workers"] == 2
     assert 'backend = "local"' in text
     assert "workers = 2" in text
-    assert 'mode = "human"' in text
+    assert 'mode = "off"' in text
     assert 'mode = "always"' in text
     assert (tmp_path / "templates" / "issue.md").exists()
     assert (tmp_path / "intents").is_dir()

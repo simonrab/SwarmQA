@@ -10,7 +10,8 @@
 | --- | --- |
 | `backend` | `local` |
 | `workers` | `2` |
-| `pr.mode` | `human` |
+| `pr.mode` | `off` |
+| `driver.kind` | `auto` |
 | `video.mode` | `always` |
 | `spend.currency` | `USD` |
 | `gui_worker_warn_threshold` | `2` |
@@ -59,6 +60,9 @@ fail_on = "scripted" # scripted | any | never
 report_root = "reports"
 gui_worker_warn_threshold = 2
 
+[driver]
+kind = "auto" # auto | fake | legacy | runner
+
 [local]
 isolation = "thread" # thread | subprocess
 
@@ -85,7 +89,7 @@ overrun = "drain" # drain | cancel
 mode = "always" # always | on_failure | exploratory_only
 
 [pr]
-mode = "human" # human | autonomous
+mode = "off" # off | human | autonomous
 max_iterations = 3
 max_wall_time = "1h"
 max_pr_updates = 5
@@ -165,7 +169,7 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.backend`, `workers`, `shard_strategy`, `fail_on`, `report_root`, `gui_worker_warn_threshold` | the same fields |
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
-| `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+| `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
 | `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 
@@ -186,6 +190,10 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 `overrun` and `on_budget` are `drain` (let the current shards finish) or `cancel` (stop them). `drain` is the default.
 
 Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (default `2`) is the local worker count above which the orchestrator warns and points you at `vm` or `cloud`, where each worker has its own machine.
+
+`driver.kind` picks the session driver. `auto` (default) uses `legacy` on a Mac or when `app.platform = "ios"`, and `fake` elsewhere. `fake` is a dry run that needs no Accessibility permission. `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver, chosen by `app.platform`. `runner` is reserved for the XCUITest runner and is rejected until it ships.
+
+`pr.mode` defaults to `off`: the campaign writes its report and no branch or PR is made. Set `human` or `autonomous` to opt into the fix loop.
 
 ### Video, coverage, issues
 
