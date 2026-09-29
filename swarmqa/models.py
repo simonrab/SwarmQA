@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 BackendName = Literal["local", "vm", "cloud"]
-PrMode = Literal["off", "human", "autonomous"]
 VideoMode = Literal["always", "on_failure", "exploratory_only"]
 OverrunPolicy = Literal["drain", "cancel"]
 Maturity = Literal["prototype", "shipped"]
@@ -88,15 +87,6 @@ class SpendConfig:
     max_spend: float | None = None
     currency: str = "USD"
     overrun: OverrunPolicy = "drain"
-
-
-@dataclass
-class PrConfig:
-    mode: PrMode = "off"
-    max_iterations: int = 3
-    max_wall_time_s: float = 3600
-    max_pr_updates: int = 5
-    fix_command: str | None = None
 
 
 @dataclass
@@ -289,7 +279,6 @@ class CampaignConfig:
     shard_strategy: ShardStrategy = "intent"
     budgets: CampaignBudgets = field(default_factory=CampaignBudgets)
     spend: SpendConfig = field(default_factory=SpendConfig)
-    pr: PrConfig = field(default_factory=PrConfig)
     video: VideoConfig = field(default_factory=VideoConfig)
     issues: IssuesConfig = field(default_factory=IssuesConfig)
     visual: VisualConfig = field(default_factory=VisualConfig)
@@ -319,7 +308,6 @@ class CliOverrides:
     max_spend: float | None = None
     spend_currency: str | None = None
     video_mode: str | None = None
-    pr_mode: str | None = None
     config_path: str | None = None
 
 
@@ -330,6 +318,9 @@ class RunOptions:
     # A run limited to some intents (e.g. `--intent`). It never marks
     # findings from the rest as fixed in the cross-run store.
     partial: bool = False
+    # Start a new campaign under this id (the MCP server picks it up front
+    # so it can return it at once). Ignored when resuming.
+    campaign_id: str | None = None
 
 
 @dataclass
@@ -548,27 +539,6 @@ class IssueRef:
     identifier: str
     url: str | None = None
     finding_id: str = ""
-
-
-@dataclass
-class FixProposal:
-    branch: str
-    title: str
-    body: str
-    commit_message: str
-    changed_files: list[str] = field(default_factory=list)
-
-
-@dataclass
-class FixLoopResult:
-    mode: PrMode
-    iterations: int
-    pr_updates: int
-    branch: str | None = None
-    pr_url: str | None = None
-    stop_reason: str | None = None
-    remaining_finding_ids: list[str] = field(default_factory=list)
-    draft_path: str | None = None
 
 
 @dataclass

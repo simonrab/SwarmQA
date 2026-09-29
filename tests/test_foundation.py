@@ -35,7 +35,6 @@ def test_locked_defaults():
     config = CampaignConfig()
     assert config.workers == 2
     assert config.backend == "local"
-    assert config.pr.mode == "off"
     assert config.video.mode == "always"
     assert config.spend.currency == "USD"
     assert config.cloud.cost_per_worker_minute > 0
@@ -205,7 +204,7 @@ def test_cli_init_and_help(tmp_path: Path):
     assert parsed["campaign"]["workers"] == 2
     assert 'backend = "local"' in text
     assert "workers = 2" in text
-    assert 'mode = "off"' in text
+    assert "[pr]" not in parsed
     assert 'mode = "always"' in text
     assert (tmp_path / "templates" / "issue.md").exists()
     assert (tmp_path / "intents").is_dir()
@@ -219,3 +218,33 @@ def test_cli_init_does_not_clobber(tmp_path: Path):
     config.write_text("custom = true\n", encoding="utf-8")
     assert main(["init", "--dir", str(tmp_path)]) == 0
     assert config.read_text(encoding="utf-8") == "custom = true\n"
+
+
+def test_dump_json_is_atomic_for_concurrent_readers(tmp_path):
+    import json
+    import threading
+
+    from swarmqa.serialize import dump_json, load_json
+
+    path = tmp_path / "status.json"
+    dump_json({"n": 0, "pad": "x" * 20000}, path)
+    stop = threading.Event()
+    bad: list[str] = []
+
+    def reader():
+        while not stop.is_set():
+            try:
+                load_json(path)
+            except json.JSONDecodeError as exc:
+                bad.append(str(exc))
+
+    thread = threading.Thread(target=reader)
+    thread.start()
+    for n in range(300):
+        dump_json({"n": n, "pad": "x" * 20000}, path)
+    stop.set()
+    thread.join()
+    assert bad == []
+    assert load_json(path)["n"] == 299
+    assert oct(path.stat().st_mode & 0o777) == "0o644"
+    assert [p.name for p in tmp_path.iterdir()] == ["status.json"]

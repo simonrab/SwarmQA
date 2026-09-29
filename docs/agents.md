@@ -1,114 +1,60 @@
-# Agent entrypoints
+# Coding agents
 
-Autonomous QA is a local CLI. Cursor, Claude Code, and Codex run the same `aqa` commands a person would run in a shell. The tool does not pick a model vendor and it does not merge pull requests.
+SwarmQA finds bugs; a coding agent fixes them. Claude Code and Codex drive SwarmQA through its MCP server, read the findings, change the code, ask SwarmQA to confirm the fix, and open the pull request themselves. SwarmQA never edits product code, never opens or merges a pull request, and does not pick a model vendor for the agent.
 
-Install once, then point a campaign at a built app and an intent file or directory:
+The built-in fix and PR loop (`--pr-mode`, `[pr]`, `swarmqa/prloop/`) was removed. A config that still has a `[pr]` table loads, prints a deprecation warning on stderr, and its contents are ignored.
 
-```bash
-python -m pip install -e ".[dev]"
-aqa init
-```
+## Setup
 
-## Campaign command
-
-Cloud (spend cap required, sample ceiling 10 USD):
+Install with the `mcp` extra and a model provider, then check the machine:
 
 ```bash
-aqa run --app /path/to/MyApp.app \
-  --intent intents/ \
-  --backend cloud \
-  --workers 12 \
-  --max-spend 10 \
-  --spend-currency USD \
-  --pr-mode human
+uv tool install 'swarmqa[anthropic,mcp] @ git+https://github.com/simonrab/swarmqa'
+aqa init        # in the app repo
+aqa doctor
 ```
 
-Local smoke (the locked default is `--backend local` and `--workers 2`). `--max-spend` is accepted and recorded; pure local runs do not stop on it:
+Register the server, which runs as `aqa mcp` over stdio:
 
-```bash
-aqa run --app /path/to/MyApp.app \
-  --intent intents/smoke.md \
-  --backend local \
-  --workers 2 \
-  --max-spend 10
-```
-
-| Flag | Meaning |
+| Agent | Files |
 | --- | --- |
-| `--backend` | `local`, `vm` (Tart), or `cloud` |
-| `--workers` | Max concurrent shards. Default is 2 |
-| `--max-spend` | Currency ceiling. Required and greater than 0 when `--backend cloud` |
-| `--spend-currency` | Default `USD` |
-| `--pr-mode` | `off` (default), `human`, or `autonomous` |
-| `--max-wall-time` | Campaign scheduling budget (`90s`, `5m`, `2h`). This is not the PR-loop cap |
+| Claude Code | `integrations/claude-code/`: `.mcp.json` (`{"mcpServers": {"swarmqa": {"command": "aqa", "args": ["mcp"]}}}`) and the `/qa` skill at `.claude/skills/qa/SKILL.md` |
+| Codex CLI | `integrations/codex/`: `[mcp_servers.swarmqa]` in `~/.codex/config.toml` and a section for the repo's `AGENTS.md` |
 
-One campaign produces one merged report and at most one fix/PR loop. Workers do not open their own pull requests. The loop branch is `aqa/<campaign-id>`. The draft body is `reports/<campaign-id>/pr/draft.md` (title, failing shards, steps, video, screenshots, replay path).
+The server inherits the agent's environment, so the model key your `[llm]` table uses (`ANTHROPIC_API_KEY` by default) must be set where the agent starts.
 
-## Safety caps
+## Tools
 
-Autonomous mode repeats fix, then update the same draft PR, then retest only the shards that failed. All three caps apply together. The first one that trips wins. The pull request stays open, remaining finding ids are returned, and nothing merges to the default branch.
+| Tool | Returns | Notes |
+| --- | --- | --- |
+| `start_campaign(config_path, app, intents, platform, workers, sha)` | `campaign_id`, `report_dir` | Returns at once; the campaign runs in a detached process |
+| `campaign_status(campaign_id)` | `CampaignStatus` | `state` is `running`, `finished` or `stopped`; `None` means the latest campaign |
+| `list_findings(campaign_id, pr, include_advisory, min_severity)` | finding summaries | `advisory` findings came only from a model |
+| `get_finding(finding_id, campaign_id)` | the full finding | steps, screenshots, video clip, `repro`, `suspected_sources` |
+| `verify_fix(finding_id, campaign_id, devices=2, build=True)` | `verify_id`, state `running` | Rebuilds and replays the repro; returns at once |
+| `verify_status(verify_id)` | `VerifyResult` | `passed` means the finding did not reproduce on any device |
+| `cancel_campaign(campaign_id, drain=True)` | `CampaignStatus` | `drain` lets running shards finish |
 
-| Cap | Config | Default | `stop_reason` |
-| --- | --- | --- | --- |
-| Iterations | `pr.max_iterations` | 3 | `max_iterations` |
-| Wall time | `pr.max_wall_time` | `1h` (`pr.max_wall_time_s`) | `max_wall_time` |
-| PR updates | `pr.max_pr_updates` | 5 | `max_pr_updates` |
+## The loop
 
-Other stop reasons: `human` after the default draft, `green` when a retest has no failed scripted shards, `no_fixer` when autonomous mode has neither a `fixer` nor `pr.fix_command` / `AQA_FIX_COMMAND`. Do not raise the caps in an agent session unless the user asks. Do not run `gh pr merge`.
+1. `start_campaign`, then poll `campaign_status` until the campaign is `finished` or `stopped`.
+2. `list_findings`, most severe first. Confirm advisory findings with the user before fixing them.
+3. `get_finding`, then open the `suspected_sources` and read the evidence.
+4. Fix on a branch, never on the default branch.
+5. `verify_fix`, then poll `verify_status` until the state is not `running`.
+   - `passed`: commit, push and open the PR with the finding id, the cause, the fix and the verify result.
+   - `failed`: the finding still reproduces on `reproduced_on`. Revise and verify again; stop after 3 attempts and report.
+   - `error`: the build or replay could not run. Report it; the fix is unverified.
+6. Repeat for the next finding, then summarise what was fixed, verified and left open.
 
-Human mode writes the draft and, when `gh` is available, `gh pr create --draft`. It does not edit product code.
+## Rules for agents
 
-## Copy-paste prompts
+- Only a `passed` verify result counts as fixed.
+- Open one PR per finding or per related group. Never merge and never push to the default branch.
+- Do not change `aqa.config.toml`, spend caps or worker counts unless the user asks.
+- Do not commit `reports/` or `.aqa/`.
+- Never print API keys or tokens.
 
-### Cursor
+## Without MCP
 
-```
-You are running Autonomous QA in this repo. Use the terminal and do not merge any pull request.
-
-aqa run --app /path/to/MyApp.app --intent intents/ --backend cloud --workers 12 --max-spend 10 --spend-currency USD --pr-mode human
-
-One loop for the campaign, on branch aqa/<campaign-id>. Human mode writes reports/<campaign-id>/pr/draft.md and opens a single draft PR. It does not apply code fixes.
-
-Safety caps — stop when any one trips and leave the draft PR open:
-- pr.max_iterations = 3 (stop_reason max_iterations)
-- pr.max_wall_time = 1h (stop_reason max_wall_time)
-- pr.max_pr_updates = 5 (stop_reason max_pr_updates)
-
-Never gh pr merge and never merge into the default branch. Use --pr-mode autonomous only if I ask, and keep these same caps.
-```
-
-### Claude Code
-
-```
-Use Bash to run Autonomous QA. Do not merge to the default branch and do not open one PR per worker.
-
-aqa run --app /path/to/MyApp.app --intent intents/ --backend cloud --workers 12 --max-spend 10 --spend-currency USD --pr-mode human
-
-The campaign may fan out across --workers on the chosen --backend. Cloud requires --max-spend (sample cap 10 USD). Local ignores the spend cap and still accepts the flag.
-
-Honor the fix-loop safety caps in aqa.config.toml. They all apply; the first one that trips stops the loop and leaves the PR open:
-- pr.max_iterations default 3, stop_reason max_iterations
-- pr.max_wall_time default 1h, stop_reason max_wall_time
-- pr.max_pr_updates default 5, stop_reason max_pr_updates
-
-Retest only the shards that failed. Stop with stop_reason green when no scripted shard is still failing.
-```
-
-### Codex
-
-```
-Run this command in the repository to start Autonomous QA:
-
-aqa run --app /path/to/MyApp.app --intent intents/ --backend vm --workers 4 --max-spend 10 --spend-currency USD --pr-mode autonomous
-
-You may be the fixer via pr.fix_command or AQA_FIX_COMMAND. Edit only the campaign branch aqa/<campaign-id>, then let the loop retest failed shards and update that one draft PR.
-
-Stop when scripted shards are green or when any safety cap trips:
-- max_iterations 3 (stop_reason max_iterations)
-- max_wall_time 1h (stop_reason max_wall_time)
-- max_pr_updates 5 (stop_reason max_pr_updates)
-
---backend selects local, vm, or cloud. --workers is the concurrency cap. --max-spend is required for cloud and is the currency ceiling (sample 10 USD).
-
-Never run gh pr merge. Never merge into the default branch. If a cap trips, leave the pull request open and report the remaining finding ids.
-```
+Every step also works from a shell: `aqa run`, `aqa status`, `aqa report`, and `aqa replay reports/<campaign-id>/findings/<id>.replay.json` (exit 1 while the finding still reproduces). `aqa file-issues` files a campaign's findings into GitHub or Linear for people to pick up; it is a dry run unless you pass `--yes`.

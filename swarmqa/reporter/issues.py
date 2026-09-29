@@ -1,7 +1,9 @@
-"""C4 — GitHub and Linear issue creation.
+"""C4 — GitHub and Linear issue creation, run by `aqa file-issues`.
 
-Always write local ticket files even when trackers are disabled.
-See docs/CONTRACTS.md section C4.
+Campaigns no longer file issues on their own; `aqa file-issues` reads a
+campaign's findings.json and calls `create_issues`. Always write local
+ticket files even when trackers are disabled. See docs/CONTRACTS.md
+section C4.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import urllib.request
 from pathlib import Path
 from typing import Callable
 
@@ -61,6 +64,18 @@ def create_issues(
             if linear_ref is not None:
                 refs.append(linear_ref)
     return refs
+
+
+def json_post(url: str, headers: dict, body: dict, *, timeout: float = 30) -> dict:
+    """POST `body` as JSON and return the decoded response. The default Linear transport."""
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers=dict(headers),
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed https URL
+        return json.loads(response.read().decode("utf-8") or "{}")
 
 
 def _load_template(config: CampaignConfig) -> str:

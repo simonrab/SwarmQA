@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "swarmqa": {
+      "command": "aqa",
+      "args": ["mcp"]
+    }
+  }
+}

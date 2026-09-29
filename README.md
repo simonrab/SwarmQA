@@ -36,37 +36,63 @@ simulators = ["iPhone 17", "iPhone 17 Pro"]
 workers = 2
 ```
 
-## Install and run
+## Install
 
-Install the `aqa` command with [uv](https://docs.astral.sh/uv/). uv fetches a suitable Python (3.11 or newer) and keeps SwarmQA in its own environment, so the macOS system Python is left alone.
+Install the `aqa` command with [uv](https://docs.astral.sh/uv/). uv fetches a suitable Python (3.11 or newer) and keeps SwarmQA in its own environment, so the macOS system Python is left alone. List the extras you want in the brackets: `anthropic` or `openai` for the model provider, `mcp` for coding agents.
 
 ```bash
-uv tool install git+https://github.com/simonrab/swarmqa
-aqa init
+uv tool install 'swarmqa[anthropic,mcp] @ git+https://github.com/simonrab/swarmqa'
 ```
 
-`pipx install git+https://github.com/simonrab/swarmqa` works the same way. To work on SwarmQA itself:
+Keep the quotes: the name, the extras, `@` and the URL are one requirement. `uv tool install git+https://github.com/simonrab/swarmqa` installs the core without extras. To add extras later, run the full command again with `--reinstall`. `pipx install 'swarmqa[anthropic,mcp] @ git+https://github.com/simonrab/swarmqa'` works the same way.
+
+Then check the machine:
+
+```bash
+aqa doctor
+```
+
+`aqa doctor` checks Python, Xcode, simulator runtimes and devices, `idb`, Accessibility permission, `ffmpeg`, Tart, model API keys, the optional extras, and `aqa.config.toml`. `--github` adds `gh` login and token scopes; `--json` prints machine-readable output. It exits 0 when nothing fails. See [docs/doctor.md](docs/doctor.md).
+
+To work on SwarmQA itself:
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest
 ```
 
-`aqa init` writes `aqa.config.toml`, `templates/issue.md`, and empty `intents/` and `reports/` directories. Pass `--dir` to choose a different directory.
+## Quick start
 
 ```bash
+aqa init
+```
+
+`aqa init` writes `aqa.config.toml`, `templates/issue.md`, and empty `intents/` and `reports/` directories. Pass `--dir` to choose a different directory. Turn on the agent explorer and a model:
+
+```toml
+[explorer]
+engine = "agent"
+
+[llm]
+enabled = true
+provider = "anthropic"   # reads ANTHROPIC_API_KEY
+```
+
+```bash
+export ANTHROPIC_API_KEY=...
 aqa run --app /path/to/MyApp.app --intent intents/smoke.md
 ```
 
-That command reads `aqa.config.toml`. The defaults are a local backend, 2 workers, video on, and PR mode off (report only, no branch or PR). It prints the report directory, `reports/<campaign-id>/`.
+That command reads `aqa.config.toml`. The defaults are a local backend, 2 workers, and video on. Without `[llm]` the agent explorer still runs with its free heuristic. It prints the report directory, `reports/<campaign-id>/`.
 
 ```bash
 aqa report
 aqa status
 aqa record --app /path/to/MyApp.app --out intents/flow.json --interactive
+aqa replay reports/<campaign-id>/findings/<id>.replay.json
 ```
 
-`aqa report` prints the latest `summary.md`. `aqa status` prints campaign progress. `aqa record --interactive` saves a flow you click through. `examples/intents/smoke.md` is a short scripted intent you can copy.
+`aqa report` prints the latest `summary.md`. `aqa status` prints campaign progress. `aqa record --interactive` saves a flow you click through. `aqa replay` reruns one finding and exits 1 if it still reproduces. `examples/intents/smoke.md` is a short scripted intent you can copy.
 
 A live Mac session needs Accessibility permission for the process that starts the app. Video also needs Screen Recording permission. Details are in [docs/driver.md](docs/driver.md).
 
@@ -76,13 +102,29 @@ To copy screenshots into the baseline directory:
 aqa baseline update --from-dir reports/<campaign-id>/media --baseline-dir baselines
 ```
 
-## Reports and the PR loop
+## Reports and issues
 
-Each campaign writes one report under `reports/<campaign-id>/`. Start with `summary.md`. Screenshots and video, when recorded, are under `media/`. A finding can include a replay JSON file.
+Each campaign writes one report under `reports/<campaign-id>/`. Start with `summary.md`. `findings.json` lists every finding with its evidence. Screenshots and video, when recorded, are under `media/`. A finding can include a replay JSON file.
 
-When the campaign has results, human mode writes one draft pull request and stops. It does not change the app under test. If the `gh` command is available, that draft is opened with `gh pr create --draft`. The draft file is still written when `gh` is missing.
+Campaigns do not file issues on their own. To file a campaign's findings into GitHub or Linear (as configured in `[issues]`):
+
+```bash
+aqa file-issues                        # dry run: print what would be filed
+aqa file-issues --tracker github --yes # file into GitHub
+```
 
 Screenshot checks compare pixels with saved baselines. See [docs/visual.md](docs/visual.md).
+
+## Coding agents (MCP)
+
+Claude Code and Codex drive SwarmQA through its MCP server, `aqa mcp` (needs the `mcp` extra). The agent starts a campaign, reads the findings, fixes the code, calls `verify_fix` to rebuild and replay the finding on two devices, and opens the pull request itself once the fix passes. SwarmQA never edits code or opens PRs.
+
+| Agent | Setup |
+| --- | --- |
+| Claude Code | [integrations/claude-code](integrations/claude-code/README.md): a `/qa` skill and an `.mcp.json` entry |
+| Codex CLI | [integrations/codex](integrations/codex/README.md): a `~/.codex/config.toml` entry and an `AGENTS.md` section |
+
+The loop and the tool reference are in [docs/agents.md](docs/agents.md). The old `--pr-mode` flag and `[pr]` config are gone; an old config with `[pr]` still loads and prints a deprecation warning.
 
 ## Tests
 
@@ -100,4 +142,5 @@ Tests use the fake driver. They do not need a Mac, Xcode, or `idb`.
 | macOS and iOS drivers | [docs/driver.md](docs/driver.md) |
 | Orchestrator | [docs/orchestrator.md](docs/orchestrator.md) |
 | Visual baselines | [docs/visual.md](docs/visual.md) |
-| PR loop | [docs/agents.md](docs/agents.md) |
+| Coding agents and MCP | [docs/agents.md](docs/agents.md) |
+| `aqa doctor` | [docs/doctor.md](docs/doctor.md) |

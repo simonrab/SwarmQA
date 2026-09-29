@@ -85,14 +85,6 @@ overrun = "drain" # drain | cancel
 # always | on_failure | exploratory_only
 mode = "always"
 
-[pr]
-# off = report only; human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
-mode = "off" # off | human | autonomous
-max_iterations = 3
-max_wall_time = "1h"
-max_pr_updates = 5
-# fix_command = ""  # or set AQA_FIX_COMMAND
-
 [issues]
 github = false
 linear = false

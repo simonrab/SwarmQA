@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
@@ -21,8 +23,23 @@ def to_plain(obj: Any) -> Any:
 
 
 def dump_json(obj: Any, path: Path) -> None:
+    """Write JSON atomically: other processes (status readers, the MCP server)
+    see the old file or the new one, never a half-written one."""
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(to_plain(obj), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    text = json.dumps(to_plain(obj), indent=2, sort_keys=True) + "\n"
+    handle, temp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        os.chmod(temp, 0o644)  # mkstemp creates 0600; keep reports readable as before
+        os.replace(temp, path)
+    except BaseException:
+        try:
+            os.unlink(temp)
+        except OSError:
+            pass
+        raise
 
 
 def load_json(path: Path) -> Any:
