@@ -381,3 +381,37 @@ def test_screenshot_action_is_attached_to_a_later_finding(tmp_path: Path):
         "workers/w1/media/before.png",
         "workers/w1/media/failure-1.png",
     ]
+
+
+def test_crash_right_after_the_last_step_fails_the_shard(tmp_path: Path):
+    """A live driver can report a tap as done and then the app dies."""
+
+    class CrashAfterClick(FakeDriver):
+        crashed = False
+
+        def click(self, target):
+            super().click(target)
+            self.crashed = True
+
+        def accessibility_tree(self):
+            if self.crashed:
+                raise AppCrashedError("app is no longer running")
+            return super().accessibility_tree()
+
+    app = make_app(tmp_path)
+    config = sample_config(app)
+    _root, work = _campaign(tmp_path)
+    driver = CrashAfterClick(app, work)
+    driver.set_tree(sample_tree())
+    result = run_scripted(
+        scripted_shard([Action(action="click", target=ElementQuery(role="button", label="Save"))]),
+        driver,
+        config,
+        worker_id="w1",
+        work_dir=work,
+    )
+    assert result.status == "failed"
+    assert [finding.kind for finding in result.findings] == ["crash"]
+    assert result.findings[0].severity == "critical"
+    assert result.steps[-1].status == "failed"
+    assert "crashed after this step" in result.steps[-1].message

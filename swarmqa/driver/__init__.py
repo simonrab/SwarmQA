@@ -4,7 +4,9 @@
 without Accessibility permission. `kind="macos"` defers to the macOS driver.
 `kind="ios"` defers to the iOS Simulator driver. `app.platform = "ios"` selects
 that driver even when `kind` is omitted. `kind="legacy"` picks the macOS or iOS
-driver from `app.platform`. `kind="runner"` is reserved for the XCUITest runner.
+driver from `app.platform`. `kind="runner"` drives the app through the XCUITest
+swarm runner (`agents/swarm-runner`): `IOSRunnerDriver` when `app.platform` is
+`ios`, else `MacOSRunnerDriver`. Both implement AppDriver v2.
 """
 
 from __future__ import annotations
@@ -27,7 +29,13 @@ def create_driver(
     if kind == "legacy":
         selected = "ios" if target.platform == "ios" else "macos"
     elif kind == "runner":
-        raise ValueError("driver kind runner is not available yet")
+        if target.platform == "ios":
+            from swarmqa.driver.ios_runner import IOSRunnerDriver
+
+            return IOSRunnerDriver(target, work_dir, video_mode=video_mode)
+        from swarmqa.driver.macos_runner import MacOSRunnerDriver
+
+        return MacOSRunnerDriver(target, work_dir, video_mode=video_mode)
     elif kind:
         selected = kind
     elif target.platform == "ios":

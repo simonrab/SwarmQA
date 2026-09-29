@@ -219,6 +219,38 @@ def _run_actions(
             if stop:
                 _skip_rest(shard.actions, index, steps)
                 break
+    if steps and steps[-1].status == "passed":
+        # A step can return before the app dies (a live driver reports the tap
+        # as done, then the app crashes). Look once more so a crash caused by
+        # the last step is not reported as a pass.
+        try:
+            driver.accessibility_tree()
+        except AppCrashedError as exc:
+            index = steps[-1].index
+            action = shard.actions[index]
+            finding = _build_finding(
+                kind="crash",
+                action=action,
+                shard=shard,
+                config=config,
+                worker_id=worker_id,
+                environment=environment,
+                step_lines=list(descriptions),
+                screenshots=_public_paths(screenshots, campaign_dir, relative),
+                details=str(exc),
+                index=index,
+            )
+            findings.append(finding)
+            replays[finding.id] = [_action_dict(item) for item in executed]
+            steps[-1] = StepResult(
+                index=index,
+                action=action.action,
+                status="failed",
+                message=f"{descriptions[-1]}: the app crashed after this step: {exc}",
+            )
+            status = "failed"
+        except Exception:
+            pass
     return status, judge_error
 
 
