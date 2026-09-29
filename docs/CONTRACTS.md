@@ -2,7 +2,6 @@
 
 Read `docs/autonomous-qa-plan.md` for product intent and `docs/OWNERSHIP.md` for file ownership. This file is the build contract. Locked defaults:
 
-- `pr.mode = off`
 - `driver.kind = auto`
 - `workers = 2`
 - `video.mode = always`
@@ -17,7 +16,7 @@ Exit codes from `aqa`: `0` success, `1` scripted failure or unhandled worker cra
 
 ## Shared objects
 
-`CampaignConfig`, `Shard`, `Action`, `Finding`, `WorkerResult`, `CampaignResult`, `CampaignStatus`, and `FixLoopResult` live in `swarmqa.models`. Serialize with `swarmqa.serialize.dump_json`.
+`CampaignConfig`, `Shard`, `Action`, `Finding`, `WorkerResult`, `CampaignResult`, and `CampaignStatus` live in `swarmqa.models`. Serialize with `swarmqa.serialize.dump_json`.
 
 Report directories (`swarmqa.report.layout.ensure_campaign_layout`):
 
@@ -49,16 +48,15 @@ Issue template placeholders: `{{title}}` `{{severity}}` `{{kind}}` `{{steps}}` `
 
 Implement `load_config(path, overrides) -> CampaignConfig` and `validate_config(config) -> list[str]`.
 
-TOML shape is `swarmqa/templates/aqa.config.toml`. Map sections onto `CampaignConfig` fields. `max_wall_time` strings go through `parse_duration` into `budgets.max_wall_time_s` and `pr.max_wall_time_s`. Top-level `intents` is a string array. Accept intent paths that point at a file or a directory.
+TOML shape is `swarmqa/templates/aqa.config.toml`. Map sections onto `CampaignConfig` fields. `max_wall_time` strings go through `parse_duration` into `budgets.max_wall_time_s`. A `[pr]` table is deprecated: it loads with a stderr warning and is ignored (see C7). Top-level `intents` is a string array. Accept intent paths that point at a file or a directory.
 
-CLI overrides replace config for one run: `--app`, repeated `--intent`, `--backend`, `--workers`, `--max-wall-time`, `--max-spend`, `--spend-currency`, `--video-mode`, `--pr-mode`.
+CLI overrides replace config for one run: `--app`, repeated `--intent`, `--backend`, `--workers`, `--max-wall-time`, `--max-spend`, `--spend-currency`, `--video-mode`.
 
 Validation, each message prefixed with its field path:
 
 - `backend` is `local`, `vm`, or `cloud`
 - `workers` is an integer `>= 1`
 - `video.mode` is `always`, `on_failure`, or `exploratory_only`
-- `pr.mode` is `off`, `human`, or `autonomous`
 - `driver.kind` is `auto`, `fake`, `legacy`, or `runner`
 - `app.maturity` is `prototype` or `shipped`
 - `visual.threshold` is between 0 and 1 inclusive
@@ -191,29 +189,9 @@ Use the fake driver in tests. A half-wired tree that lacks a goal control must y
 
 Tag visual findings `kind="visual"` when the orchestrator or a caller wraps `DiffResult` in a `Finding`. Concurrent compares only read baselines.
 
-## C7 — Fix and PR loop
+## C7 — Fix and PR loop (removed)
 
-`run_fix_loop(result, config, *, repo, fixer=None, retest=None, gh_runner=None) -> FixLoopResult`.
-
-There is exactly one loop per campaign. Ignore worker identity when opening a PR.
-
-Human mode (`pr.mode == "human"`):
-
-- Create branch name `aqa/<campaign-id>` in `repo` when `repo` is a git checkout. If git is unavailable, skip the branch and still write files.
-- Write `report_dir/pr/draft.md` from the merged findings (title, body, failing shards, evidence paths, video, replay).
-- When `gh_runner` is provided or `gh` exists on PATH, create a draft PR (`gh pr create --draft`). Store the URL on the result.
-- Do not apply code fixes. `stop_reason="human"`. Return after that single draft.
-
-Autonomous mode:
-
-- Repeat while findings remain and all caps hold: `iterations < pr.max_iterations`, `pr_updates < pr.max_pr_updates`, and elapsed time `< pr.max_wall_time_s`.
-- Ask `fixer(findings, repo, iteration) -> FixProposal`. When `fixer` is omitted, use `config.pr.fix_command` or env `AQA_FIX_COMMAND`. When no command exists, write the draft, set `stop_reason="no_fixer"`, and return with remaining finding ids. Do not spin.
-- Open or update one PR for the campaign branch.
-- Call `retest(failed_shards) -> CampaignResult` on the shards that failed, not the original full queue, unless the caller passes a retest that does otherwise.
-- When retest reports no failed scripted shards, `stop_reason="green"`.
-- When a cap trips, leave `stop_reason` as `max_iterations`, `max_pr_updates`, or `max_wall_time`, list `remaining_finding_ids`, and keep the PR open (do not close it).
-
-`gh_runner(args: list[str]) -> subprocess.CompletedProcess` is the test seam. Never merge to the default branch.
+Removed in Wave C (WP-C3). `swarmqa/prloop/`, `run_fix_loop`, `FixLoopResult`, `FixProposal`, `PrConfig` and the `--pr-mode` flag are gone. Coding agents (Claude Code, Codex) now drive SwarmQA over MCP (`start_campaign` … `verify_fix`) and open the fix PRs themselves; see `docs/agents.md`. A config that still has a `[pr]` table loads, prints a deprecation warning on stderr, and its contents are ignored.
 
 ## C8 — Orchestrator and local backend
 

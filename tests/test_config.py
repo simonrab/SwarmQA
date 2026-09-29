@@ -22,7 +22,6 @@ from swarmqa.models import (
     FrictionConfig,
     IssuesConfig,
     LocalConfig,
-    PrConfig,
     SpendConfig,
     SuiteConfig,
     SystemOneConfig,
@@ -52,8 +51,6 @@ def test_template_maps_onto_campaign_config():
     )
     assert config.workers == 2
     assert config.backend == "local"
-    assert config.pr.mode == "off"
-    assert config.pr.max_wall_time_s == parse_duration("1h")
     assert config.video.mode == "always"
     assert config.spend.currency == "USD"
     assert config.spend.max_spend is None
@@ -79,7 +76,6 @@ def test_empty_file_uses_locked_defaults(tmp_path: Path):
     config = load_config(_write(tmp_path, ""))
     assert config == sample_config()
     assert config.workers == 2
-    assert config.pr.mode == "off"
     assert config.video.mode == "always"
 
 
@@ -134,13 +130,6 @@ overrun = "cancel"
 
 [video]
 mode = "on_failure"
-
-[pr]
-mode = "autonomous"
-max_iterations = 4
-max_wall_time = "90s"
-max_pr_updates = 2
-fix_command = "echo fix"
 
 [issues]
 github = true
@@ -220,13 +209,6 @@ command = "xcodebuild test -scheme MyApp"
             on_budget="cancel",
         ),
         spend=SpendConfig(max_spend=25.5, currency="EUR", overrun="cancel"),
-        pr=PrConfig(
-            mode="autonomous",
-            max_iterations=4,
-            max_wall_time_s=parse_duration("90s"),
-            max_pr_updates=2,
-            fix_command="echo fix",
-        ),
         video=VideoConfig(mode="on_failure"),
         issues=IssuesConfig(
             github=True,
@@ -295,7 +277,6 @@ command = "xcodebuild test -scheme MyApp"
         gui_worker_warn_threshold=4,
     )
     assert config.budgets.max_wall_time_s == 5400
-    assert config.pr.max_wall_time_s == 90
 
 
 def test_intent_file_and_directory_paths_are_kept(tmp_path: Path):
@@ -364,10 +345,6 @@ def test_section_must_be_a_table(tmp_path: Path):
             ["video.mode: must be one of always, on_failure, exploratory_only"],
         ),
         (
-            lambda c: setattr(c.pr, "mode", "robot"),
-            ["pr.mode: must be one of off, human, autonomous"],
-        ),
-        (
             lambda c: setattr(c.app, "maturity", "beta"),
             ["app.maturity: must be one of prototype, shipped"],
         ),
@@ -407,14 +384,6 @@ def test_section_must_be_a_table(tmp_path: Path):
         (
             lambda c: (setattr(c, "backend", "cloud"), setattr(c.spend, "max_spend", True)),
             [_CLOUD_SPEND],
-        ),
-        (
-            lambda c: setattr(c.pr, "max_iterations", 0),
-            ["pr.max_iterations: must be an integer >= 1"],
-        ),
-        (
-            lambda c: setattr(c.pr, "max_pr_updates", 0),
-            ["pr.max_pr_updates: must be an integer >= 1"],
         ),
         (
             lambda c: setattr(c.explorer, "max_steps", 0),
@@ -518,8 +487,6 @@ def test_validation_boundaries_and_combined_errors():
     config = sample_config()
     config.workers = 1
     config.visual.threshold = 0
-    config.pr.max_iterations = 1
-    config.pr.max_pr_updates = 1
     config.explorer.max_steps = 1
     config.explorer.max_time_s = 0.001
     config.backend = "cloud"
@@ -533,24 +500,18 @@ def test_validation_boundaries_and_combined_errors():
     broken.backend = "docker"
     broken.workers = 0
     broken.video.mode = "sometimes"
-    broken.pr.mode = "robot"
     broken.app.maturity = "beta"
     broken.visual.threshold = 2
     broken.spend.currency = ""
-    broken.pr.max_iterations = 0
-    broken.pr.max_pr_updates = 0
     broken.explorer.max_steps = 0
     broken.explorer.max_time_s = 0
     assert validate_config(broken) == [
         "backend: must be one of local, vm, cloud",
         "workers: must be an integer >= 1",
         "video.mode: must be one of always, on_failure, exploratory_only",
-        "pr.mode: must be one of off, human, autonomous",
         "app.maturity: must be one of prototype, shipped",
         "visual.threshold: must be between 0 and 1 inclusive",
         "spend.currency: must be a non-empty string",
-        "pr.max_iterations: must be an integer >= 1",
-        "pr.max_pr_updates: must be an integer >= 1",
         "explorer.max_steps: must be an integer >= 1",
         "explorer.max_time_s: must be > 0",
     ]
@@ -609,19 +570,14 @@ def test_bad_duration(tmp_path: Path):
         """
 [campaign]
 max_wall_time = "soon"
-[pr]
-max_wall_time = "nope"
 """,
     )
     with pytest.raises(ValueError) as soon:
         parse_duration("soon")
-    with pytest.raises(ValueError) as nope:
-        parse_duration("nope")
     with pytest.raises(ConfigError) as exc:
         load_config(path)
     assert exc.value.errors == [
         f"budgets.max_wall_time_s: {soon.value}",
-        f"pr.max_wall_time_s: {nope.value}",
     ]
 
     bare = _write(tmp_path, '[campaign]\nmax_wall_time = "30"\n')
@@ -676,9 +632,6 @@ backend = "kubernetes"
 
 [video]
 mode = "sometimes"
-
-[pr]
-mode = "robot"
 """,
     )
     with pytest.raises(ConfigError) as exc:
@@ -686,7 +639,6 @@ mode = "robot"
     assert exc.value.errors == [
         "backend: must be one of local, vm, cloud",
         "video.mode: must be one of always, on_failure, exploratory_only",
-        "pr.mode: must be one of off, human, autonomous",
         "app.maturity: must be one of prototype, shipped",
     ]
 
@@ -712,11 +664,32 @@ def test_driver_kind_selects_local_driver(tmp_path: Path, monkeypatch: pytest.Mo
     assert isinstance(driver, FakeDriver)
 
 
-def test_pr_mode_off_skips_fix_loop(tmp_path: Path):
-    config = load_config(_write(tmp_path, "[pr]\nmode = \"off\"\n"))
-    assert config.pr.mode == "off"
-    args = build_parser().parse_args(["run", "--pr-mode", "off"])
-    assert overrides_from_namespace(args).pr_mode == "off"
+def test_old_pr_table_loads_with_deprecation_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    path = _write(
+        tmp_path,
+        '[pr]\nmode = "robot"\nmax_iterations = 0\nmax_wall_time = "nope"\nfix_command = 3\n',
+    )
+    config = load_config(path)
+    assert config == sample_config()
+    assert not hasattr(config, "pr")
+    err = capsys.readouterr().err
+    assert "WARNING" in err
+    assert "[pr] table is deprecated and ignored" in err
+
+
+def test_config_without_pr_table_does_not_warn(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
+    load_config(_write(tmp_path, "[video]\nmode = \"always\"\n"))
+    assert "deprecated" not in capsys.readouterr().err
+
+
+def test_cli_no_longer_accepts_pr_mode():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["run", "--pr-mode", "off"])
+    assert not hasattr(CliOverrides(), "pr_mode")
 
 def test_cli_overrides_replace_file_values(tmp_path: Path):
     path = _write(
@@ -739,9 +712,6 @@ currency = "USD"
 
 [video]
 mode = "always"
-
-[pr]
-mode = "human"
 """,
     )
     overrides = CliOverrides(
@@ -753,7 +723,6 @@ mode = "human"
         max_spend=12.5,
         spend_currency="EUR",
         video_mode="exploratory_only",
-        pr_mode="autonomous",
     )
     config = load_config(path, overrides)
     assert config.app.path == "/Applications/Demo.app"
@@ -766,7 +735,6 @@ mode = "human"
     assert config.spend.max_spend == 12.5
     assert config.spend.currency == "EUR"
     assert config.video.mode == "exploratory_only"
-    assert config.pr.mode == "autonomous"
 
     partial = load_config(path, CliOverrides(workers=9))
     assert partial.workers == 9
@@ -805,8 +773,6 @@ def test_cli_flags_build_overrides_and_load(tmp_path: Path):
             "USD",
             "--video-mode",
             "on_failure",
-            "--pr-mode",
-            "human",
         ]
     )
     overrides = overrides_from_namespace(args)
@@ -819,7 +785,6 @@ def test_cli_flags_build_overrides_and_load(tmp_path: Path):
     assert config.spend.max_spend == 10
     assert config.spend.currency == "USD"
     assert config.video.mode == "on_failure"
-    assert config.pr.mode == "human"
 
 
 def test_cli_run_reports_config_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]):

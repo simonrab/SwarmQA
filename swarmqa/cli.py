@@ -14,6 +14,8 @@ from swarmqa import __version__
 from swarmqa.errors import AQAError, ChunkNotReady, ConfigError
 from swarmqa.models import CliOverrides
 
+_TRACKERS = ("github", "linear")
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
@@ -56,7 +58,6 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-spend", type=float)
     run_p.add_argument("--spend-currency")
     run_p.add_argument("--video-mode", choices=["always", "on_failure", "exploratory_only"])
-    run_p.add_argument("--pr-mode", choices=["off", "human", "autonomous"])
     run_p.add_argument("--resume", help="Campaign id whose pending and failed shards should rerun")
     run_p.add_argument("--reset-spend", action="store_true")
     run_p.set_defaults(func=cmd_run)
@@ -86,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replay a finding and report whether it still reproduces (exit 1 if it does)",
     )
     replay_p.add_argument("replay", help="Path to findings/<id>.replay.json")
-    replay_p.add_argument("--config", default="aqa.config.toml")
+    replay_p.add_argument("--config", help="Config file (default: aqa.config.toml if present)")
     replay_p.add_argument("--app", help="App to replay against (overrides app.path)")
     replay_p.set_defaults(func=cmd_replay)
 
@@ -94,6 +95,34 @@ def build_parser() -> argparse.ArgumentParser:
     status_p.add_argument("--campaign")
     status_p.add_argument("--report-root", default="reports")
     status_p.set_defaults(func=cmd_status)
+
+    issues_p = sub.add_parser(
+        "file-issues",
+        help="File a campaign's findings as tracker issues (dry run unless --yes)",
+    )
+    issues_p.add_argument("--campaign", help="Campaign id (default: the latest)")
+    issues_p.add_argument("--report-root", default="reports")
+    issues_p.add_argument("--config", help="Config file (default: aqa.config.toml if present)")
+    issues_p.add_argument(
+        "--tracker",
+        action="append",
+        dest="trackers",
+        choices=list(_TRACKERS),
+        help="Tracker to file into (repeatable). Default: the ones enabled in [issues]",
+    )
+    issues_p.add_argument(
+        "--skip-advisory", action="store_true", help="Leave out model-only (advisory) findings"
+    )
+    issues_p.add_argument("--yes", action="store_true", help="Actually file; without it, only print the plan")
+    issues_p.set_defaults(func=cmd_file_issues)
+
+    doctor_p = sub.add_parser("doctor", help="Check Xcode, simulators, permissions, keys and tools")
+    doctor_p.add_argument("--config", default="aqa.config.toml")
+    doctor_p.add_argument("--github", action="store_true", help="Also check gh auth and token scopes")
+    doctor_p.add_argument("--json", action="store_true", help="Print the checks as JSON")
+    doctor_p.set_defaults(func=cmd_doctor)
+
+    # `aqa mcp` and `aqa verify` are registered here once their packages land.
     return parser
 
 
@@ -139,7 +168,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         max_spend=args.max_spend,
         spend_currency=args.spend_currency,
         video_mode=args.video_mode,
-        pr_mode=args.pr_mode,
         config_path=args.config,
     )
     config = load_config(Path(args.config), overrides)
@@ -150,14 +178,6 @@ def cmd_run(args: argparse.Namespace) -> int:
         partial=bool(args.intents),
     )
     result = run_campaign(config, queue, options=options)
-    if config.pr.mode in {"human", "autonomous"} and result.results:
-        from swarmqa.prloop.loop import run_fix_loop
-
-        loop = run_fix_loop(result, config, repo=Path.cwd())
-        if loop.pr_url:
-            print(loop.pr_url)
-        elif loop.draft_path:
-            print(loop.draft_path)
     print(result.report_dir)
     return result.exit_code
 
@@ -190,16 +210,14 @@ def cmd_replay(args: argparse.Namespace) -> int:
     """Exit 0 when the finding no longer reproduces, 1 when it does, 2 when the replay could not run."""
     import time
 
-    from swarmqa.config import load_config
-    from swarmqa.models import CampaignConfig
+    from swarmqa.config import load_config_or_defaults
     from swarmqa.report.repro import replay_finding
 
     replay = Path(args.replay)
     if not replay.is_file():
         print(f"replay not found: {replay}", file=sys.stderr)
         return 2
-    config_path = Path(args.config)
-    config = load_config(config_path, CliOverrides(app=args.app)) if config_path.is_file() else CampaignConfig()
+    config = load_config_or_defaults(args.config)
     if args.app:
         config.app.path = args.app
     # <campaign>/findings/<id>.replay.json -> <campaign>/replays/<id>-<time>
@@ -221,6 +239,80 @@ def cmd_status(args: argparse.Namespace) -> int:
     status = read_status(Path(args.report_root), args.campaign)
     print(status)
     return 0
+
+
+def cmd_file_issues(args: argparse.Namespace) -> int:
+    """Dry run by default: print what would be filed. `--yes` files and prints each ref."""
+    from swarmqa.config import load_config_or_defaults
+    from swarmqa.report.findings_json import FINDINGS_JSON, load_findings_json
+
+    config = load_config_or_defaults(args.config)
+    campaign = _resolve_campaign(Path(args.report_root), args.campaign)
+    findings_path = campaign / FINDINGS_JSON
+    if not findings_path.is_file():
+        print(f"no findings.json at {findings_path}", file=sys.stderr)
+        return 2
+    if args.trackers is not None:
+        config.issues.github = "github" in args.trackers
+        config.issues.linear = "linear" in args.trackers
+    findings = load_findings_json(findings_path)
+    if args.skip_advisory:
+        findings = [finding for finding in findings if not finding.advisory]
+    trackers = [name for name in ("github", "linear") if getattr(config.issues, name)]
+    problems = _tracker_problems(config, trackers)
+    targets = ", ".join(["local", *trackers])
+    print(f"campaign {campaign.name}: {len(findings)} finding(s) -> {targets}")
+    for problem in problems:
+        print(f"warning: {problem}", file=sys.stderr)
+    if not args.yes:
+        for finding in findings:
+            advisory = " (advisory)" if finding.advisory else ""
+            print(f"  would file {finding.id} [{finding.severity}] {finding.title}{advisory}")
+        print("dry run: nothing filed. Re-run with --yes to file.")
+        return 0
+
+    from swarmqa.reporter.issues import create_issues, json_post
+
+    refs = create_issues(findings, config, campaign, http_post=json_post)
+    for ref in refs:
+        location = ref.url or ref.identifier
+        print(f"  {ref.finding_id} -> {ref.tracker}: {location}")
+    # Every enabled tracker must have filed every finding; one tracker's
+    # success does not cover another's failure.
+    filed = {(ref.finding_id, ref.tracker) for ref in refs}
+    missing = [(f.id, name) for f in findings for name in trackers if (f.id, name) not in filed]
+    if missing:
+        for finding_id, name in missing:
+            print(f"  {finding_id} -> {name}: not filed", file=sys.stderr)
+        print(
+            f"{len(missing)} filing(s) failed; see findings/<id>.md for the error",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _tracker_problems(config, trackers: list[str]) -> list[str]:
+    import os
+
+    problems: list[str] = []
+    if "github" in trackers and not config.issues.github_repo:
+        problems.append("issues.github_repo is not set; GitHub filing will fail")
+    if "linear" in trackers:
+        if not config.issues.linear_team:
+            problems.append("issues.linear_team is not set; Linear filing will fail")
+        key = config.issues.linear_api_key_env or "LINEAR_API_KEY"
+        if not os.environ.get(key):
+            problems.append(f"{key} is not set; Linear filing will fail")
+    return problems
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from swarmqa.doctor import exit_code, render_json, render_text, run_doctor
+
+    checks = run_doctor(Path(args.config), github=args.github)
+    print(render_json(checks) if args.json else render_text(checks))
+    return exit_code(checks)
 
 
 def cmd_baseline_update(args: argparse.Namespace) -> int:
@@ -260,6 +352,5 @@ def overrides_from_namespace(args: argparse.Namespace) -> CliOverrides:
         max_spend=getattr(args, "max_spend", None),
         spend_currency=getattr(args, "spend_currency", None),
         video_mode=getattr(args, "video_mode", None),
-        pr_mode=getattr(args, "pr_mode", None),
         config_path=getattr(args, "config", None),
     )

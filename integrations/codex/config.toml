@@ -1,0 +1,10 @@
+# Add this to ~/.codex/config.toml (or run: codex mcp add swarmqa -- aqa mcp).
+# Codex starts `aqa mcp` over stdio when a session begins.
+
+[mcp_servers.swarmqa]
+command = "aqa"
+args = ["mcp"]
+# Codex may not pass your whole shell environment to MCP servers. Forward the
+# model key your [llm] table uses, or set it in an `env` table.
+env_vars = ["ANTHROPIC_API_KEY"]
+# start_campaign and verify_fix return at once, so the default tool timeout is enough.

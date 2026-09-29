@@ -17,7 +17,7 @@ Pull requests target `cursor/aqa-foundation-d827`.
 | C12 | `swarmqa/decision/` (`protocol`, `heuristic`, `system_one`, `cascade`, `cache`, `providers`, …), `tests/test_decision.py`, `docs/decision.md`; extends C5 observe→decide→act |
 | C13 | `swarmqa/friction/` (`session`, `score`, `gold`, `emit`, `personas`), `tests/test_friction.py`, `docs/friction.md`; hooks in C5 exploratory; extends report summary + `[explorer.friction]` config |
 | C6 | `swarmqa/visual/diff.py`, `swarmqa/visual/baseline.py`, `tests/test_visual.py`, `docs/visual.md` |
-| C7 | `swarmqa/prloop/loop.py`, `tests/test_prloop.py`, `docs/agents.md` |
+| C7 | Removed in WP-C3: coding agents open fix PRs through `aqa mcp` |
 | C8 | `swarmqa/orchestrator/campaign.py`, `swarmqa/orchestrator/status.py`, `swarmqa/backends/local.py`, `swarmqa/worker.py`, `tests/test_orchestrator.py`, `docs/orchestrator.md` |
 | C9 | `swarmqa/backends/tart.py`, `swarmqa/backends/cloud.py`, `tests/test_backends.py`, `docs/backends.md` |
 | C10 | `swarmqa/driver/ios.py`, `tests/test_ios_driver.py`, `docs/driver.md`; `app.platform` / `app.simulator` / `app.simulators` on `AppTarget` |

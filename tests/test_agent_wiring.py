@@ -17,6 +17,12 @@ from swarmqa.orchestrator.campaign import run_campaign
 from swarmqa.testing import make_app, sample_config
 
 
+def _empty_config(tmp_path: Path) -> str:
+    path = tmp_path / "empty.aqa.toml"
+    path.write_text("", encoding="utf-8")
+    return str(path)
+
+
 def _write(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "aqa.config.toml"
     path.write_text(text, encoding="utf-8")
@@ -239,7 +245,7 @@ def test_aqa_replay_reports_whether_a_finding_reproduces(tmp_path: Path, monkeyp
     replay = Path(result.report_dir) / crash.repro
 
     monkeypatch.setattr(repro_mod, "_default_driver_factory", lambda _config: _factory)
-    assert cli.main(["replay", str(replay), "--config", str(tmp_path / "none.toml"), "--app", config.app.path]) == 1
+    assert cli.main(["replay", str(replay), "--config", _empty_config(tmp_path), "--app", config.app.path]) == 1
     assert "reproduced" in capsys.readouterr().out
 
     def fixed(target, work_dir):
@@ -248,7 +254,7 @@ def test_aqa_replay_reports_whether_a_finding_reproduces(tmp_path: Path, monkeyp
         return driver
 
     monkeypatch.setattr(repro_mod, "_default_driver_factory", lambda _config: fixed)
-    assert cli.main(["replay", str(replay), "--config", str(tmp_path / "none.toml"), "--app", config.app.path]) == 0
+    assert cli.main(["replay", str(replay), "--config", _empty_config(tmp_path), "--app", config.app.path]) == 0
     assert "did not reproduce" in capsys.readouterr().out
 
 
@@ -313,7 +319,7 @@ def test_aqa_replay_exits_2_when_the_app_cannot_launch(tmp_path: Path, capsys):
     result = run_campaign(config, [Shard(id="s1", kind="exploratory", name="crawl")], driver_factory=_factory)
     crash = next(f for w in result.results for f in w.findings if f.kind == "crash")
     replay = Path(result.report_dir) / crash.repro
-    code = cli.main(["replay", str(replay), "--config", str(tmp_path / "none.toml"),
+    code = cli.main(["replay", str(replay), "--config", _empty_config(tmp_path),
                      "--app", str(tmp_path / "Missing.app")])
     assert code == 2
     assert "could not replay" in capsys.readouterr().err

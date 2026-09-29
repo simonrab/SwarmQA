@@ -22,21 +22,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--campaign", default=None, help="campaign id (default: the latest)")
     parser.add_argument("--devices", type=int, default=2, help="devices to replay on (default: 2)")
     parser.add_argument("--no-build", action="store_true", help="skip app.build_command")
-    parser.add_argument("--config", default="aqa.config.toml", help="config file (default: aqa.config.toml)")
+    parser.add_argument("--config", default=None, help="config file (default: aqa.config.toml if present)")
     return parser
 
 
 def main(argv: list[str] | None = None, *, driver_factory: Callable[[Any, Path], Any] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    from swarmqa.config import load_config
+    from swarmqa.config import load_config_or_defaults
     from swarmqa.errors import ConfigError
-    from swarmqa.models import CampaignConfig
     from swarmqa.verify.core import verify
 
-    config_path = Path(args.config)
     try:
-        config = load_config(config_path) if config_path.is_file() else CampaignConfig()
+        # A mistyped --config is an error: defaults have no build command, so
+        # a verify on them would replay the old app and could report "passed".
+        config = load_config_or_defaults(args.config)
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
