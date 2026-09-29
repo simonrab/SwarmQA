@@ -65,6 +65,10 @@ gui_worker_warn_threshold = 2
 [driver]
 kind = "auto" # auto | fake | legacy | runner
 
+[llm]
+enabled = false
+provider = "anthropic" # anthropic | openai | fake
+
 [local]
 isolation = "thread" # thread | subprocess
 
@@ -179,6 +183,7 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.backend`, `workers`, `shard_strategy`, `fail_on`, `report_root`, `gui_worker_warn_threshold` | the same fields |
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
+| `[llm]` | `llm.enabled`; every other key goes to `llm.settings` and is read by `swarmqa.config.llm_settings` |
 | `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
 | `[visual.judgment]` | `visual.judgment` (`VisualJudgmentConfig`) |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
@@ -205,6 +210,10 @@ Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (defa
 `driver.kind` picks the session driver. `auto` (default) uses `legacy` on a Mac or when `app.platform = "ios"`, and `fake` elsewhere. `fake` is a dry run that needs no Accessibility permission. `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver, chosen by `app.platform`. `runner` is reserved for the XCUITest runner and is rejected until it ships.
 
 `pr.mode` defaults to `off`: the campaign writes its report and no branch or PR is made. Set `human` or `autonomous` to opt into the fix loop.
+
+### Models
+
+`[llm]` is off by default, so no campaign calls a model or spends money until you set `enabled = true`. The other keys are `swarmqa.llm.settings.LLMSettings` fields (`provider`, `step_model`, `judge_model`, `max_cost`, `prices`, and so on); an unknown key or provider fails validation. See `docs/llm.md`.
 
 ### Video, coverage, issues
 

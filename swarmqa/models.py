@@ -7,7 +7,7 @@ when every chunk needs the field; otherwise keep chunk-local types local.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 BackendName = Literal["local", "vm", "cloud"]
 PrMode = Literal["off", "human", "autonomous"]
@@ -240,6 +240,19 @@ class DriverConfig:
 
 
 @dataclass
+class LLMConfig:
+    """The `[llm]` table. Off unless `enabled`, so nothing spends money by default.
+
+    `settings` holds the rest of the table as written; `swarmqa.config.llm_settings`
+    turns it into `swarmqa.llm.settings.LLMSettings` (kept raw here so this
+    module does not import the llm package).
+    """
+
+    enabled: bool = False
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class LocalConfig:
     isolation: LocalIsolation = "thread"
 
@@ -266,6 +279,7 @@ class CampaignConfig:
     vm: VmConfig = field(default_factory=VmConfig)
     local: LocalConfig = field(default_factory=LocalConfig)
     driver: DriverConfig = field(default_factory=DriverConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2

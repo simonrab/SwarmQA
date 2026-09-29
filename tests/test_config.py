@@ -878,3 +878,23 @@ def test_driver_kind_legacy_follows_platform(tmp_path: Path):
     assert isinstance(factory(config.app, tmp_path / "mac"), MacOSDriver)
     config.app.platform = "ios"
     assert isinstance(factory(config.app, tmp_path / "ios"), IOSSimulatorDriver)
+
+
+def test_llm_table_is_off_by_default_and_validated(tmp_path: Path):
+    from swarmqa.config import llm_settings
+
+    config = load_config(_write(tmp_path, ""))
+    assert config.llm.enabled is False
+    assert llm_settings(config).provider == "anthropic"
+
+    config = load_config(_write(tmp_path, '[llm]\nenabled = true\nprovider = "openai"\nmax_cost = 2.5\n'))
+    assert config.llm.enabled is True
+    settings = llm_settings(config)
+    assert settings.provider == "openai" and settings.max_cost == 2.5
+
+    with pytest.raises(ConfigError) as exc:
+        load_config(_write(tmp_path, '[llm]\nprovider = "gemini"\n'))
+    assert exc.value.errors == ["llm.provider: must be one of anthropic, openai, fake"]
+    with pytest.raises(ConfigError) as exc:
+        load_config(_write(tmp_path, "[llm]\nmodel_name = 1\n"))
+    assert exc.value.errors == ["llm: unknown llm settings: model_name"]

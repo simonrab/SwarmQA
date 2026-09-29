@@ -69,6 +69,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "app.platform", config.app.platform, _PLATFORMS)
     _number_between(errors, "visual.threshold", config.visual.threshold, 0, 1)
     _validate_visual_judgment(errors, config)
+    _validate_llm(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "pr.max_iterations", config.pr.max_iterations, 1)
@@ -195,6 +196,11 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
 
     driver = _section(document, "driver", errors)
     _assign(driver, "kind", config.driver, "kind")
+
+    llm = dict(_section(document, "llm", errors))
+    if "enabled" in llm:
+        config.llm.enabled = llm.pop("enabled")
+    config.llm.settings = llm
 
     vm = _section(document, "vm", errors)
     _assign(vm, "provider", config.vm, "provider")
@@ -461,6 +467,29 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
         config.video.mode = overrides.video_mode  # type: ignore[assignment]
     if overrides.pr_mode is not None:
         config.pr.mode = overrides.pr_mode  # type: ignore[assignment]
+
+
+_LLM_PROVIDERS = ("anthropic", "openai", "fake")
+
+
+def llm_settings(config: CampaignConfig):
+    """The `[llm]` table as `LLMSettings`. Raises ValueError or TypeError on bad keys."""
+    from swarmqa.llm.settings import LLMSettings
+
+    return LLMSettings.from_mapping(config.llm.settings)
+
+
+def _validate_llm(errors: list[str], config: CampaignConfig) -> None:
+    if not isinstance(config.llm.enabled, bool):
+        errors.append("llm.enabled: must be true or false")
+    provider = config.llm.settings.get("provider", "anthropic")
+    if provider not in _LLM_PROVIDERS:
+        errors.append(f"llm.provider: must be one of {', '.join(_LLM_PROVIDERS)}")
+        return
+    try:
+        llm_settings(config)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"llm: {exc}")
 
 
 def _section(

@@ -23,6 +23,15 @@ platform = "macos"
 # fake = scripted dry run, no Accessibility permission. legacy = AppleScript (macos) or simctl/idb (ios).
 kind = "auto" # auto | fake | legacy | runner
 
+[llm]
+# Model calls for exploring and judging screens. Off by default: nothing spends
+# money until you set enabled = true. Needs the extra: uv tool install 'swarmqa[anthropic]'
+enabled = false
+# provider = "anthropic" # anthropic | openai | fake
+# max_cost = 5.0       # stop model calls past this many `currency` units
+# step_model = ""      # blank = the provider's default (see docs/llm.md)
+# judge_model = ""
+
 [campaign]
 # local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter
 backend = "local"
