@@ -10,6 +10,7 @@ dependencies = ["pillow"]
 dev = ["pytest"]
 anthropic = ["anthropic>=1.0"]
 openai = ["openai>=2.0"]
+mcp = ["mcp>=1.2"]
 
 [project.scripts]
 aqa = "swarmqa.cli:main"

@@ -318,6 +318,9 @@ class RunOptions:
     # A run limited to some intents (e.g. `--intent`). It never marks
     # findings from the rest as fixed in the cross-run store.
     partial: bool = False
+    # Start a new campaign under this id (the MCP server picks it up front
+    # so it can return it at once). Ignored when resuming.
+    campaign_id: str | None = None
 
 
 @dataclass

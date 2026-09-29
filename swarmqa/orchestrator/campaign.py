@@ -300,7 +300,7 @@ def _open_campaign(config: CampaignConfig, options: RunOptions):
         if root.is_dir():
             previous = load_status(root)
     else:
-        campaign_id = new_campaign_id()
+        campaign_id = Path(options.campaign_id).name if options.campaign_id else new_campaign_id()
         root = campaign_dir(report_root, campaign_id)
     root = root.resolve()
     ensure_campaign_layout(root)

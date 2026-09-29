@@ -220,3 +220,15 @@ def test_file_issues_reports_a_failure_on_any_tracker(tmp_path: Path, capsys, mo
     code = main(["file-issues", "--report-root", str(tmp_path / "reports"), "--config", str(config), "--yes"])
     assert code == 1
     assert "-> linear: not filed" in capsys.readouterr().err
+
+
+def test_mcp_and_verify_commands_dispatch(monkeypatch):
+    import swarmqa.mcp.server as server
+    import swarmqa.verify.cli as verify_cli
+
+    seen = []
+    monkeypatch.setattr(server, "main", lambda argv: seen.append(("mcp", argv)) or 0)
+    monkeypatch.setattr(verify_cli, "main", lambda argv: seen.append(("verify", argv)) or 1)
+    assert main(["mcp", "--config", "x.toml"]) == 0
+    assert main(["verify", "f-1", "--help"]) == 1
+    assert seen == [("mcp", ["--config", "x.toml"]), ("verify", ["f-1", "--help"])]

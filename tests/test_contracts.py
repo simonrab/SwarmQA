@@ -391,7 +391,7 @@ def test_lease_releases_on_error_and_wakes_waiters():
 # MCP tools
 
 
-def test_mcp_tool_stubs_have_resolvable_json_friendly_signatures():
+def test_mcp_tools_have_resolvable_json_friendly_signatures():
     names = [tool.__name__ for tool in mcp_tools.TOOLS]
     assert names == [
         "start_campaign", "campaign_status", "list_findings", "get_finding",
@@ -401,9 +401,20 @@ def test_mcp_tool_stubs_have_resolvable_json_friendly_signatures():
         hints = typing.get_type_hints(tool)
         assert "return" in hints
         assert tool.__doc__
-        required = tool.__code__.co_argcount - len(tool.__defaults__ or ())
-        with pytest.raises(NotImplementedError):
-            tool(*["x"] * required)
+
+
+def test_verify_contract_signatures():
+    import inspect
+
+    from swarmqa import verify
+
+    params = {name: list(inspect.signature(getattr(verify, name)).parameters) for name in
+              ("run_verify", "start_verify", "verify_status")}
+    assert params["run_verify"] == [
+        "finding_id", "config", "campaign_id", "devices", "build", "verify_id", "driver_factory",
+    ]
+    assert params["start_verify"] == ["finding_id", "config_path", "campaign_id", "devices", "build"]
+    assert params["verify_status"] == ["verify_id", "report_root"]
 
 
 # Checks
