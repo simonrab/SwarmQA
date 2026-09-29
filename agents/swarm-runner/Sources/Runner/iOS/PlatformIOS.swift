@@ -39,6 +39,13 @@ enum PlatformBridge {
         return fn(workspace, sel, bundleID as NSString)
     }
 
+    /// Screen point -> coordinate. XCUICoordinate offsets are relative to the
+    /// app element's frame origin, so subtract it.
+    static func coordinate(for point: CGPoint, appOrigin: CGPoint, app: XCUIApplication) -> XCUICoordinate {
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+            .withOffset(CGVector(dx: point.x - appOrigin.x, dy: point.y - appOrigin.y))
+    }
+
     static func cgImage(of shot: XCUIScreenshot) -> CGImage? {
         shot.image.cgImage
     }

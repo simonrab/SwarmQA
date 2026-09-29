@@ -398,11 +398,9 @@ final class Runner {
         coordinate(for: point, origin: try appOrigin(app), in: app)
     }
 
-    /// Screen point -> coordinate. XCUICoordinate offsets are relative to the
-    /// app element's frame origin, so subtract it.
+    /// Screen point -> coordinate. See `PlatformBridge.coordinate`.
     private func coordinate(for point: CGPoint, origin: CGPoint, in app: XCUIApplication) -> XCUICoordinate {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-            .withOffset(CGVector(dx: point.x - origin.x, dy: point.y - origin.y))
+        PlatformBridge.coordinate(for: point, appOrigin: origin, app: app)
     }
 
     /// Run an XCUITest call and turn any recorded XCTest issue into an error.
