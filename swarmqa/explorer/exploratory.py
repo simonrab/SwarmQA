@@ -362,7 +362,7 @@ class _Session:
             worker_id=self.worker_id,
             backend=self.config.backend,
             shard_id=self.shard.id,
-            finding_id=f"f-{len(self.findings) + 1}",
+            finding_id=f"f-{self.worker_id}-{len(self.findings) + 1}",
             steps=list(self.narrative),
             environment=dict(self.environment),
             intent_id=intent_id,
@@ -685,7 +685,7 @@ class _Session:
         target: str,
         details: str,
     ) -> None:
-        finding_id = f"f-{len(self.findings) + 1}"
+        finding_id = f"f-{self.worker_id}-{len(self.findings) + 1}"
         screenshots: list[str] = []
         shot = self._screenshot(finding_id)
         if shot:

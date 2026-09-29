@@ -209,3 +209,135 @@ def test_model_spend_meters_a_local_campaign(tmp_path: Path):
     campaign_mod._settle_spend(meter, metered, 0.0, config, result, 0.0)
     assert meter.spent == pytest.approx(0.4)
     assert result.estimated_cost == pytest.approx(0.4)
+
+
+def test_two_workers_do_not_overwrite_each_others_findings(tmp_path: Path):
+    config = sample_config(make_app(tmp_path))
+    config.report_root = str(tmp_path / "reports")
+    config.workers = 2
+    config.explorer.engine = "agent"
+    shards = [Shard(id="s1", kind="exploratory", name="one"), Shard(id="s2", kind="exploratory", name="two")]
+    result = run_campaign(config, shards, driver_factory=_factory)
+    ids = [finding.id for worker in result.results for finding in worker.findings]
+    assert len(ids) == len(set(ids))
+    for worker in result.results:
+        for finding in worker.findings:
+            assert (Path(result.report_dir) / finding.replay_json).is_file()
+
+
+def test_aqa_replay_reports_whether_a_finding_reproduces(tmp_path: Path, monkeypatch, capsys):
+    from swarmqa import cli
+    from swarmqa.report import repro as repro_mod
+
+    config = sample_config(make_app(tmp_path))
+    config.report_root = str(tmp_path / "reports")
+    config.workers = 1
+    config.explorer.engine = "agent"
+    result = run_campaign(config, [Shard(id="s1", kind="exploratory", name="crawl")], driver_factory=_factory)
+    crash = next(f for w in result.results for f in w.findings if f.kind == "crash")
+    assert crash.repro and crash.evidence.frames
+    replay = Path(result.report_dir) / crash.repro
+
+    monkeypatch.setattr(repro_mod, "_default_driver_factory", lambda _config: _factory)
+    assert cli.main(["replay", str(replay), "--config", str(tmp_path / "none.toml"), "--app", config.app.path]) == 1
+    assert "reproduced" in capsys.readouterr().out
+
+    def fixed(target, work_dir):
+        driver = _factory(target, work_dir)
+        driver.crash_labels = set()
+        return driver
+
+    monkeypatch.setattr(repro_mod, "_default_driver_factory", lambda _config: fixed)
+    assert cli.main(["replay", str(replay), "--config", str(tmp_path / "none.toml"), "--app", config.app.path]) == 0
+    assert "did not reproduce" in capsys.readouterr().out
+
+
+def test_campaign_writes_findings_json_and_enriched_summary(tmp_path: Path):
+    from swarmqa.report.findings_json import load_findings_json
+
+    config = sample_config(make_app(tmp_path))
+    config.report_root = str(tmp_path / "reports")
+    config.workers = 1
+    config.explorer.engine = "agent"
+    result = run_campaign(config, [Shard(id="s1", kind="exploratory", name="crawl")], driver_factory=_factory)
+    loaded = load_findings_json(Path(result.report_dir) / "findings.json")
+    assert {f.kind for f in loaded} >= {"crash", "unresponsive"}
+    crash = next(f for f in loaded if f.kind == "crash")
+    assert crash.environment["target_identifier"] == "home.crash"
+    assert "event_ts" in crash.environment
+    assert "aqa replay" in (Path(result.report_dir) / "summary.md").read_text()
+
+
+def test_session_scoped_checks_report_at_the_end(tmp_path: Path):
+    from swarmqa.checks.protocol import CheckIssue
+    from swarmqa.explorer.agent_loop import AgentLoopSettings, run_agent_loop
+
+    class SessionCheck:
+        name = "session"
+        per_screen = False
+
+        def __init__(self):
+            self.steps = 0
+
+        def run(self, ctx):
+            self.steps += 1
+            return []
+
+        def finish(self):
+            return [CheckIssue(kind="friction_path", category="confusing", title="Took the long way",
+                               advisory=True, confidence=0.5)]
+
+    check = SessionCheck()
+    config = sample_config(make_app(tmp_path))
+    result = run_agent_loop(
+        Shard(id="s1", kind="exploratory", name="crawl"),
+        _factory(config.app, tmp_path / "w"),
+        config,
+        checks=[check],
+        settings=AgentLoopSettings(mode="crawl", max_steps=10),
+        work_dir=tmp_path / "campaign" / "workers" / "w1",
+        worker_id="w1",
+    )
+    assert check.steps > 0
+    friction = [f for f in result.findings if f.kind == "friction_path"]
+    assert len(friction) == 1 and friction[0].advisory
+
+
+def test_aqa_replay_exits_2_when_the_app_cannot_launch(tmp_path: Path, capsys):
+    from swarmqa import cli
+
+    config = sample_config(make_app(tmp_path))
+    config.report_root = str(tmp_path / "reports")
+    config.workers = 1
+    config.explorer.engine = "agent"
+    result = run_campaign(config, [Shard(id="s1", kind="exploratory", name="crawl")], driver_factory=_factory)
+    crash = next(f for w in result.results for f in w.findings if f.kind == "crash")
+    replay = Path(result.report_dir) / crash.repro
+    code = cli.main(["replay", str(replay), "--config", str(tmp_path / "none.toml"),
+                     "--app", str(tmp_path / "Missing.app")])
+    assert code == 2
+    assert "could not replay" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("shards", "partial", "expected"),
+    [
+        ([Shard(id="s1", kind="exploratory", name="ok")], False, True),
+        ([Shard(id="s1", kind="exploratory", name="ok")], True, False),
+        ([Shard(id="s1", kind="exploratory", name="ok"), Shard(id="s2", kind="suite", name="broken")], False, False),
+    ],
+)
+def test_only_complete_clean_runs_mark_findings_fixed(tmp_path: Path, monkeypatch, shards, partial, expected):
+    from swarmqa.models import RunOptions
+
+    seen = {}
+    monkeypatch.setattr(
+        campaign_mod, "_finalize_findings",
+        lambda findings, root, campaign_id, config, *, full_run: seen.setdefault("full_run", full_run),
+    )
+    config = sample_config(make_app(tmp_path))
+    config.report_root = str(tmp_path / "reports")
+    config.workers = 1
+    config.explorer.engine = "agent"
+    run_campaign(config, shards, driver_factory=_factory, options=RunOptions(partial=partial))
+    assert seen["full_run"] is expected

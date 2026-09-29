@@ -289,6 +289,10 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResu
         except Exception as exc:
             return make_error_result(shard, worker_id, f"llm: {exc}", config.backend)
     checks = default_checks(checks_settings(config), provider)
+    if config.explorer.friction.enabled and shard.goal:
+        from swarmqa.checks.friction import FrictionCheck
+
+        checks.append(FrictionCheck.for_shard(shard, config.explorer.friction))
     driver = _make_driver(config, work_dir, driver_factory)
     try:
         return run_agent_loop(

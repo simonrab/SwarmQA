@@ -217,9 +217,15 @@ Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (defa
 
 `explorer.engine` picks the exploratory explorer. `legacy` (the default) is the original one. `agent` runs the observe-decide-act loop in `docs/explorer-v2.md` with the checks from `[checks]`, plus the model from `[llm]` when `llm.enabled = true`; without a model it uses the free heuristic and breadth-first crawling. A model provider that cannot be built (for example a missing `swarmqa[anthropic]` extra) ends the shard as an error before the app launches.
 
-`[checks]` takes `functional`, `layout`, `baseline` and `judge`. Each is on unless set to `false`, and a table overrides that check's settings (see `docs/checks.md`); an unknown check or setting fails validation. `layout.platform` defaults to `app.platform`. `baseline` defaults to on only when `visual.enabled`, using `visual.baseline_dir` and `visual.threshold`. When the model judge has no provider, `visual.judgment` (the command judge) is the fallback. The session-level friction check does not run under the agent engine yet.
+`[checks]` takes `functional`, `layout`, `baseline` and `judge`. Each is on unless set to `false`, and a table overrides that check's settings (see `docs/checks.md`); an unknown check or setting fails validation. `layout.platform` defaults to `app.platform`. `baseline` defaults to on only when `visual.enabled`, using `visual.baseline_dir` and `visual.threshold`. When the model judge has no provider, `visual.judgment` (the command judge) is the fallback. When `explorer.friction.enabled` and the shard has a goal, the friction check also runs and reports once at the end of the session.
 
 With the agent engine and `[llm]` enabled, model spend counts toward `spend.max_spend` on every backend, including `local`.
+
+### Evidence
+
+Every campaign runs the evidence pipeline (`docs/evidence.md`) and writes `findings.json` (schema v2). Set `app.source_dir` to the app's source checkout to add suspected source files to each finding and to keep the cross-run store in `<source_dir>/.aqa/state/findings.json`; only a complete run, with no stopped, errored, resumed or `--intent`-filtered shards, marks missing findings as fixed.
+
+`aqa replay reports/<campaign>/findings/<id>.replay.json` replays one finding. It exits 1 when the finding still reproduces, 0 when it does not, and 2 when the replay could not run (for example the app did not launch).
 
 ### Models
 

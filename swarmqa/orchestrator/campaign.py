@@ -242,7 +242,15 @@ def run_campaign(
     not_started = [shard for shard in to_run if shard.id not in results]
     ordered = _ordered_results(queue, results)
     merged = _apply_dedup(ordered)
-    _persist_findings(merged, root)
+    # Only a complete, clean run may mark missing findings as fixed.
+    full_run = (
+        stop_reason is None
+        and not not_started
+        and not resume
+        and not options.partial
+        and all(item.status in ("passed", "failed") for item in ordered)
+    )
+    _finalize_findings(merged, root, campaign_id, config, full_run=full_run)
     coverage = Coverage(
         completed=sum(item.status == "passed" for item in ordered),
         failed=sum(item.status in {"failed", "error"} for item in ordered),
@@ -508,6 +516,20 @@ def _apply_dedup(results: list[WorkerResult]) -> list:
                 owners.pop(finding.fingerprint, None)
         item.findings = kept
     return merged
+
+
+def _finalize_findings(findings, root: Path, campaign_id: str, config: CampaignConfig, *, full_run: bool) -> None:
+    """Enrich findings in place (repro, clip, sources, cross-run state) and
+    write findings.json. Evidence is best effort: if the pipeline fails the
+    findings are still written as before."""
+    source_dir = Path(config.app.source_dir).expanduser() if config.app.source_dir else None
+    try:
+        from swarmqa.report.pipeline import finalize_findings
+
+        finalize_findings(root, campaign_id, findings, config=config, repo=source_dir, full_run=full_run)
+    except Exception as exc:
+        print(f"warning: evidence pipeline failed: {exc}", file=sys.stderr)
+        _persist_findings(findings, root)
 
 
 def _persist_findings(findings, root: Path) -> None:

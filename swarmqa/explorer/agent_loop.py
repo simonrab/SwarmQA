@@ -293,6 +293,7 @@ class _AgentLoop:
         self.back_tried: set[str] = set()
         self.relaunches_for: dict[str, int] = {}
         self.video_started = False
+        self.video_start_ts: float | None = None
         self.fatal: str | None = None
         self.stop_reason = ""
 
@@ -411,6 +412,7 @@ class _AgentLoop:
         except Exception:  # noqa: BLE001 - video is best effort
             return
         self.video_started = True
+        self.video_start_ts = time.time()
 
     def _stop_video(self) -> Path | None:
         if not self.video_started:
@@ -548,6 +550,23 @@ class _AgentLoop:
                 self._record_issue(issue, ctx)
         return issues
 
+    def _finish_checks(self) -> None:
+        """Session-scoped checks (friction) report once, at the end, via `finish()`."""
+        for check in self.checks:
+            finish = getattr(check, "finish", None)
+            if not callable(finish):
+                continue
+            name = getattr(check, "name", type(check).__name__)
+            try:
+                found = list(finish())
+            except Exception as exc:  # noqa: BLE001 - a broken check never stops the loop
+                self._note(f"check {name}", "failed", f"{type(exc).__name__}: {exc}")
+                continue
+            for issue in found:
+                if not issue.check:
+                    issue = replace(issue, check=name)
+                self._record_issue(issue, None)
+
     def _record_issue(self, issue: CheckIssue, ctx: StepContext | None) -> Finding | None:
         key = fingerprint_for(issue.kind, issue.title, issue.target())
         if key in self.seen:
@@ -557,14 +576,24 @@ class _AgentLoop:
             shot = ctx.after.screenshot or (ctx.before.screenshot if ctx.before else None)
             if shot is not None:
                 issue = replace(issue, screenshot=shot)
+        # Evidence keys read by swarmqa.report (clips and source map); strings only.
+        environment = dict(self.environment)
+        environment["event_ts"] = f"{(ctx.after.ts if ctx is not None and ctx.after.ts else time.time()):.3f}"
+        if self.video_start_ts is not None:
+            environment["video_start_ts"] = f"{self.video_start_ts:.3f}"
+        if issue.element is not None:
+            if issue.element.identifier:
+                environment["target_identifier"] = issue.element.identifier
+            if issue.element.label:
+                environment["target_label"] = issue.element.label
         finding = issue.to_finding(
-            finding_id=f"f-{len(self.findings) + 1}",
+            finding_id=f"f-{self.worker_id}-{len(self.findings) + 1}",
             worker_id=self.worker_id,
             shard_id=self.shard.id,
             backend=self.backend,
             steps=list(self.narrative),
             media_root=self.campaign if self.relative else None,
-            environment=dict(self.environment),
+            environment=environment,
         )
         self.findings.append(finding)
         self.finding_replays.append([dict(step) for step in self.replay])
@@ -1006,6 +1035,7 @@ class _AgentLoop:
     def finish(self, started_at: str, started_mono: float) -> WorkerResult:
         if self.stop_reason:
             self._note("stop", "passed", self.stop_reason)
+        self._finish_checks()
         status = self.status()
         video = self._stop_video()
         if video is not None and not keep_video(self.config.video.mode, self.shard.kind, status):

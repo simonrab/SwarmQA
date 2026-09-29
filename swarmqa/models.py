@@ -71,6 +71,9 @@ class AppTarget:
     platform: TargetPlatform = "macos"
     simulator: str | None = None
     simulators: list[str] = field(default_factory=list)
+    # The app's source checkout: enables suspected-source lookup and the
+    # cross-run findings store in <source_dir>/.aqa/state/.
+    source_dir: str | None = None
 
 
 @dataclass
@@ -324,6 +327,9 @@ class CliOverrides:
 class RunOptions:
     resume_campaign_id: str | None = None
     reset_spend: bool = False
+    # A run limited to some intents (e.g. `--intent`). It never marks
+    # findings from the rest as fixed in the cross-run store.
+    partial: bool = False
 
 
 @dataclass

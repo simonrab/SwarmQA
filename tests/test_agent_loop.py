@@ -471,8 +471,8 @@ def test_issues_become_deduplicated_findings_with_replays(tmp_path):
     assert 'tap "About"' in finding.steps
     assert finding.screenshots and not Path(finding.screenshots[0]).is_absolute()
     campaign = tmp_path / "campaign"
-    assert finding.replay_json == "findings/f-1.replay.json"
-    assert (campaign / "findings" / "f-1.md").is_file()
+    assert finding.replay_json == "findings/f-w1-1.replay.json"
+    assert (campaign / "findings" / "f-w1-1.md").is_file()
     assert finding.video == "workers/w1/media/session.mp4"
 
     # The replay is a version-1 flow that the scripted explorer runs to the same screen.

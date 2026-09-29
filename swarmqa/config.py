@@ -175,6 +175,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(app, "platform", config.app, "platform")
     _assign(app, "simulator", config.app, "simulator")
     _assign(app, "simulators", config.app, "simulators")
+    _assign(app, "source_dir", config.app, "source_dir")
 
     campaign = _section(document, "campaign", errors)
     _assign(campaign, "backend", config, "backend")

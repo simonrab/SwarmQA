@@ -118,6 +118,9 @@ class ReplayResult:
     final_step_failed: bool = False
     crashed: bool = False
     result: WorkerResult | None = None
+    # False when the app never launched, so the flow could not be checked
+    # (except for a launch finding, where that is the reproduction).
+    ran: bool = True
 
 
 def replay_finding(
@@ -186,6 +189,7 @@ def _judge(
         final_step_failed=final_failed,
         crashed=crashed,
         result=result,
+        ran=not launch_failed or (finding is not None and finding.kind == "launch"),
     )
     if finding is None:
         failed = launch_failed or any(step.status == "failed" for step in result.steps)
