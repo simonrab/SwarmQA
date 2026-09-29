@@ -17,10 +17,18 @@ from swarmqa.backends.cloud import (
     register_cloud_adapter,
 )
 from swarmqa.backends.tart import GUEST_SHARE, TartBackend
+from swarmqa.devices.capacity import HostResources
+from swarmqa.devices.locks import try_lock
 from swarmqa.errors import BackendUnavailable, ChunkNotReady
 from swarmqa.models import Shard, WorkerResult
 from swarmqa.spend import SpendMeter
 from swarmqa.testing import make_app, sample_config, scripted_shard
+
+
+@pytest.fixture(autouse=True)
+def _host_locks(tmp_path: Path, monkeypatch):
+    """Keep host-wide Tart slot locks out of ~/.aqa/locks."""
+    monkeypatch.setenv("AQA_LOCK_DIR", str(tmp_path / "locks"))
 
 
 def _shard(shard_id: str, name: str) -> Shard:
@@ -44,6 +52,8 @@ class FakeRunner:
         self.kwargs.append(kwargs)
         if self.fail_on and self.fail_on in recorded:
             return CompletedProcess(recorded, 1, "", "injected failure")
+        if len(recorded) >= 3 and recorded[1] == "ip":
+            return CompletedProcess(recorded, 0, "192.168.64.10\n", "")
         if len(recorded) >= 2 and recorded[1] == "list":
             if self.list_text is not None:
                 return CompletedProcess(recorded, 0, self.list_text, "")
@@ -150,7 +160,10 @@ def test_run_shard_clones_copies_runs_and_pulls(tmp_path: Path):
     assert run[0] == "tart"
     assert run[-1] == "aqa-w1"
     assert run[2].startswith("--dir=swarmqa:")
-    worker = runner.commands("exec")[0]
+    execs = runner.commands("exec")
+    assert execs[0] == ["tart", "exec", "aqa-w1", "true"]
+    assert runner.commands("ip") == [["tart", "ip", "aqa-w1"]]
+    worker = execs[1]
     assert worker[2] == "aqa-w1"
     assert "python" in worker
     assert "-m" in worker
@@ -417,6 +430,8 @@ def test_runner_exception_fails_only_that_shard(tmp_path: Path):
     def runner(args, **kwargs):
         if "swarmqa.worker" in args:
             raise RuntimeError("guest agent closed")
+        if len(args) >= 2 and args[1] == "ip":
+            return CompletedProcess(list(args), 0, "192.168.64.10", "")
         if len(args) >= 2 and args[1] == "list":
             return CompletedProcess(list(args), 0, "[]", "")
         return CompletedProcess(list(args), 0, "", "")
@@ -428,3 +443,229 @@ def test_runner_exception_fails_only_that_shard(tmp_path: Path):
     )
     assert result.status == "error"
     assert "guest agent closed" in (result.error or "")
+
+
+# WP-A4 regressions: readiness, result.json, campaign dir, symlinks, VM cap.
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class SlowBootRunner(FakeRunner):
+    """`tart ip` fails `ip_failures` times, then `tart exec <vm> true` fails `exec_failures` times."""
+
+    def __init__(self, *, ip_failures: int = 0, exec_failures: int = 0, **kwargs):
+        super().__init__(**kwargs)
+        self.ip_failures = ip_failures
+        self.exec_failures = exec_failures
+
+    def __call__(self, args, **kwargs):
+        recorded = list(args)
+        if recorded[1:2] == ["ip"] and self.ip_failures > 0:
+            self.ip_failures -= 1
+            self.calls.append(recorded)
+            return CompletedProcess(recorded, 1, "", "no IP address found")
+        if recorded[1:2] == ["exec"] and recorded[-1] == "true" and self.exec_failures > 0:
+            self.exec_failures -= 1
+            self.calls.append(recorded)
+            return CompletedProcess(recorded, 1, "", "guest agent is not running")
+        return super().__call__(args, **kwargs)
+
+
+class NoResultRunner(FakeRunner):
+    """The guest writes `write` as result.json, or nothing when it is None."""
+
+    def __init__(self, write: bytes | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.write = write
+
+    def _write_guest(self, host_share, worker_id):
+        if self.write is None or not host_share:
+            return
+        path = Path(host_share) / "workers" / worker_id / "result.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(self.write)
+
+
+def _vm_config():
+    config = sample_config()
+    config.vm.image = "base"
+    config.vm.recycle = True
+    return config
+
+
+_HUGE = HostResources(memory_bytes=512 * 1024**3, cpu_cores=64)
+
+
+def test_run_shard_waits_for_ip_then_guest_agent(tmp_path: Path):
+    clock = FakeClock()
+    runner = SlowBootRunner(ip_failures=2, exec_failures=3)
+    backend = TartBackend(_vm_config(), runner=runner, poll_s=1.0, sleep=clock.sleep, clock=clock)
+
+    result = backend.run_shard(scripted_shard(), "w1", campaign_dir=tmp_path / "camp")
+
+    assert result.status == "passed"
+    probes = [call for call in runner.calls if call[1] in {"ip", "exec"} and "swarmqa.worker" not in call]
+    assert probes == [["tart", "ip", "aqa-w1"]] * 3 + [["tart", "exec", "aqa-w1", "true"]] * 4
+    worker_at = next(i for i, call in enumerate(runner.calls) if "swarmqa.worker" in call)
+    last_probe = max(i for i, call in enumerate(runner.calls) if call[-1] == "true")
+    assert last_probe < worker_at
+
+
+def test_run_shard_boot_timeout_is_an_error_and_stops_the_vm(tmp_path: Path):
+    clock = FakeClock()
+    runner = SlowBootRunner(exec_failures=10_000)
+    backend = TartBackend(
+        _vm_config(), runner=runner, boot_timeout_s=30, poll_s=5, sleep=clock.sleep, clock=clock
+    )
+
+    result = backend.run_shard(scripted_shard(), "w1", campaign_dir=tmp_path / "camp")
+
+    assert result.status == "error"
+    assert "not ready after 30s" in (result.error or "")
+    assert "guest agent" in (result.error or "")
+    assert not any("swarmqa.worker" in call for call in runner.calls)
+    assert runner.commands("stop") == [["tart", "stop", "aqa-w1"]]
+    assert clock.now >= 30
+
+
+def test_missing_result_json_is_an_error_not_a_pass(tmp_path: Path):
+    result = TartBackend(_vm_config(), runner=NoResultRunner()).run_shard(
+        scripted_shard(), "w1", campaign_dir=tmp_path / "camp"
+    )
+    assert result.status == "error"
+    assert "no result" in (result.error or "")
+
+
+@pytest.mark.parametrize("content", [b"{not json", b"\xff\xfe\xfa"])
+def test_unreadable_result_json_is_an_error(tmp_path: Path, content: bytes):
+    result = TartBackend(_vm_config(), runner=NoResultRunner(write=content)).run_shard(
+        scripted_shard(), "w1", campaign_dir=tmp_path / "camp"
+    )
+    assert result.status == "error"
+    assert "could not read" in (result.error or "")
+
+
+def test_run_shard_uses_the_running_campaign_directory(tmp_path: Path):
+    config = _vm_config()
+    config.report_root = str(tmp_path / "reports")
+    old = tmp_path / "reports" / "20260101-old"
+    live = tmp_path / "reports" / "20260102-live"
+    for campaign, state in ((old, "completed"), (live, "running")):
+        (campaign / "workers" / "w1").mkdir(parents=True)
+        (campaign / "status.json").write_text(json.dumps({"state": state}), encoding="utf-8")
+
+    result = TartBackend(config, runner=FakeRunner()).run_shard(scripted_shard(), "w1")
+
+    assert result.status == "passed"
+    assert (live / "workers" / "w1" / "result.json").is_file()
+    assert (live / "media" / "clip.txt").is_file()
+    assert (live / "raw" / "tart" / "w1" / "shard.json").is_file()
+    assert not (old / "workers" / "w1" / "result.json").exists()
+    assert not (tmp_path / "reports" / "vm").exists()
+
+
+def test_constructor_campaign_dir_is_used(tmp_path: Path):
+    campaign = tmp_path / "given"
+    backend = TartBackend(_vm_config(), runner=FakeRunner(), campaign_dir=campaign)
+    assert backend.run_shard(scripted_shard(), "w1").status == "passed"
+    assert (campaign / "workers" / "w1" / "result.json").is_file()
+
+
+def test_app_bundle_symlinks_are_copied_as_symlinks(tmp_path: Path):
+    config = sample_config(make_app(tmp_path))
+    config.vm.image = "base"
+    framework = Path(config.app.path) / "Contents" / "Frameworks" / "Kit.framework"
+    (framework / "Versions" / "A").mkdir(parents=True)
+    (framework / "Versions" / "A" / "Kit").write_text("binary", encoding="utf-8")
+    (framework / "Versions" / "Current").symlink_to("A")
+    (framework / "Kit").symlink_to("Versions/Current/Kit")
+    campaign = tmp_path / "camp"
+
+    TartBackend(config, runner=FakeRunner()).run_shard(scripted_shard(), "w1", campaign_dir=campaign)
+
+    copied = campaign / "raw" / "tart" / "w1" / "app" / "Sample.app" / "Contents" / "Frameworks" / "Kit.framework"
+    assert (copied / "Versions" / "Current").is_symlink()
+    assert (copied / "Kit").is_symlink()
+    assert (copied / "Kit").read_text(encoding="utf-8") == "binary"
+
+
+def test_pulled_artifacts_keep_symlinks(tmp_path: Path):
+    source = tmp_path / "src"
+    (source / "w1").mkdir(parents=True)
+    (source / "w1" / "a.txt").write_text("a", encoding="utf-8")
+    (source / "w1" / "latest").symlink_to("a.txt")
+    tart_mod._merge_tree(source, tmp_path / "dest")
+    assert (tmp_path / "dest" / "w1" / "latest").is_symlink()
+
+
+def test_vm_capacity_never_exceeds_two():
+    assert TartBackend(_vm_config(), resources=_HUGE).vm_capacity() == 2
+    assert TartBackend(_vm_config(), resources=_HUGE, max_vms=5).vm_capacity() == 2
+    assert TartBackend(_vm_config(), resources=_HUGE, max_vms=1).vm_capacity() == 1
+
+
+def test_third_vm_waits_for_a_host_slot_then_errors(tmp_path: Path):
+    held = [try_lock(f"{tart_mod.TART_SLOT_PREFIX}-{index}") for index in range(2)]
+    assert all(held)
+    clock = FakeClock()
+    runner = FakeRunner()
+    backend = TartBackend(
+        _vm_config(), runner=runner, resources=_HUGE, slot_timeout_s=10, poll_s=1,
+        sleep=clock.sleep, clock=clock,
+    )
+
+    result = backend.run_shard(scripted_shard(), "w3", campaign_dir=tmp_path / "camp")
+
+    assert result.status == "error"
+    assert "at most 2 macOS VMs" in (result.error or "")
+    assert runner.calls == []
+    assert clock.now >= 10
+    held[0].release()
+    assert backend.run_shard(scripted_shard(), "w3", campaign_dir=tmp_path / "camp").status == "passed"
+    held[1].release()
+
+
+def test_slot_is_released_after_each_shard(tmp_path: Path):
+    backend = TartBackend(
+        _vm_config(), runner=FakeRunner(), resources=_HUGE, max_vms=1, slot_timeout_s=0
+    )
+    for worker in ("w1", "w2", "w3"):
+        assert backend.run_shard(scripted_shard(), worker, campaign_dir=tmp_path / "c").status == "passed"
+
+
+def test_create_backend_passes_the_campaign_dir_to_tart(tmp_path):
+    from swarmqa.backends import create_backend
+    from swarmqa.testing import sample_config
+
+    config = sample_config()
+    config.backend = "vm"
+    backend = create_backend(config, campaign_dir=tmp_path / "campaign")
+    assert backend.campaign_dir == tmp_path / "campaign"
+
+
+def test_slot_stays_held_when_the_vm_will_not_stop(tmp_path: Path):
+    backend = TartBackend(
+        _vm_config(), runner=FakeRunner(fail_on="stop"), resources=_HUGE, max_vms=1, slot_timeout_s=0
+    )
+    first = backend.run_shard(scripted_shard(), "w1", campaign_dir=tmp_path / "c")
+    assert first.status == "error"
+    second = backend.run_shard(scripted_shard(), "w2", campaign_dir=tmp_path / "c")
+    assert second.status == "error"
+    assert "at most 1 macOS VMs" in (second.error or "")
+
+
+def test_default_runner_enforces_timeouts():
+    import subprocess
+    import sys
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        tart_mod._default_runner([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.2)

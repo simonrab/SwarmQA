@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/simonrab/swarmqa/schemas/findings.v2.json",
+  "title": "SwarmQA findings v2",
+  "description": "reports/<campaign-id>/findings.json. Media paths are relative to the campaign report directory.",
+  "type": "object",
+  "required": ["schema_version", "campaign_id", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 2},
+    "campaign_id": {"type": "string"},
+    "sha": {"type": ["string", "null"], "description": "Commit the build came from, when known."},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}}
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "title", "severity", "kind", "category", "steps", "fingerprint",
+        "worker_id", "backend", "confidence", "advisory"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "title": {"type": "string"},
+        "severity": {"enum": ["critical", "high", "medium", "low"]},
+        "kind": {
+          "enum": [
+            "crash", "timeout", "assertion", "missing_control", "visual",
+            "visual_judgment", "suite_failure", "unresponsive", "error_state",
+            "launch", "friction_path"
+          ]
+        },
+        "category": {"enum": ["broken", "visual", "confusing", "crash"]},
+        "steps": {"type": "array", "items": {"type": "string"}},
+        "fingerprint": {"type": "string"},
+        "worker_id": {"type": "string"},
+        "worker_ids": {"type": "array", "items": {"type": "string"}},
+        "backend": {"type": "string"},
+        "shard_id": {"type": "string"},
+        "screenshots": {"type": "array", "items": {"type": "string"}},
+        "video": {"type": ["string", "null"]},
+        "replay_json": {"type": ["string", "null"]},
+        "environment": {"type": "object", "additionalProperties": {"type": "string"}},
+        "details": {"type": "string"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "advisory": {"type": "boolean", "description": "True when only a model reported it."},
+        "repro": {"type": ["string", "null"], "description": "Path to a replay script."},
+        "suspected_sources": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Repo-relative path or path:line."
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "video_clip": {"type": ["string", "null"]},
+            "frames": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    }
+  }
+}

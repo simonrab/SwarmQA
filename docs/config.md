@@ -10,7 +10,8 @@
 | --- | --- |
 | `backend` | `local` |
 | `workers` | `2` |
-| `pr.mode` | `human` |
+| `pr.mode` | `off` |
+| `driver.kind` | `auto` |
 | `video.mode` | `always` |
 | `spend.currency` | `USD` |
 | `gui_worker_warn_threshold` | `2` |
@@ -25,6 +26,8 @@
 | `explorer.decision.mode` | `heuristic` |
 | `explorer.friction.enabled` / `fail_ci` | `true` / `false` |
 | `visual.threshold` | `0.01` |
+| `visual.judgment.enabled` | `false` |
+| `visual.judgment.provider` | `command` |
 
 `spend.max_spend` stays unset until the file or `--max-spend` sets it. The template comment suggests `10` USD when you turn on `backend = cloud`. Set that cap yourself. A cloud campaign without a positive cap fails fast.
 
@@ -59,6 +62,13 @@ fail_on = "scripted" # scripted | any | never
 report_root = "reports"
 gui_worker_warn_threshold = 2
 
+[driver]
+kind = "auto" # auto | fake | legacy | runner
+
+[llm]
+enabled = false
+provider = "anthropic" # anthropic | openai | fake
+
 [local]
 isolation = "thread" # thread | subprocess
 
@@ -85,7 +95,7 @@ overrun = "drain" # drain | cancel
 mode = "always" # always | on_failure | exploratory_only
 
 [pr]
-mode = "human" # human | autonomous
+mode = "off" # off | human | autonomous
 max_iterations = 3
 max_wall_time = "1h"
 max_pr_updates = 5
@@ -105,12 +115,21 @@ enabled = false
 baseline_dir = "baselines"
 threshold = 0.01
 
+[visual.judgment]
+enabled = false
+provider = "command" # command | fake. `mode` is accepted as an alias.
+command_env = "AQA_VISUAL_JUDGE_COMMAND"
+# command = ""  # used when the env var is unset
+# judgment = ""  # canned text for provider = "fake"; empty or "fine" means the screen is fine
+timeout_s = 60
+
 [coverage]
 scripted = true
 exploratory = true
 visual = false
 
 [explorer]
+engine = "legacy" # legacy | agent
 max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue
@@ -165,7 +184,10 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.backend`, `workers`, `shard_strategy`, `fail_on`, `report_root`, `gui_worker_warn_threshold` | the same fields |
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
-| `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+| `[checks]` | `checks.settings`, read by `swarmqa.checks.config.checks_settings` |
+| `[llm]` | `llm.enabled`; every other key goes to `llm.settings` and is read by `swarmqa.config.llm_settings` |
+| `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+| `[visual.judgment]` | `visual.judgment` (`VisualJudgmentConfig`) |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
 | `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 
@@ -187,11 +209,35 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 
 Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (default `2`) is the local worker count above which the orchestrator warns and points you at `vm` or `cloud`, where each worker has its own machine.
 
+`driver.kind` picks the session driver. `auto` (default) uses `legacy` on a Mac or when `app.platform = "ios"`, and `fake` elsewhere. `fake` is a dry run that needs no Accessibility permission. `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver, chosen by `app.platform`. `runner` is reserved for the XCUITest runner and is rejected until it ships.
+
+`pr.mode` defaults to `off`: the campaign writes its report and no branch or PR is made. Set `human` or `autonomous` to opt into the fix loop.
+
+### Explorer engine and checks
+
+`explorer.engine` picks the exploratory explorer. `legacy` (the default) is the original one. `agent` runs the observe-decide-act loop in `docs/explorer-v2.md` with the checks from `[checks]`, plus the model from `[llm]` when `llm.enabled = true`; without a model it uses the free heuristic and breadth-first crawling. A model provider that cannot be built (for example a missing `swarmqa[anthropic]` extra) ends the shard as an error before the app launches.
+
+`[checks]` takes `functional`, `layout`, `baseline` and `judge`. Each is on unless set to `false`, and a table overrides that check's settings (see `docs/checks.md`); an unknown check or setting fails validation. `layout.platform` defaults to `app.platform`. `baseline` defaults to on only when `visual.enabled`, using `visual.baseline_dir` and `visual.threshold`. When the model judge has no provider, `visual.judgment` (the command judge) is the fallback. When `explorer.friction.enabled` and the shard has a goal, the friction check also runs and reports once at the end of the session.
+
+With the agent engine and `[llm]` enabled, model spend counts toward `spend.max_spend` on every backend, including `local`.
+
+### Evidence
+
+Every campaign runs the evidence pipeline (`docs/evidence.md`) and writes `findings.json` (schema v2). Set `app.source_dir` to the app's source checkout to add suspected source files to each finding and to keep the cross-run store in `<source_dir>/.aqa/state/findings.json`; only a complete run, with no stopped, errored, resumed or `--intent`-filtered shards, marks missing findings as fixed.
+
+`aqa replay reports/<campaign>/findings/<id>.replay.json` replays one finding. It exits 1 when the finding still reproduces, 0 when it does not, and 2 when the replay could not run (for example the app did not launch).
+
+### Models
+
+`[llm]` is off by default, so no campaign calls a model or spends money until you set `enabled = true`. The other keys are `swarmqa.llm.settings.LLMSettings` fields (`provider`, `step_model`, `judge_model`, `max_cost`, `prices`, and so on); an unknown key or provider fails validation. See `docs/llm.md`.
+
 ### Video, coverage, issues
 
 `video.mode` is `always` (default), `on_failure`, or `exploratory_only`.
 
 `coverage.scripted`, `coverage.exploratory`, and `coverage.visual` toggle those passes. Visual comparison uses `visual.baseline_dir` and `visual.threshold` (0 through 1 inclusive).
+
+`visual.judgment` is separate from that pixel compare. It stays off until `visual.judgment.enabled` is true, so existing campaigns do not call out. `provider = "command"` runs the command in `AQA_VISUAL_JUDGE_COMMAND` (or `command` when that variable is unset). Claude Code or Codex can be the command. It receives the PNG path as its last argument and must print one JSON object: `{"ok": true}` when the screen is fine, or `{"ok": false, "judgment": "what looks wrong"}` when it is not. A non-zero exit or unparseable output does not fail the campaign. `provider = "fake"` reads the canned `judgment` string and runs nothing. See `docs/visual.md`.
 
 `issues.github` and `issues.linear` enable trackers. `issues.template` is the markdown ticket body. When it is unset, reporters use `swarmqa/templates/issue.md`. Tokens stay in the environment variables named by the config.
 
@@ -231,6 +277,7 @@ Every message starts with its field path. `load_config` collects them and raises
 | `app.maturity` is `prototype` or `shipped` | `app.maturity:` |
 | `app.platform` is `macos` or `ios` | `app.platform:` |
 | `visual.threshold` is from 0 to 1 inclusive | `visual.threshold:` |
+| `visual.judgment.provider` is `command` or `fake`; `timeout_s` is `> 0` | `visual.judgment.provider:`, `visual.judgment.timeout_s:` |
 | `spend.currency` is a non-empty string | `spend.currency:` |
 | cloud `spend.max_spend` is present and `> 0` | `spend.max_spend:` |
 | `pr.max_iterations` and `pr.max_pr_updates` are integers `>= 1` | `pr.max_iterations:`, `pr.max_pr_updates:` |

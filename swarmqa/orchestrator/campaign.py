@@ -82,7 +82,7 @@ def run_campaign(
             campaign_dir=root,
         )
     else:
-        backend = create_backend(config)
+        backend = create_backend(config, campaign_dir=root)
 
     status = CampaignStatus(
         campaign_id=campaign_id,
@@ -242,7 +242,15 @@ def run_campaign(
     not_started = [shard for shard in to_run if shard.id not in results]
     ordered = _ordered_results(queue, results)
     merged = _apply_dedup(ordered)
-    _persist_findings(merged, root)
+    # Only a complete, clean run may mark missing findings as fixed.
+    full_run = (
+        stop_reason is None
+        and not not_started
+        and not resume
+        and not options.partial
+        and all(item.status in ("passed", "failed") for item in ordered)
+    )
+    _finalize_findings(merged, root, campaign_id, config, full_run=full_run)
     coverage = Coverage(
         completed=sum(item.status == "passed" for item in ordered),
         failed=sum(item.status in {"failed", "error"} for item in ordered),
@@ -378,17 +386,24 @@ def _backend_rate(config: CampaignConfig) -> float:
 
 
 def _open_meter(config: CampaignConfig, rate: float) -> tuple[SpendMeter, bool, str | None]:
-    metered = rate > 0
+    # Model calls cost money on any backend, so an enabled [llm] meters the
+    # campaign even when the machines are free.
+    models_cost = _models_cost(config)
+    metered = rate > 0 or models_cost
     note = None
     cap = config.spend.max_spend
     currency = config.spend.currency or "USD"
-    if config.backend == "local" and cap is not None:
+    if config.backend == "local" and cap is not None and not models_cost:
         note = LOCAL_SPEND_NOTE
     if metered and cap is not None and cap > 0:
         meter = SpendMeter(cap, currency)
     else:
         meter = SpendMeter(None, currency)
     return meter, metered, note
+
+
+def _models_cost(config: CampaignConfig) -> bool:
+    return config.llm.enabled and config.explorer.engine == "agent"
 
 
 def _warn_gui(config: CampaignConfig, queue: list[Shard]) -> None:
@@ -464,7 +479,7 @@ def _settle_spend(meter, metered: bool, rate: float, config: CampaignConfig, res
         result.estimated_cost = result.estimated_cost or 0.0
         return
     actual = result.estimated_cost
-    if actual <= 0:
+    if actual <= 0 and rate > 0:
         actual = reserved_cost if reserved_cost > 0 else rate * float(config.cloud.estimated_shard_minutes)
         result.estimated_cost = actual
     extra = actual - reserved_cost
@@ -501,6 +516,20 @@ def _apply_dedup(results: list[WorkerResult]) -> list:
                 owners.pop(finding.fingerprint, None)
         item.findings = kept
     return merged
+
+
+def _finalize_findings(findings, root: Path, campaign_id: str, config: CampaignConfig, *, full_run: bool) -> None:
+    """Enrich findings in place (repro, clip, sources, cross-run state) and
+    write findings.json. Evidence is best effort: if the pipeline fails the
+    findings are still written as before."""
+    source_dir = Path(config.app.source_dir).expanduser() if config.app.source_dir else None
+    try:
+        from swarmqa.report.pipeline import finalize_findings
+
+        finalize_findings(root, campaign_id, findings, config=config, repo=source_dir, full_run=full_run)
+    except Exception as exc:
+        print(f"warning: evidence pipeline failed: {exc}", file=sys.stderr)
+        _persist_findings(findings, root)
 
 
 def _persist_findings(findings, root: Path) -> None:

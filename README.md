@@ -38,11 +38,18 @@ workers = 2
 
 ## Install and run
 
-You need Python 3.11 or newer.
+Install the `aqa` command with [uv](https://docs.astral.sh/uv/). uv fetches a suitable Python (3.11 or newer) and keeps SwarmQA in its own environment, so the macOS system Python is left alone.
+
+```bash
+uv tool install git+https://github.com/simonrab/swarmqa
+aqa init
+```
+
+`pipx install git+https://github.com/simonrab/swarmqa` works the same way. To work on SwarmQA itself:
 
 ```bash
 python -m pip install -e ".[dev]"
-aqa init
+python -m pytest
 ```
 
 `aqa init` writes `aqa.config.toml`, `templates/issue.md`, and empty `intents/` and `reports/` directories. Pass `--dir` to choose a different directory.
@@ -51,7 +58,7 @@ aqa init
 aqa run --app /path/to/MyApp.app --intent intents/smoke.md
 ```
 
-That command reads `aqa.config.toml`. The defaults are a local backend, 2 workers, video on, and human PR mode. It prints the report directory, `reports/<campaign-id>/`.
+That command reads `aqa.config.toml`. The defaults are a local backend, 2 workers, video on, and PR mode off (report only, no branch or PR). It prints the report directory, `reports/<campaign-id>/`.
 
 ```bash
 aqa report

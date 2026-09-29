@@ -39,7 +39,7 @@ aqa run --app /path/to/MyApp.app \
 | `--workers` | Max concurrent shards. Default is 2 |
 | `--max-spend` | Currency ceiling. Required and greater than 0 when `--backend cloud` |
 | `--spend-currency` | Default `USD` |
-| `--pr-mode` | `human` (default) or `autonomous` |
+| `--pr-mode` | `off` (default), `human`, or `autonomous` |
 | `--max-wall-time` | Campaign scheduling budget (`90s`, `5m`, `2h`). This is not the PR-loop cap |
 
 One campaign produces one merged report and at most one fix/PR loop. Workers do not open their own pull requests. The loop branch is `aqa/<campaign-id>`. The draft body is `reports/<campaign-id>/pr/draft.md` (title, failing shards, steps, video, screenshots, replay path).

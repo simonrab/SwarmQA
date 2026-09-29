@@ -390,3 +390,30 @@ def test_record_flow_rejects_bad_event(tmp_path: Path):
     with pytest.raises(IntentError, match="unknown action"):
         record_flow(app_path="Sample.app", out_path=out, events=[{"action": "hop"}])
     assert not out.exists()
+
+
+def test_tap_point_and_swipe_steps_round_trip_and_replay(tmp_path):
+    from swarmqa.driver.fake import FakeDriver
+    from swarmqa.intent.ingest import action_from_dict, action_to_dict
+    from swarmqa.models import AppTarget, UIElement
+    from swarmqa.explorer.scripted import _execute
+
+    tap = action_from_dict({"action": "tap_point", "point": [30, 120]}, origin="t")
+    swipe = action_from_dict({"action": "swipe", "point": [200, 600], "end": [200, 200]}, origin="t")
+    assert action_to_dict(tap) == {"action": "tap_point", "point": [30.0, 120.0]}
+    assert action_from_dict(action_to_dict(swipe), origin="t") == swipe
+    for bad in ({"action": "tap_point"}, {"action": "swipe", "point": [1, 2]}, {"action": "tap_point", "point": [1]}):
+        with pytest.raises(IntentError):
+            action_from_dict(bad, origin="t")
+
+    driver = FakeDriver(AppTarget(path="/A.app"), tmp_path, require_path=False)
+    driver.set_tree([
+        UIElement(role="button", label="Save As…", frame=(10, 10, 100, 44)),
+        UIElement(role="button", label="Save", frame=(10, 100, 100, 44)),
+    ])
+    driver.transitions["Save"] = []
+    driver.launch()
+    _execute(driver, tap, 0)
+    assert driver.tree == []
+    _execute(driver, swipe, 1)
+    assert driver.actions_log[-1] == "swipe:200,600->200,200"

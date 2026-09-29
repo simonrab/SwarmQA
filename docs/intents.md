@@ -41,6 +41,10 @@ When `coverage.exploratory` is true and the markdown shard is scripted, the queu
 
 `examples/intents/smoke.md` is a scripted markdown intent.
 
+### Tags
+
+Each shard gets `tags`, lower-cased with inner spaces turned into `-` and duplicates dropped, in this order: `tags:` in YAML front matter (`---` block at the top), items under a `## Tags` section, then `flow:<slug>`. The exploratory companion of a scripted intent also gets `gold_steps:<n>` (the scripted step count) unless a gold tag is already declared. Front matter and the Tags section are not part of the goal. See `docs/checks.md`.
+
 ## JSON flows
 
 A `.json` intent is one `kind="scripted"` shard. `version` must be the integer `1`. Any other version, including a missing version, raises `IntentError` (`flow version must be 1`). The shard name is the flow `name`. Each step becomes an `Action`. Unknown document, step, or target fields are rejected. The shard actions are the steps in order.

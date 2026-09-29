@@ -472,3 +472,18 @@ def test_create_driver_uses_ios_for_platform_and_kind(tmp_path: Path):
     assert isinstance(explicit, IOSSimulatorDriver)
     with pytest.raises(ValueError, match="unknown driver kind"):
         create_driver(AppTarget(), tmp_path / "bad", kind="android")
+
+
+def test_driver_and_pool_share_the_udid_lock(tmp_path: Path):
+    from swarmqa.devices.locks import simulator_lock_name, try_lock
+
+    app = write_app(tmp_path / "Sample.app")
+    target = AppTarget(path=str(app), platform="ios", simulators=["iPhone 17"])
+    held = try_lock(simulator_lock_name(BOOTED))
+    driver = IOSSimulatorDriver(target, tmp_path / "w", runner=FakeRunner(), platform="darwin")
+    with pytest.raises(BackendUnavailable, match="No free iOS Simulator"):
+        driver.launch()
+    held.release()
+    driver.launch()
+    assert driver.udid == BOOTED
+    driver.close()

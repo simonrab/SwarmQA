@@ -2,7 +2,8 @@
 
 Read `docs/autonomous-qa-plan.md` for product intent and `docs/OWNERSHIP.md` for file ownership. This file is the build contract. Locked defaults:
 
-- `pr.mode = human`
+- `pr.mode = off`
+- `driver.kind = auto`
 - `workers = 2`
 - `video.mode = always`
 - cloud sample cap `max_spend = 10`, `currency = USD`
@@ -57,7 +58,8 @@ Validation, each message prefixed with its field path:
 - `backend` is `local`, `vm`, or `cloud`
 - `workers` is an integer `>= 1`
 - `video.mode` is `always`, `on_failure`, or `exploratory_only`
-- `pr.mode` is `human` or `autonomous`
+- `pr.mode` is `off`, `human`, or `autonomous`
+- `driver.kind` is `auto`, `fake`, `legacy`, or `runner`
 - `app.maturity` is `prototype` or `shipped`
 - `visual.threshold` is between 0 and 1 inclusive
 - `spend.currency` is a non-empty string
@@ -287,6 +289,45 @@ On a Mac the driver:
 Inject subprocess calls behind an instance attribute so tests can fake simctl and idb output on Linux. Tests must pass without a display or a booted Simulator.
 
 A local campaign with `platform = ios`, more than one worker, and fewer `app.simulators` entries than workers warns on stderr that each worker needs its own Simulator. A pool that covers the worker count does not warn. macOS campaigns keep the existing shared-display warning.
+
+## Phase 1 contracts (v2)
+
+These are read-only for Wave A and Wave B work packages. A WP that needs a change reports it to the lead. `tests/test_contracts.py` pins them. See `docs/build-plan.md` for the waves.
+
+| Contract | Module | Fake |
+|---|---|---|
+| Driver v2 | `swarmqa.driver.protocol` (`AppDriverV2`, `ScreenObservation`, `LogEntry`, `CrashReport`, `supports_v2`) | `swarmqa.driver.fake.FakeDriver`; `swarmqa.driver.v1_adapter.V1Adapter` serves v2 from any v1 driver |
+| Runner wire protocol | `agents/swarm-runner/PROTOCOL.md` and `swarmqa.driver.runner_schema` | encoders for both sides in `runner_schema` |
+| ModelProvider | `swarmqa.llm.protocol` | `swarmqa.llm.fake.FakeModelProvider` |
+| DevicePool | `swarmqa.devices.protocol` (`Device`, `DevicePool`, `lease`) | `swarmqa.devices.fake.FakeDevicePool` |
+| Findings v2 | `swarmqa.models.Finding`, `Evidence`, `category_for_kind`; `swarmqa/schemas/findings.v2.json` | — |
+| Build artifact | `swarmqa.models.BuildArtifact` | — |
+| MCP tools | `swarmqa.mcp.tools` (stubs raising `NotImplementedError`) | — |
+| Checks | `swarmqa.checks.protocol` (`StepContext`, `CheckIssue`, `Check`; `CheckIssue.to_finding` is the only issue-to-finding path) | — |
+
+Driver v2:
+
+- `observe(name=None, *, screenshot=True)` returns the tree and screenshot from one round-trip. `ts` is Unix epoch seconds.
+- Coordinates are points in the `UIElement.frame` space. `tap_point(x, y)`, `swipe(start, end, duration_s)`.
+- `logs_since(ts)` and `crash_reports_since(ts)` return entries at or after `ts`, oldest first; empty when a driver cannot read them.
+- Callers that accept any driver call `as_v2(driver)`. `V1Adapter.tap_point` clicks the smallest enabled element under the point; `swipe` becomes a vertical `scroll`; horizontal swipes raise `UnsupportedAction`.
+
+ModelProvider:
+
+- `decide_step(obs, goal, history)` and `computer_use(obs, instruction)` return `StepDecision`; `judge_screen(obs, rubric)` returns `ScreenJudgment`; `propose_flows(diff, files)` returns `FlowProposal`.
+- Every result carries `usage: Usage` (tokens, cost, currency, latency). Callers add `usage.cost` to the spend meter.
+- Providers raise `ModelError` (`ModelTimeout`, `ModelRefused`, `ModelBudgetExceeded`). Callers fail open to heuristics.
+- Only adapters under `swarmqa/llm/` import a model SDK.
+
+Findings v2:
+
+- New fields, all defaulted: `category` (`broken`, `visual`, `confusing`, `crash`; defaults from `kind`), `confidence` (0 to 1), `advisory` (true when only a model reported it), `repro` (replay script path), `suspected_sources` (repo-relative `path` or `path:line`), `evidence` (`video_clip`, `frames`).
+- `Finding.from_dict` loads v1 and v2 JSON. `findings.json` is `{"schema_version": 2, "campaign_id", "sha", "findings": [...]}`.
+- Dedup unions frames and suspected sources, keeps the first repro and clip, takes the highest confidence, and clears `advisory` when any duplicate is firm.
+
+DevicePool: `acquire(platform, build, *, timeout_s)` blocks until a device is free or raises `DeviceUnavailable`; a device that was free but failed to clone, boot, or install raises `DeviceSetupError` (a `DeviceUnavailable` subclass), so a broken build is not reported as a capacity shortage; leases are exclusive host-wide; `release(device, *, erase=True)` is idempotent. Prefer `with lease(pool, platform, build) as device:`.
+
+MCP tools: `start_campaign`, `campaign_status`, `list_findings`, `get_finding`, `verify_fix`, `verify_status`, `cancel_campaign`. `start_campaign` and `verify_fix` return at once; `verify_status` polls a verify run.
 
 ## Progress log
 

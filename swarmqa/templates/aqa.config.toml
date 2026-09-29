@@ -18,6 +18,28 @@ platform = "macos"
 # Names must match `xcrun simctl list devices available` (iOS 26.5 has iPhone 17, not iPhone 16).
 # simulators = ["iPhone 17", "iPhone 17 Pro"]
 
+[driver]
+# auto = legacy on a Mac or for platform = ios, else fake.
+# fake = scripted dry run, no Accessibility permission. legacy = AppleScript (macos) or simctl/idb (ios).
+kind = "auto" # auto | fake | legacy | runner
+
+[llm]
+# Model calls for exploring and judging screens. Off by default: nothing spends
+# money until you set enabled = true. Needs the extra: uv tool install 'swarmqa[anthropic]'
+enabled = false
+# provider = "anthropic" # anthropic | openai | fake
+# max_cost = 5.0       # stop model calls past this many `currency` units
+# step_model = ""      # blank = the provider's default (see docs/llm.md)
+# judge_model = ""
+
+[checks]
+# Used by explorer.engine = "agent". Each check is on unless set to false;
+# a table overrides its settings. See docs/checks.md.
+# functional = true
+# layout = { contrast = false }
+# baseline = false   # on by default only when [visual] enabled = true
+# judge = true       # model judge; needs [llm] enabled = true
+
 [campaign]
 # local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter
 backend = "local"
@@ -64,8 +86,8 @@ overrun = "drain" # drain | cancel
 mode = "always"
 
 [pr]
-# human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
-mode = "human"
+# off = report only; human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
+mode = "off" # off | human | autonomous
 max_iterations = 3
 max_wall_time = "1h"
 max_pr_updates = 5
@@ -85,12 +107,25 @@ enabled = false
 baseline_dir = "baselines"
 threshold = 0.01
 
+# Appearance judgment. Off by default. Pixel diff does not call this.
+# Claude Code or Codex can be the command. It receives the PNG path and
+# prints {"ok": true} or {"ok": false, "judgment": "what looks wrong"}.
+[visual.judgment]
+enabled = false
+provider = "command" # command | fake
+command_env = "AQA_VISUAL_JUDGE_COMMAND"
+# command = ""  # used when AQA_VISUAL_JUDGE_COMMAND is unset
+# judgment = ""  # canned text for provider = "fake"
+
 [coverage]
 scripted = true
 exploratory = true
 visual = false
 
 [explorer]
+# legacy = the original explorer; agent = observe-decide-act loop with [checks]
+# (and a model when [llm] enabled = true). See docs/explorer-v2.md.
+engine = "legacy" # legacy | agent
 max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue

@@ -2,6 +2,8 @@
 
 Workers compare a fresh screenshot to a stored baseline and emit a score plus a reviewable diff image. Baselines change only through `update_baselines`. A compare never writes the baseline file, so concurrent workers can read the same set.
 
+Pixel diff only flags pixels that changed. It does not decide whether a screen looks wrong, and it does not write prose. Appearance judgment is a separate step, below.
+
 ## Compare
 
 ```python
@@ -50,3 +52,38 @@ aqa baseline update --from-dir reports/<id>/media --baseline-dir baselines
 ## Findings
 
 When a caller wraps a failed `DiffResult` in a `Finding`, set `kind="visual"`. Put the diff path in the finding evidence. Functional findings stay on their own kinds (`assertion`, `crash`, and the rest). The orchestrator owns that wrap; this module only returns `DiffResult`.
+
+Appearance judgments use `kind="visual_judgment"` so a report can list both. The campaign summary keeps pixel diffs and judgments together under **## Findings**, and tags each line with its kind.
+
+## Judgment
+
+`visual.judgment` looks at a screenshot that the campaign already saved and returns either `fine` or a short written judgment. It does not need a baseline. It runs only when `visual.judgment.enabled` is true (the default is false).
+
+Call sites:
+
+- after a scripted `screenshot` action
+- after an exploratory hunt saves a screenshot
+- after the visual shard captures the current screenshot, including when the baseline file is missing
+
+A fine screen adds nothing. A bad screen writes one `Finding`:
+
+| Field | Value |
+| --- | --- |
+| `kind` | `visual_judgment` |
+| `severity` | `medium` |
+| `title` | the judgment, truncated to 120 characters |
+| `details` | the full judgment |
+
+`provider = "command"` (the default) runs one command. The command is the value of the environment variable named by `command_env` (default `AQA_VISUAL_JUDGE_COMMAND`). When that variable is unset, `command` in the config is used. Claude Code or Codex can be that command. The PNG path is the last argument. Stdout must be one JSON object:
+
+```json
+{"ok": true}
+```
+
+```json
+{"ok": false, "judgment": "The save button overlaps the title."}
+```
+
+A non-zero exit, a timeout, or unparseable output fails open: no finding, and the campaign keeps going. The worker result `error` field gets a one-line note only when that field was empty. The command is not retried.
+
+`provider = "fake"` does not spawn a process. It uses the canned `judgment` string from config. An empty string, or the text `fine`, means the screen is fine. Anything else is the written judgment. Tests use this provider.

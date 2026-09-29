@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from swarmqa.models import CampaignConfig
 
 
-def create_backend(config: CampaignConfig):
+def create_backend(config: CampaignConfig, *, campaign_dir: Path | None = None):
     if config.backend == "local":
         from swarmqa.backends.local import LocalBackend
 
@@ -13,7 +15,7 @@ def create_backend(config: CampaignConfig):
     if config.backend == "vm":
         from swarmqa.backends.tart import TartBackend
 
-        return TartBackend(config)
+        return TartBackend(config, campaign_dir=campaign_dir)
     if config.backend == "cloud":
         from swarmqa.backends.cloud import create_cloud_backend
 

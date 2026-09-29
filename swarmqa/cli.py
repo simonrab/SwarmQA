@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-spend", type=float)
     run_p.add_argument("--spend-currency")
     run_p.add_argument("--video-mode", choices=["always", "on_failure", "exploratory_only"])
-    run_p.add_argument("--pr-mode", choices=["human", "autonomous"])
+    run_p.add_argument("--pr-mode", choices=["off", "human", "autonomous"])
     run_p.add_argument("--resume", help="Campaign id whose pending and failed shards should rerun")
     run_p.add_argument("--reset-spend", action="store_true")
     run_p.set_defaults(func=cmd_run)
@@ -80,6 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
     update_p.add_argument("--from-dir", required=True)
     update_p.set_defaults(func=cmd_baseline_update)
     base_p.set_defaults(func=lambda args: _baseline_help(base_p, args))
+
+    replay_p = sub.add_parser(
+        "replay",
+        help="Replay a finding and report whether it still reproduces (exit 1 if it does)",
+    )
+    replay_p.add_argument("replay", help="Path to findings/<id>.replay.json")
+    replay_p.add_argument("--config", default="aqa.config.toml")
+    replay_p.add_argument("--app", help="App to replay against (overrides app.path)")
+    replay_p.set_defaults(func=cmd_replay)
 
     status_p = sub.add_parser("status", help="Show active campaign status")
     status_p.add_argument("--campaign")
@@ -135,7 +144,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     config = load_config(Path(args.config), overrides)
     queue = build_queue(config)
-    options = RunOptions(resume_campaign_id=args.resume, reset_spend=args.reset_spend)
+    options = RunOptions(
+        resume_campaign_id=args.resume,
+        reset_spend=args.reset_spend,
+        partial=bool(args.intents),
+    )
     result = run_campaign(config, queue, options=options)
     if config.pr.mode in {"human", "autonomous"} and result.results:
         from swarmqa.prloop.loop import run_fix_loop
@@ -171,6 +184,35 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 2
     print(summary.read_text(encoding="utf-8"))
     return 0
+
+
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Exit 0 when the finding no longer reproduces, 1 when it does, 2 when the replay could not run."""
+    import time
+
+    from swarmqa.config import load_config
+    from swarmqa.models import CampaignConfig
+    from swarmqa.report.repro import replay_finding
+
+    replay = Path(args.replay)
+    if not replay.is_file():
+        print(f"replay not found: {replay}", file=sys.stderr)
+        return 2
+    config_path = Path(args.config)
+    config = load_config(config_path, CliOverrides(app=args.app)) if config_path.is_file() else CampaignConfig()
+    if args.app:
+        config.app.path = args.app
+    # <campaign>/findings/<id>.replay.json -> <campaign>/replays/<id>-<time>
+    campaign = replay.resolve().parent.parent
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    work_dir = campaign / "replays" / f"{replay.name.removesuffix('.replay.json')}-{stamp}"
+    result = replay_finding(replay, config, work_dir=work_dir)
+    if not result.ran:
+        print(f"{result.finding_id or replay.name}: could not replay ({result.reason})", file=sys.stderr)
+        return 2
+    verdict = "reproduced" if result.reproduced else "did not reproduce"
+    print(f"{result.finding_id or replay.name}: {verdict} ({result.reason})")
+    return 1 if result.reproduced else 0
 
 
 def cmd_status(args: argparse.Namespace) -> int:

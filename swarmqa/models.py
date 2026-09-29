@@ -7,10 +7,10 @@ when every chunk needs the field; otherwise keep chunk-local types local.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 BackendName = Literal["local", "vm", "cloud"]
-PrMode = Literal["human", "autonomous"]
+PrMode = Literal["off", "human", "autonomous"]
 VideoMode = Literal["always", "on_failure", "exploratory_only"]
 OverrunPolicy = Literal["drain", "cancel"]
 Maturity = Literal["prototype", "shipped"]
@@ -24,15 +24,20 @@ FindingKind = Literal[
     "assertion",
     "missing_control",
     "visual",
+    "visual_judgment",
     "suite_failure",
     "unresponsive",
     "error_state",
     "launch",
     "friction_path",
 ]
+ExplorerEngine = Literal["legacy", "agent"]
+FindingCategory = Literal["broken", "visual", "confusing", "crash"]
+FINDINGS_SCHEMA_VERSION = 2
 DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
 SystemOneProvider = Literal["http", "fake"]
 ComputerUseProvider = Literal["command", "fake"]
+VisualJudgmentProvider = Literal["command", "fake"]
 FrictionCompareTo = Literal["gold", "prior_p50"]
 ActionType = Literal[
     "click",
@@ -45,11 +50,14 @@ ActionType = Literal[
     "assert",
     "launch",
     "relaunch",
+    "tap_point",
+    "swipe",
 ]
 StepFailurePolicy = Literal["stop", "continue"]
 FailOn = Literal["scripted", "any", "never"]
 LocalIsolation = Literal["thread", "subprocess"]
 TargetPlatform = Literal["macos", "ios"]
+DriverKind = Literal["auto", "fake", "legacy", "runner"]
 
 
 @dataclass
@@ -63,6 +71,9 @@ class AppTarget:
     platform: TargetPlatform = "macos"
     simulator: str | None = None
     simulators: list[str] = field(default_factory=list)
+    # The app's source checkout: enables suspected-source lookup and the
+    # cross-run findings store in <source_dir>/.aqa/state/.
+    source_dir: str | None = None
 
 
 @dataclass
@@ -81,7 +92,7 @@ class SpendConfig:
 
 @dataclass
 class PrConfig:
-    mode: PrMode = "human"
+    mode: PrMode = "off"
     max_iterations: int = 3
     max_wall_time_s: float = 3600
     max_pr_updates: int = 5
@@ -105,10 +116,31 @@ class IssuesConfig:
 
 
 @dataclass
+class VisualJudgmentConfig:
+    """Appearance check for one saved screenshot. Off unless ``enabled``.
+
+    ``provider="command"`` runs the shell command from the environment
+    variable named by ``command_env`` (default ``AQA_VISUAL_JUDGE_COMMAND``),
+    or from ``command`` when that variable is unset. The PNG path is the
+    last argument. ``provider="fake"`` returns ``judgment`` and does not
+    spawn a process. An empty ``judgment``, or the text ``fine``, means
+    the screen is fine.
+    """
+
+    enabled: bool = False
+    provider: VisualJudgmentProvider = "command"
+    command_env: str = "AQA_VISUAL_JUDGE_COMMAND"
+    command: str = ""
+    judgment: str = ""
+    timeout_s: float = 60.0
+
+
+@dataclass
 class VisualConfig:
     enabled: bool = False
     baseline_dir: str = "baselines"
     threshold: float = 0.01
+    judgment: VisualJudgmentConfig = field(default_factory=VisualJudgmentConfig)
 
 
 @dataclass
@@ -165,6 +197,10 @@ class FrictionConfig:
 
 @dataclass
 class ExplorerConfig:
+    """`engine = "agent"` runs the observe-decide-act loop (explorer/agent_loop.py)
+    with the `[checks]` set; `legacy` keeps the original exploratory explorer."""
+
+    engine: ExplorerEngine = "legacy"
     max_steps: int = 40
     max_time_s: float = 120
     on_step_failure: StepFailurePolicy = "stop"
@@ -203,6 +239,41 @@ class VmConfig:
 
 
 @dataclass
+class DriverConfig:
+    """`auto` is legacy on darwin (or for `app.platform = "ios"`), else fake.
+
+    `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver,
+    chosen by `app.platform`. `runner` is reserved for the XCUITest runner.
+    """
+
+    kind: DriverKind = "auto"
+
+
+@dataclass
+class LLMConfig:
+    """The `[llm]` table. Off unless `enabled`, so nothing spends money by default.
+
+    `settings` holds the rest of the table as written; `swarmqa.config.llm_settings`
+    turns it into `swarmqa.llm.settings.LLMSettings` (kept raw here so this
+    module does not import the llm package).
+    """
+
+    enabled: bool = False
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ChecksConfig:
+    """The `[checks]` table, kept raw; `swarmqa.checks.config.checks_settings`
+    builds `ChecksSettings` from it. Sub-tables `functional`, `layout`,
+    `baseline` and `judge` take that check's settings, or `false` to turn it
+    off. Used by `explorer.engine = "agent"`.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class LocalConfig:
     isolation: LocalIsolation = "thread"
 
@@ -228,6 +299,9 @@ class CampaignConfig:
     cloud: CloudConfig = field(default_factory=CloudConfig)
     vm: VmConfig = field(default_factory=VmConfig)
     local: LocalConfig = field(default_factory=LocalConfig)
+    driver: DriverConfig = field(default_factory=DriverConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    checks: ChecksConfig = field(default_factory=ChecksConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2
@@ -253,6 +327,9 @@ class CliOverrides:
 class RunOptions:
     resume_campaign_id: str | None = None
     reset_spend: bool = False
+    # A run limited to some intents (e.g. `--intent`). It never marks
+    # findings from the rest as fixed in the cross-run store.
+    partial: bool = False
 
 
 @dataclass
@@ -287,6 +364,8 @@ class Action:
     timeout_s: float | None = None
     name: str | None = None
     exists: bool | None = None
+    point: tuple[float, float] | None = None
+    end: tuple[float, float] | None = None
 
 
 @dataclass
@@ -320,6 +399,21 @@ class BuildMetadata:
 
 
 @dataclass
+class BuildArtifact:
+    """One built app for one platform, produced by the builder.
+
+    `app_path` is the `.app` bundle (simulator build for ios). `sha` is empty
+    when the build did not come from a specific commit.
+    """
+
+    platform: TargetPlatform
+    app_path: str
+    bundle_id: str
+    sha: str = ""
+    log_path: str | None = None
+
+
+@dataclass
 class StepResult:
     index: int
     action: str
@@ -328,7 +422,44 @@ class StepResult:
 
 
 @dataclass
+class Evidence:
+    """Media attached to a finding beyond the full-session video.
+
+    `video_clip` is a short clip trimmed around the failure. `frames` are
+    screenshots in time order. Paths are relative to the campaign report
+    directory, like every other media path on `Finding`.
+    """
+
+    video_clip: str | None = None
+    frames: list[str] = field(default_factory=list)
+
+
+_CATEGORY_BY_KIND: dict[str, FindingCategory] = {
+    "crash": "crash",
+    "launch": "crash",
+    "visual": "visual",
+    "visual_judgment": "visual",
+    "friction_path": "confusing",
+}
+
+
+def category_for_kind(kind: str) -> FindingCategory:
+    """Default category for a finding kind: crash, visual, confusing, or broken."""
+    return _CATEGORY_BY_KIND.get(kind, "broken")
+
+
+@dataclass
 class Finding:
+    """One problem found by a worker. Findings v2 (`schemas/findings.v2.json`).
+
+    v2 adds `category`, `confidence`, `advisory`, `repro`,
+    `suspected_sources`, and `evidence`. All v2 fields have defaults, so v1
+    constructors keep working. `category` defaults from `kind`. A finding
+    that only a model reported is `advisory` with its `confidence` below 1.
+    `repro` is the path to a replay script. `suspected_sources` are
+    repo-relative `path` or `path:line` strings.
+    """
+
     id: str
     title: str
     severity: Severity
@@ -344,10 +475,25 @@ class Finding:
     environment: dict[str, str] = field(default_factory=dict)
     details: str = ""
     worker_ids: list[str] = field(default_factory=list)
+    category: FindingCategory | None = None
+    confidence: float = 1.0
+    advisory: bool = False
+    repro: str | None = None
+    suspected_sources: list[str] = field(default_factory=list)
+    evidence: Evidence = field(default_factory=Evidence)
 
     def __post_init__(self) -> None:
         if self.worker_id and self.worker_id not in self.worker_ids:
             self.worker_ids.insert(0, self.worker_id)
+        if self.category is None:
+            self.category = category_for_kind(self.kind)
+        if isinstance(self.evidence, dict):
+            self.evidence = Evidence(**self.evidence)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Finding":
+        """Build a Finding from v1 or v2 JSON. Unknown keys raise TypeError."""
+        return cls(**data)
 
 
 @dataclass

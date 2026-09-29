@@ -18,17 +18,20 @@ from swarmqa.util import parse_duration
 
 _BACKENDS = ("local", "vm", "cloud")
 _VIDEO_MODES = ("always", "on_failure", "exploratory_only")
-_PR_MODES = ("human", "autonomous")
+_PR_MODES = ("off", "human", "autonomous")
 _MATURITIES = ("prototype", "shipped")
 _PLATFORMS = ("macos", "ios")
 _SHARD_STRATEGIES = ("intent", "suite", "exploratory_seed")
 _OVERRUN = ("drain", "cancel")
 _FAIL_ON = ("scripted", "any", "never")
 _ISOLATION = ("thread", "subprocess")
+_DRIVER_KINDS = ("auto", "fake", "legacy", "runner")
+_ENGINES = ("legacy", "agent")
 _STEP_FAILURE = ("stop", "continue")
 _DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
 _SYSTEM_ONE_PROVIDERS = ("http", "fake")
 _COMPUTER_USE_PROVIDERS = ("command", "fake")
+_VISUAL_JUDGMENT_PROVIDERS = ("command", "fake")
 _FRICTION_COMPARE = ("gold", "prior_p50")
 
 _NOT_FOUND = "config: not found"
@@ -66,6 +69,10 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "app.maturity", config.app.maturity, _MATURITIES)
     _enum(errors, "app.platform", config.app.platform, _PLATFORMS)
     _number_between(errors, "visual.threshold", config.visual.threshold, 0, 1)
+    _validate_visual_judgment(errors, config)
+    _validate_llm(errors, config)
+    _enum(errors, "explorer.engine", config.explorer.engine, _ENGINES)
+    _validate_checks(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "pr.max_iterations", config.pr.max_iterations, 1)
@@ -77,6 +84,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "budgets.on_budget", config.budgets.on_budget, _OVERRUN)
     _enum(errors, "fail_on", config.fail_on, _FAIL_ON)
     _enum(errors, "local.isolation", config.local.isolation, _ISOLATION)
+    _enum(errors, "driver.kind", config.driver.kind, _DRIVER_KINDS)
     _enum(errors, "spend.overrun", config.spend.overrun, _OVERRUN)
     _enum(errors, "explorer.on_step_failure", config.explorer.on_step_failure, _STEP_FAILURE)
     _validate_decision(errors, config)
@@ -167,6 +175,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(app, "platform", config.app, "platform")
     _assign(app, "simulator", config.app, "simulator")
     _assign(app, "simulators", config.app, "simulators")
+    _assign(app, "source_dir", config.app, "source_dir")
 
     campaign = _section(document, "campaign", errors)
     _assign(campaign, "backend", config, "backend")
@@ -188,6 +197,16 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
 
     local = _section(document, "local", errors)
     _assign(local, "isolation", config.local, "isolation")
+
+    driver = _section(document, "driver", errors)
+    _assign(driver, "kind", config.driver, "kind")
+
+    config.checks.settings = dict(_section(document, "checks", errors))
+
+    llm = dict(_section(document, "llm", errors))
+    if "enabled" in llm:
+        config.llm.enabled = llm.pop("enabled")
+    config.llm.settings = llm
 
     vm = _section(document, "vm", errors)
     _assign(vm, "provider", config.vm, "provider")
@@ -231,6 +250,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(visual, "enabled", config.visual, "enabled")
     _assign(visual, "baseline_dir", config.visual, "baseline_dir")
     _assign(visual, "threshold", config.visual, "threshold")
+    _apply_visual_judgment(visual, config, errors)
 
     coverage = _section(document, "coverage", errors)
     _assign(coverage, "scripted", config.coverage, "scripted")
@@ -238,6 +258,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(coverage, "visual", config.coverage, "visual")
 
     explorer = _section(document, "explorer", errors)
+    _assign(explorer, "engine", config.explorer, "engine")
     _assign(explorer, "max_steps", config.explorer, "max_steps")
     _assign(explorer, "max_time_s", config.explorer, "max_time_s")
     _assign(explorer, "on_step_failure", config.explorer, "on_step_failure")
@@ -246,6 +267,36 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
 
     suite = _section(document, "suite", errors)
     _assign(suite, "command", config.suite, "command")
+
+
+def _apply_visual_judgment(
+    visual: dict[str, Any], config: CampaignConfig, errors: list[str]
+) -> None:
+    judgment = _section(visual, "judgment", errors, path="visual.judgment")
+    _assign(judgment, "enabled", config.visual.judgment, "enabled")
+    if "provider" in judgment:
+        _assign(judgment, "provider", config.visual.judgment, "provider")
+    elif "mode" in judgment:
+        _assign(judgment, "mode", config.visual.judgment, "provider")
+    _assign(judgment, "command_env", config.visual.judgment, "command_env")
+    _assign(judgment, "command", config.visual.judgment, "command")
+    _assign(judgment, "judgment", config.visual.judgment, "judgment")
+    _assign(judgment, "timeout_s", config.visual.judgment, "timeout_s")
+
+
+def _validate_visual_judgment(errors: list[str], config: CampaignConfig) -> None:
+    judgment = config.visual.judgment
+    _bool_field(errors, "visual.judgment.enabled", judgment.enabled)
+    _enum(
+        errors,
+        "visual.judgment.provider",
+        judgment.provider,
+        _VISUAL_JUDGMENT_PROVIDERS,
+    )
+    _nonempty_str(errors, "visual.judgment.command_env", judgment.command_env)
+    _optional_str(errors, "visual.judgment.command", judgment.command)
+    _optional_str(errors, "visual.judgment.judgment", judgment.judgment)
+    _number_above(errors, "visual.judgment.timeout_s", judgment.timeout_s, 0)
 
 
 def _apply_decision(
@@ -423,6 +474,38 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
         config.video.mode = overrides.video_mode  # type: ignore[assignment]
     if overrides.pr_mode is not None:
         config.pr.mode = overrides.pr_mode  # type: ignore[assignment]
+
+
+_LLM_PROVIDERS = ("anthropic", "openai", "fake")
+
+
+def llm_settings(config: CampaignConfig):
+    """The `[llm]` table as `LLMSettings`. Raises ValueError or TypeError on bad keys."""
+    from swarmqa.llm.settings import LLMSettings
+
+    return LLMSettings.from_mapping(config.llm.settings)
+
+
+def _validate_llm(errors: list[str], config: CampaignConfig) -> None:
+    if not isinstance(config.llm.enabled, bool):
+        errors.append("llm.enabled: must be true or false")
+    provider = config.llm.settings.get("provider", "anthropic")
+    if provider not in _LLM_PROVIDERS:
+        errors.append(f"llm.provider: must be one of {', '.join(_LLM_PROVIDERS)}")
+        return
+    try:
+        llm_settings(config)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"llm: {exc}")
+
+
+def _validate_checks(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.checks.config import checks_settings
+
+    try:
+        checks_settings(config)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"checks: {exc}")
 
 
 def _section(

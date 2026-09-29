@@ -257,11 +257,55 @@ def _run_scripted(shard, worker_id, work_dir, config, driver_factory, on_step) -
 
 def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step) -> WorkerResult:
     _emit(on_step, worker_id, shard, "explore")
+    if config.explorer.engine == "agent":
+        return _run_agent(shard, worker_id, work_dir, config, driver_factory)
     driver = _make_driver(config, work_dir, driver_factory)
     try:
         from swarmqa.explorer.exploratory import run_exploratory
 
         return run_exploratory(shard, driver, config, worker_id=worker_id, work_dir=work_dir)
+    finally:
+        _close_driver(driver)
+
+
+def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResult:
+    """Run the agent loop with the configured checks and, when `[llm]` is on, a model.
+
+    A provider that cannot be built (missing SDK extra, bad settings) ends the
+    shard as an error before the app is launched, so no half-configured run
+    spends time or money.
+    """
+    from swarmqa.checks import default_checks
+    from swarmqa.checks.config import checks_settings
+    from swarmqa.explorer.agent_loop import AgentLoopSettings, run_agent_loop
+
+    provider = None
+    if config.llm.enabled:
+        from swarmqa.config import llm_settings
+        from swarmqa.llm.settings import create_provider
+
+        try:
+            provider = create_provider(llm_settings(config))
+        except Exception as exc:
+            return make_error_result(shard, worker_id, f"llm: {exc}", config.backend)
+    checks = default_checks(checks_settings(config), provider)
+    if config.explorer.friction.enabled and shard.goal:
+        from swarmqa.checks.friction import FrictionCheck
+
+        checks.append(FrictionCheck.for_shard(shard, config.explorer.friction))
+    driver = _make_driver(config, work_dir, driver_factory)
+    try:
+        return run_agent_loop(
+            shard,
+            driver,
+            config,
+            provider=provider,
+            checks=checks,
+            settings=AgentLoopSettings.from_config(config),
+            work_dir=work_dir,
+            worker_id=worker_id,
+            backend=config.backend,
+        )
     finally:
         _close_driver(driver)
 
@@ -313,6 +357,7 @@ def _run_suite(shard, worker_id, work_dir, config, root: Path, on_step) -> Worke
 
 def _run_visual(shard, worker_id, work_dir, config, driver_factory, on_step) -> WorkerResult:
     from swarmqa.visual.diff import compare_screenshot
+    from swarmqa.visual.judge import apply_judgment
 
     names = list(shard.visual_names)
     baseline_dir = Path(config.visual.baseline_dir)
@@ -335,11 +380,25 @@ def _run_visual(shard, worker_id, work_dir, config, driver_factory, on_step) -> 
     _emit(on_step, worker_id, shard, "compare")
     driver = _make_driver(config, work_dir, driver_factory)
     findings: list[Finding] = []
+    judge_error: str | None = None
     try:
         driver.launch()
         for name in names:
             _emit(on_step, worker_id, shard, name)
             current = driver.screenshot(name)
+            if config.visual.judgment.enabled:
+                judged, judge_error = apply_judgment(
+                    current,
+                    config,
+                    worker_id=worker_id,
+                    shard_id=shard.id,
+                    backend=config.backend,
+                    error=judge_error,
+                    name=name,
+                )
+                if judged is not None:
+                    findings.append(judged)
+                    persist_finding(judged, _infer_campaign_root(work_dir))
             baseline = baseline_dir / f"{name}.png"
             diff_out = work_dir / f"{name}.diff.png"
             diff = compare_screenshot(
@@ -364,6 +423,7 @@ def _run_visual(shard, worker_id, work_dir, config, driver_factory, on_step) -> 
         started_at=started,
         finished_at=_now(),
         backend=config.backend,
+        error=judge_error,
     )
 
 
@@ -376,7 +436,8 @@ def _default_driver_factory(config: CampaignConfig) -> Callable:
     def factory(target, work_dir):
         from swarmqa.driver import create_driver
 
-        return create_driver(target, work_dir, video_mode=config.video.mode)
+        kind = None if config.driver.kind == "auto" else config.driver.kind
+        return create_driver(target, work_dir, kind=kind, video_mode=config.video.mode)
 
     return factory
 

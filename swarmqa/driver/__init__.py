@@ -3,7 +3,8 @@
 `kind="fake"` is the default off macOS so campaigns and tests have a session
 without Accessibility permission. `kind="macos"` defers to the macOS driver.
 `kind="ios"` defers to the iOS Simulator driver. `app.platform = "ios"` selects
-that driver even when `kind` is omitted.
+that driver even when `kind` is omitted. `kind="legacy"` picks the macOS or iOS
+driver from `app.platform`. `kind="runner"` is reserved for the XCUITest runner.
 """
 
 from __future__ import annotations
@@ -23,7 +24,11 @@ def create_driver(
     kind: str | None = None,
     video_mode: str = "always",
 ) -> AppDriver:
-    if kind:
+    if kind == "legacy":
+        selected = "ios" if target.platform == "ios" else "macos"
+    elif kind == "runner":
+        raise ValueError("driver kind runner is not available yet")
+    elif kind:
         selected = kind
     elif target.platform == "ios":
         selected = "ios"

@@ -10,3 +10,5 @@ reports/
 .aqa/
 *.app/
 .DS_Store
+aqa.local.toml
+.claude/worktrees/

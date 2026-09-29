@@ -8,6 +8,8 @@ dependencies = ["pillow"]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+anthropic = ["anthropic>=1.0"]
+openai = ["openai>=2.0"]
 
 [project.scripts]
 aqa = "swarmqa.cli:main"
@@ -20,7 +22,7 @@ build-backend = "setuptools.build_meta"
 include = ["swarmqa*"]
 
 [tool.setuptools.package-data]
-swarmqa = ["templates/*"]
+swarmqa = ["templates/*", "schemas/*.json", "llm/prompts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

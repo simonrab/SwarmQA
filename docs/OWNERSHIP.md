@@ -27,3 +27,20 @@ Do not edit `swarmqa/cli.py`, `swarmqa/errors.py`, `pyproject.toml`, or another 
 Construct `CampaignConfig` in tests with `swarmqa.testing.sample_config`. Call `swarmqa.config.load_config` only from C1 tests.
 
 Web targets (C11) are out of this delivery.
+
+## Build-plan waves
+
+From Phase 2 on, work packages from `docs/build-plan.md` replace chunks. Each WP owns only the paths below. The Phase 1 contract modules (`swarmqa/driver/protocol.py`, `swarmqa/driver/runner_schema.py`, `agents/swarm-runner/PROTOCOL.md`, `swarmqa/llm/protocol.py`, `swarmqa/devices/protocol.py`, `swarmqa/mcp/tools.py`, `swarmqa/checks/protocol.py`, `swarmqa/schemas/`, and the v2 types in `swarmqa/models.py`) are read-only for every WP; the lead changes them.
+
+| WP | Owns |
+| --- | --- |
+| A1 Swift runner | `agents/swarm-runner/**` except `PROTOCOL.md` |
+| A2 Planted-bug fixture | `fixtures/PlantedBugs/**` |
+| A3 Model providers | `swarmqa/llm/**` except `protocol.py`; `anthropic` and `openai` extras in `pyproject.toml`; `tests/test_llm*.py` |
+| A4 Device pools | `swarmqa/devices/**` except `protocol.py`; `swarmqa/backends/tart.py`; `tests/test_devices*.py`, `tests/test_backends.py` |
+| B1 Runner drivers | `swarmqa/driver/runner_client.py`, `ios_runner.py`, `macos_runner.py`; `tests/test_runner_driver*.py` |
+| B2 Explorer v2 | `swarmqa/explorer/agent_loop.py`, `swarmqa/explorer/screen_graph.py`; `tests/test_agent_loop*.py` |
+| B3 Checks | `swarmqa/checks/**` except `protocol.py`; `swarmqa/friction/emit.py` (KLM fix only); `swarmqa/intent/ingest.py` (Shard.tags only); `tests/test_checks*.py` |
+| B4 Evidence and findings v2 | `swarmqa/report/**`, `swarmqa/reporter/findings.py`; `tests/test_report*.py`, `tests/test_reporter.py` |
+
+Never add references to the private validation app to tracked files.

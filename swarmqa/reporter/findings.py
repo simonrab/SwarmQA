@@ -22,12 +22,18 @@ def fingerprint_for(kind: str, title: str, target: str = "") -> str:
 
 
 def write_finding(finding: Finding, campaign_dir: Path) -> Path:
-    """Write findings/<id>.md and return that path."""
+    """Write findings/<id>.md and return that path.
+
+    The built-in template is followed by a Triage section with the v2
+    fields: category, confidence, advisory, repro, clip, frames, and
+    suspected sources.
+    """
     destination = Path(campaign_dir) / "findings" / f"{finding.id}.md"
     destination.parent.mkdir(parents=True, exist_ok=True)
     text = render_issue(default_template(), finding)
     if not text.endswith("\n"):
         text += "\n"
+    text += "\n" + render_triage(finding)
     destination.write_text(text, encoding="utf-8")
     return destination
 
@@ -57,6 +63,27 @@ def render_issue(template: str, finding: Finding) -> str:
     return _PLACEHOLDER.sub(replace, template)
 
 
+def render_triage(finding: Finding) -> str:
+    """Markdown block with the findings-v2 triage fields."""
+    evidence = finding.evidence
+    lines = [
+        "## Triage",
+        "",
+        f"Category: {finding.category or ''}",
+        f"Confidence: {finding.confidence:.2f}",
+        f"Advisory: {'yes (model-only)' if finding.advisory else 'no'}",
+        f"Repro: {finding.repro or 'none'}",
+        f"Clip: {evidence.video_clip or 'none'}",
+    ]
+    if finding.environment.get("seen_before") == "true":
+        lines.append(f"Seen before: yes, first seen {finding.environment.get('first_seen', '')}".rstrip())
+    lines.extend(["", "Frames:", ""])
+    lines.extend([f"- {frame}" for frame in evidence.frames] or ["none"])
+    lines.extend(["", "Suspected sources:", ""])
+    lines.extend([f"- {source}" for source in finding.suspected_sources] or ["none"])
+    return "\n".join(lines) + "\n"
+
+
 def default_template() -> str:
     """Return the built-in issue template text."""
     path = Path(__file__).resolve().parents[1] / "templates" / "issue.md"
@@ -79,6 +106,13 @@ def _placeholder_values(finding: Finding) -> dict[str, str]:
         "build_id": "" if environment.get("version") in (None, "") else str(environment.get("version")),
         "fingerprint": finding.fingerprint or "",
         "details": finding.details or "",
+        "category": finding.category or "",
+        "confidence": f"{finding.confidence:.2f}",
+        "advisory": "true" if finding.advisory else "false",
+        "repro": finding.repro or "",
+        "video_clip": finding.evidence.video_clip or "",
+        "frames": "\n".join(finding.evidence.frames or []),
+        "suspected_sources": "\n".join(finding.suspected_sources or []),
     }
 
 
