@@ -10,7 +10,6 @@
 | --- | --- |
 | `backend` | `local` |
 | `workers` | `2` |
-| `pr.mode` | `off` |
 | `driver.kind` | `auto` |
 | `video.mode` | `always` |
 | `spend.currency` | `USD` |
@@ -19,9 +18,6 @@
 | `app.platform` | `macos` |
 | `budgets.on_budget` / `spend.overrun` | `drain` |
 | `fail_on` | `scripted` |
-| `pr.max_iterations` | `3` |
-| `pr.max_wall_time` | `1h` (3600 seconds) |
-| `pr.max_pr_updates` | `5` |
 | `explorer.max_steps` / `max_time_s` | `40` / `120` |
 | `explorer.decision.mode` | `heuristic` |
 | `explorer.friction.enabled` / `fail_ci` | `true` / `false` |
@@ -65,6 +61,10 @@ gui_worker_warn_threshold = 2
 [driver]
 kind = "auto" # auto | fake | legacy | runner
 
+[llm]
+enabled = false
+provider = "anthropic" # anthropic | openai | fake
+
 [local]
 isolation = "thread" # thread | subprocess
 
@@ -89,13 +89,6 @@ overrun = "drain" # drain | cancel
 
 [video]
 mode = "always" # always | on_failure | exploratory_only
-
-[pr]
-mode = "off" # off | human | autonomous
-max_iterations = 3
-max_wall_time = "1h"
-max_pr_updates = 5
-fix_command = ""
 
 [issues]
 github = false
@@ -125,6 +118,7 @@ exploratory = true
 visual = false
 
 [explorer]
+engine = "legacy" # legacy | agent
 max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue
@@ -179,12 +173,14 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.backend`, `workers`, `shard_strategy`, `fail_on`, `report_root`, `gui_worker_warn_threshold` | the same fields |
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
-| `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+| `[checks]` | `checks.settings`, read by `swarmqa.checks.config.checks_settings` |
+| `[llm]` | `llm.enabled`; every other key goes to `llm.settings` and is read by `swarmqa.config.llm_settings` |
+| `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
 | `[visual.judgment]` | `visual.judgment` (`VisualJudgmentConfig`) |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
 | `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 
-`max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional. The PR loop wall time defaults to one hour.
+`max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional.
 
 ### Maturity
 
@@ -204,7 +200,27 @@ Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (defa
 
 `driver.kind` picks the session driver. `auto` (default) uses `legacy` on a Mac or when `app.platform = "ios"`, and `fake` elsewhere. `fake` is a dry run that needs no Accessibility permission. `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver, chosen by `app.platform`. `runner` is reserved for the XCUITest runner and is rejected until it ships.
 
-`pr.mode` defaults to `off`: the campaign writes its report and no branch or PR is made. Set `human` or `autonomous` to opt into the fix loop.
+### Removed: `[pr]`
+
+The built-in fix and PR loop is gone. Coding agents (Claude Code, Codex) drive SwarmQA over MCP and open fix PRs themselves; see `docs/agents.md`. A config that still has a `[pr]` table loads, prints `WARNING: config: the [pr] table is deprecated and ignored ...` on stderr, and ignores its contents. `--pr-mode` is no longer accepted.
+
+### Explorer engine and checks
+
+`explorer.engine` picks the exploratory explorer. `legacy` (the default) is the original one. `agent` runs the observe-decide-act loop in `docs/explorer-v2.md` with the checks from `[checks]`, plus the model from `[llm]` when `llm.enabled = true`; without a model it uses the free heuristic and breadth-first crawling. A model provider that cannot be built (for example a missing `swarmqa[anthropic]` extra) ends the shard as an error before the app launches.
+
+`[checks]` takes `functional`, `layout`, `baseline` and `judge`. Each is on unless set to `false`, and a table overrides that check's settings (see `docs/checks.md`); an unknown check or setting fails validation. `layout.platform` defaults to `app.platform`. `baseline` defaults to on only when `visual.enabled`, using `visual.baseline_dir` and `visual.threshold`. When the model judge has no provider, `visual.judgment` (the command judge) is the fallback. When `explorer.friction.enabled` and the shard has a goal, the friction check also runs and reports once at the end of the session.
+
+With the agent engine and `[llm]` enabled, model spend counts toward `spend.max_spend` on every backend, including `local`.
+
+### Evidence
+
+Every campaign runs the evidence pipeline (`docs/evidence.md`) and writes `findings.json` (schema v2). Set `app.source_dir` to the app's source checkout to add suspected source files to each finding and to keep the cross-run store in `<source_dir>/.aqa/state/findings.json`; only a complete run, with no stopped, errored, resumed or `--intent`-filtered shards, marks missing findings as fixed.
+
+`aqa replay reports/<campaign>/findings/<id>.replay.json` replays one finding. It exits 1 when the finding still reproduces, 0 when it does not, and 2 when the replay could not run (for example the app did not launch).
+
+### Models
+
+`[llm]` is off by default, so no campaign calls a model or spends money until you set `enabled = true`. The other keys are `swarmqa.llm.settings.LLMSettings` fields (`provider`, `step_model`, `judge_model`, `max_cost`, `prices`, and so on); an unknown key or provider fails validation. See `docs/llm.md`.
 
 ### Video, coverage, issues
 
@@ -230,11 +246,10 @@ Flags on `aqa run` replace the file for that invocation. Omitted flags leave the
 | `--max-spend` | `spend.max_spend` |
 | `--spend-currency` | `spend.currency` |
 | `--video-mode` | `video.mode` |
-| `--pr-mode` | `pr.mode` |
 
 ```bash
 aqa run --config aqa.config.toml --app /path/to/MyApp.app --intent intents/smoke.md --intent intents/
-aqa run --backend cloud --workers 12 --max-wall-time 2h --max-spend 10 --spend-currency USD --video-mode on_failure --pr-mode human
+aqa run --backend cloud --workers 12 --max-wall-time 2h --max-spend 10 --spend-currency USD --video-mode on_failure
 ```
 
 An agent can invoke the same command. Raise `--workers` and `--max-spend` to test more. Lower `--max-spend` to stay inside a currency ceiling. `--backend vm` or `--backend cloud` isolates GUI sessions.
@@ -248,14 +263,12 @@ Every message starts with its field path. `load_config` collects them and raises
 | `backend` is `local`, `vm`, or `cloud` | `backend:` |
 | `workers` is an integer `>= 1` | `workers:` |
 | `video.mode` is `always`, `on_failure`, or `exploratory_only` | `video.mode:` |
-| `pr.mode` is `human` or `autonomous` | `pr.mode:` |
 | `app.maturity` is `prototype` or `shipped` | `app.maturity:` |
 | `app.platform` is `macos` or `ios` | `app.platform:` |
 | `visual.threshold` is from 0 to 1 inclusive | `visual.threshold:` |
 | `visual.judgment.provider` is `command` or `fake`; `timeout_s` is `> 0` | `visual.judgment.provider:`, `visual.judgment.timeout_s:` |
 | `spend.currency` is a non-empty string | `spend.currency:` |
 | cloud `spend.max_spend` is present and `> 0` | `spend.max_spend:` |
-| `pr.max_iterations` and `pr.max_pr_updates` are integers `>= 1` | `pr.max_iterations:`, `pr.max_pr_updates:` |
 | `explorer.max_steps` is an integer `>= 1` and `explorer.max_time_s` is `> 0` | `explorer.max_steps:`, `explorer.max_time_s:` |
 | `explorer.decision.mode` is `heuristic`, `system_one`, `computer_use`, or `cascade` | `explorer.decision.mode:` |
 | `explorer.decision.escalate_after` `>= 1`, `max_model_calls` `>= 0`, `model_timeout_s` `> 0` | `explorer.decision.escalate_after:`, … |
@@ -263,8 +276,8 @@ Every message starts with its field path. `load_config` collects them and raises
 | `computer_use.provider` is `command` or `fake`; `max_calls` `>= 0` | `explorer.decision.computer_use.*:` |
 | `explorer.friction.compare_to` is `gold` or `prior_p50`; `emit_threshold` 0..100 | `explorer.friction.*:` |
 
-The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, PR mode, platform, or decision mode. `app.simulators` is an array of non-empty strings. `app.simulator` is an optional string.
+The same style covers the other closed sets: `shard_strategy`, `budgets.on_budget`, `fail_on`, `local.isolation`, `spend.overrun`, and `explorer.on_step_failure`. Unknown names are field errors, including an unknown backend, video mode, platform, or decision mode. `app.simulators` is an array of non-empty strings. `app.simulator` is an optional string.
 
-A missing file, including a path that is a directory, raises `ConfigError(["config: not found"])`. Unreadable bytes and TOML syntax errors raise `ConfigError(["config: invalid toml"])`. A bad duration raises a field error on `budgets.max_wall_time_s` or `pr.max_wall_time_s` and includes the `parse_duration` reason. `90s` and `2h` load. `30` and `soon` fail. A table written as a scalar (`campaign = "local"`) is `campaign: must be a table`.
+A missing file, including a path that is a directory, raises `ConfigError(["config: not found"])`. Unreadable bytes and TOML syntax errors raise `ConfigError(["config: invalid toml"])`. A bad duration raises a field error on `budgets.max_wall_time_s` and includes the `parse_duration` reason. `90s` and `2h` load. `30` and `soon` fail. A table written as a scalar (`campaign = "local"`) is `campaign: must be a table`.
 
 `max_spend` on `backend = local` is valid. The loaded config still has that number.

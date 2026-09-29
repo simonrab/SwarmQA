@@ -201,6 +201,7 @@ def test_import_and_factory_work_on_linux(tmp_path: Path):
 
 def test_launch_on_non_darwin_tells_caller_to_use_fake_or_mac(tmp_path: Path):
     driver = MacOSDriver(make_app(tmp_path), tmp_path / "work", platform="linux")
+    assert driver.platform != "darwin"
     with pytest.raises(BackendUnavailable) as exc:
         driver.launch()
     message = str(exc.value)

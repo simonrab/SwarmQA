@@ -8,6 +8,7 @@ docs/CONTRACTS.md section C1 and docs/config.md.
 from __future__ import annotations
 
 import math
+import sys
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,6 @@ from swarmqa.util import parse_duration
 
 _BACKENDS = ("local", "vm", "cloud")
 _VIDEO_MODES = ("always", "on_failure", "exploratory_only")
-_PR_MODES = ("off", "human", "autonomous")
 _MATURITIES = ("prototype", "shipped")
 _PLATFORMS = ("macos", "ios")
 _SHARD_STRATEGIES = ("intent", "suite", "exploratory_seed")
@@ -26,6 +26,7 @@ _OVERRUN = ("drain", "cancel")
 _FAIL_ON = ("scripted", "any", "never")
 _ISOLATION = ("thread", "subprocess")
 _DRIVER_KINDS = ("auto", "fake", "legacy", "runner")
+_ENGINES = ("legacy", "agent")
 _STEP_FAILURE = ("stop", "continue")
 _DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
 _SYSTEM_ONE_PROVIDERS = ("http", "fake")
@@ -35,6 +36,28 @@ _FRICTION_COMPARE = ("gold", "prior_p50")
 
 _NOT_FOUND = "config: not found"
 _INVALID_TOML = "config: invalid toml"
+_PR_DEPRECATED = (
+    "WARNING: config: the [pr] table is deprecated and ignored. The built-in PR loop "
+    "was removed; coding agents open fix PRs through `aqa mcp` (see docs/agents.md). "
+    "Delete [pr] from your config to silence this warning."
+)
+
+
+DEFAULT_CONFIG = "aqa.config.toml"
+
+
+def load_config_or_defaults(path: str | Path | None) -> CampaignConfig:
+    """Load `path`, or defaults when no path was given and `aqa.config.toml` is absent.
+
+    An explicit path that does not exist raises `config: not found`, so a
+    mistyped `--config` never runs silently on defaults.
+    """
+    if path is None:
+        default = Path(DEFAULT_CONFIG)
+        if not default.is_file():
+            return CampaignConfig()
+        path = default
+    return load_config(Path(path))
 
 
 def load_config(path: Path | None, overrides: CliOverrides | None = None) -> CampaignConfig:
@@ -64,15 +87,15 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "backend", config.backend, _BACKENDS)
     _int_at_least(errors, "workers", config.workers, 1)
     _enum(errors, "video.mode", config.video.mode, _VIDEO_MODES)
-    _enum(errors, "pr.mode", config.pr.mode, _PR_MODES)
     _enum(errors, "app.maturity", config.app.maturity, _MATURITIES)
     _enum(errors, "app.platform", config.app.platform, _PLATFORMS)
     _number_between(errors, "visual.threshold", config.visual.threshold, 0, 1)
     _validate_visual_judgment(errors, config)
+    _validate_llm(errors, config)
+    _enum(errors, "explorer.engine", config.explorer.engine, _ENGINES)
+    _validate_checks(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
-    _int_at_least(errors, "pr.max_iterations", config.pr.max_iterations, 1)
-    _int_at_least(errors, "pr.max_pr_updates", config.pr.max_pr_updates, 1)
     _int_at_least(errors, "explorer.max_steps", config.explorer.max_steps, 1)
     _number_above(errors, "explorer.max_time_s", config.explorer.max_time_s, 0)
 
@@ -87,7 +110,6 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _validate_friction(errors, config)
 
     _optional_seconds(errors, "budgets.max_wall_time_s", config.budgets.max_wall_time_s)
-    _required_seconds(errors, "pr.max_wall_time_s", config.pr.max_wall_time_s)
     if config.budgets.max_worker_minutes is not None and not _is_number_at_least(
         config.budgets.max_worker_minutes, 0
     ):
@@ -107,7 +129,6 @@ def validate_config(config: CampaignConfig) -> list[str]:
         ("vm.image", config.vm.image),
         ("cloud.endpoint_env", config.cloud.endpoint_env),
         ("cloud.token_env", config.cloud.token_env),
-        ("pr.fix_command", config.pr.fix_command),
         ("issues.template", config.issues.template),
         ("issues.github_repo", config.issues.github_repo),
         ("issues.linear_team", config.issues.linear_team),
@@ -171,6 +192,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(app, "platform", config.app, "platform")
     _assign(app, "simulator", config.app, "simulator")
     _assign(app, "simulators", config.app, "simulators")
+    _assign(app, "source_dir", config.app, "source_dir")
 
     campaign = _section(document, "campaign", errors)
     _assign(campaign, "backend", config, "backend")
@@ -196,6 +218,13 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     driver = _section(document, "driver", errors)
     _assign(driver, "kind", config.driver, "kind")
 
+    config.checks.settings = dict(_section(document, "checks", errors))
+
+    llm = dict(_section(document, "llm", errors))
+    if "enabled" in llm:
+        config.llm.enabled = llm.pop("enabled")
+    config.llm.settings = llm
+
     vm = _section(document, "vm", errors)
     _assign(vm, "provider", config.vm, "provider")
     _assign(vm, "image", config.vm, "image")
@@ -218,12 +247,9 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     video = _section(document, "video", errors)
     _assign(video, "mode", config.video, "mode")
 
-    pr = _section(document, "pr", errors)
-    _assign(pr, "mode", config.pr, "mode")
-    _assign(pr, "max_iterations", config.pr, "max_iterations")
-    _assign(pr, "max_pr_updates", config.pr, "max_pr_updates")
-    _assign(pr, "fix_command", config.pr, "fix_command")
-    _apply_duration(pr, "max_wall_time", config.pr, "max_wall_time_s", "pr.max_wall_time_s", errors)
+    if "pr" in document:
+        # The PR loop was removed: coding agents open PRs over MCP now.
+        print(_PR_DEPRECATED, file=sys.stderr)
 
     issues = _section(document, "issues", errors)
     _assign(issues, "github", config.issues, "github")
@@ -246,6 +272,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(coverage, "visual", config.coverage, "visual")
 
     explorer = _section(document, "explorer", errors)
+    _assign(explorer, "engine", config.explorer, "engine")
     _assign(explorer, "max_steps", config.explorer, "max_steps")
     _assign(explorer, "max_time_s", config.explorer, "max_time_s")
     _assign(explorer, "on_step_failure", config.explorer, "on_step_failure")
@@ -459,8 +486,38 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
         config.spend.currency = overrides.spend_currency
     if overrides.video_mode is not None:
         config.video.mode = overrides.video_mode  # type: ignore[assignment]
-    if overrides.pr_mode is not None:
-        config.pr.mode = overrides.pr_mode  # type: ignore[assignment]
+
+
+_LLM_PROVIDERS = ("anthropic", "openai", "fake")
+
+
+def llm_settings(config: CampaignConfig):
+    """The `[llm]` table as `LLMSettings`. Raises ValueError or TypeError on bad keys."""
+    from swarmqa.llm.settings import LLMSettings
+
+    return LLMSettings.from_mapping(config.llm.settings)
+
+
+def _validate_llm(errors: list[str], config: CampaignConfig) -> None:
+    if not isinstance(config.llm.enabled, bool):
+        errors.append("llm.enabled: must be true or false")
+    provider = config.llm.settings.get("provider", "anthropic")
+    if provider not in _LLM_PROVIDERS:
+        errors.append(f"llm.provider: must be one of {', '.join(_LLM_PROVIDERS)}")
+        return
+    try:
+        llm_settings(config)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"llm: {exc}")
+
+
+def _validate_checks(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.checks.config import checks_settings
+
+    try:
+        checks_settings(config)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"checks: {exc}")
 
 
 def _section(
@@ -569,11 +626,6 @@ def _number_at_least(errors: list[str], field: str, value: object, minimum: floa
 
 def _optional_seconds(errors: list[str], field: str, value: object) -> None:
     if value is not None and not _is_number_at_least(value, 0):
-        errors.append(f"{field}: must be >= 0")
-
-
-def _required_seconds(errors: list[str], field: str, value: object) -> None:
-    if not _is_number_at_least(value, 0):
         errors.append(f"{field}: must be >= 0")
 
 

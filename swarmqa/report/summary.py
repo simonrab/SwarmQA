@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from swarmqa.models import CampaignResult, Finding
+from swarmqa.report.paths import repro_command, resolve
 from swarmqa.serialize import dump_json, to_plain
 
 # Pixel diffs and appearance judgments share the main findings list.
@@ -59,18 +60,29 @@ def render_summary_md(result: CampaignResult) -> str:
         lines.append(
             f"| {item.shard_name or item.shard_id} | {item.shard_kind or ''} | {item.status} | {evidence} |"
         )
-    lines.extend(["", "## Findings", ""])
+    report_dir = Path(result.report_dir) if result.report_dir else None
     findings = [
         finding
         for item in result.results
         for finding in item.findings
         if finding.kind != "friction_path"
     ]
-    if not findings:
+    firm = [finding for finding in findings if not finding.advisory]
+    advisory = [finding for finding in findings if finding.advisory]
+    lines.extend(["", "## Findings", ""])
+    if not firm:
         lines.append("No findings.")
-    else:
-        for finding in findings:
-            lines.append(_bullet(finding))
+    for finding in firm:
+        lines.append(_bullet(finding))
+        lines.extend(_detail_lines(finding, report_dir))
+    lines.extend(["", "## Advisory findings", ""])
+    lines.append("Reported only by a model or a soft heuristic; check before acting.")
+    lines.append("")
+    if not advisory:
+        lines.append("No advisory findings.")
+    for finding in advisory:
+        lines.append(_bullet(finding))
+        lines.extend(_detail_lines(finding, report_dir))
     friction = [
         finding
         for item in result.results
@@ -123,6 +135,26 @@ def _bullet(finding: Finding) -> str:
         f"(worker {workers}, backend {finding.backend}{kind}) "
         f"-> findings/{finding.id}.md"
     )
+
+
+def _detail_lines(finding: Finding, report_dir: Path | None) -> list[str]:
+    """Indented category, confidence, sources, clip, and repro lines under a bullet."""
+    head = f"category {finding.category}, confidence {finding.confidence:.2f}"
+    if finding.advisory:
+        head += ", advisory"
+    if finding.environment.get("regressed") == "true":
+        head += ", regressed"
+    elif finding.environment.get("seen_before") == "true":
+        head += f", seen before (first {finding.environment.get('first_seen', '?')})"
+    lines = [f"  - {head}"]
+    if finding.suspected_sources:
+        lines.append("  - suspected sources: " + ", ".join(f"`{source}`" for source in finding.suspected_sources))
+    if finding.evidence.video_clip:
+        lines.append(f"  - clip: {finding.evidence.video_clip}")
+    if finding.repro:
+        replay = resolve(report_dir, finding.repro) if report_dir is not None else Path(finding.repro)
+        lines.append(f"  - repro: `{repro_command(replay)}`")
+    return lines
 
 
 def _evidence(findings: list[Finding]) -> str:

@@ -404,3 +404,34 @@ def test_mcp_tool_stubs_have_resolvable_json_friendly_signatures():
         required = tool.__code__.co_argcount - len(tool.__defaults__ or ())
         with pytest.raises(NotImplementedError):
             tool(*["x"] * required)
+
+
+# Checks
+
+
+def test_check_issue_to_finding(tmp_path: Path):
+    from swarmqa.checks.protocol import CheckIssue
+
+    shot = tmp_path / "media" / "s.png"
+    shot.parent.mkdir()
+    shot.write_bytes(b"x")
+    issue = CheckIssue(
+        kind="unresponsive",
+        category="broken",
+        title="Save does nothing",
+        element=ElementQuery(role="button", label="Save", identifier="settings.save"),
+        screenshot=shot,
+        confidence=0.9,
+        check="dead_tap",
+    )
+    finding = issue.to_finding(
+        finding_id="f1", worker_id="w1", shard_id="s1", backend="local", steps=["tap Save"], media_root=tmp_path
+    )
+    assert finding.screenshots == ["media/s.png"]
+    assert finding.evidence.frames == ["media/s.png"]
+    assert finding.category == "broken" and finding.confidence == 0.9
+    assert "check: dead_tap" in finding.details
+    again = CheckIssue(kind="unresponsive", category="broken", title="save does nothing  ",
+                       element=ElementQuery(identifier="settings.save"))
+    assert again.to_finding(finding_id="f2", worker_id="w2", shard_id="s1", backend="local", steps=[]).fingerprint \
+        == finding.fingerprint

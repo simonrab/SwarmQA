@@ -23,6 +23,23 @@ platform = "macos"
 # fake = scripted dry run, no Accessibility permission. legacy = AppleScript (macos) or simctl/idb (ios).
 kind = "auto" # auto | fake | legacy | runner
 
+[llm]
+# Model calls for exploring and judging screens. Off by default: nothing spends
+# money until you set enabled = true. Needs the extra: uv tool install 'swarmqa[anthropic]'
+enabled = false
+# provider = "anthropic" # anthropic | openai | fake
+# max_cost = 5.0       # stop model calls past this many `currency` units
+# step_model = ""      # blank = the provider's default (see docs/llm.md)
+# judge_model = ""
+
+[checks]
+# Used by explorer.engine = "agent". Each check is on unless set to false;
+# a table overrides its settings. See docs/checks.md.
+# functional = true
+# layout = { contrast = false }
+# baseline = false   # on by default only when [visual] enabled = true
+# judge = true       # model judge; needs [llm] enabled = true
+
 [campaign]
 # local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter
 backend = "local"
@@ -68,14 +85,6 @@ overrun = "drain" # drain | cancel
 # always | on_failure | exploratory_only
 mode = "always"
 
-[pr]
-# off = report only; human = draft PR and stop; autonomous = fix, retest, repeat until green or cap
-mode = "off" # off | human | autonomous
-max_iterations = 3
-max_wall_time = "1h"
-max_pr_updates = 5
-# fix_command = ""  # or set AQA_FIX_COMMAND
-
 [issues]
 github = false
 linear = false
@@ -106,6 +115,9 @@ exploratory = true
 visual = false
 
 [explorer]
+# legacy = the original explorer; agent = observe-decide-act loop with [checks]
+# (and a model when [llm] enabled = true). See docs/explorer-v2.md.
+engine = "legacy" # legacy | agent
 max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue

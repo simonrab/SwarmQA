@@ -81,7 +81,10 @@ For each finding the runner writes:
 - `findings/<id>.replay.json` via `write_replay`
 
 The markdown is the built-in issue template filled from the finding (title,
-severity, steps, evidence paths, worker id, backend, build version). The replay
+severity, steps, evidence paths, worker id, backend, build version),
+followed by a `## Triage` section with the findings-v2 fields (category,
+confidence, advisory, repro, clip, frames, suspected sources). See
+`docs/evidence.md` for how those are filled. The replay
 file is a version-1 flow (`version`, `name`, `steps`) of the actions that
 actually ran, including the failing one. Null fields are omitted so the
 document matches `docs/flow.schema.json`. A launch failure replays a single
@@ -101,9 +104,12 @@ written. Missing values become empty strings.
 
 `{{title}}` `{{severity}}` `{{kind}}` `{{steps}}` `{{video}}` `{{screenshots}}`
 `{{replay_json}}` `{{environment}}` `{{worker_id}}` `{{backend}}` `{{build_id}}`
-`{{fingerprint}}` `{{details}}`
+`{{fingerprint}}` `{{details}}` `{{category}}` `{{confidence}}` `{{advisory}}`
+`{{repro}}` `{{video_clip}}` `{{frames}}` `{{suspected_sources}}`
 
-`steps` and `screenshots` are newline-joined. `environment` is `key: value`
+`steps`, `screenshots`, `frames`, and `suspected_sources` are
+newline-joined. `confidence` has two decimals; `advisory` is `true` or
+`false`. `environment` is `key: value`
 lines in insertion order. `build_id` is `environment["version"]` or empty.
 `default_template()` reads `swarmqa/templates/issue.md`. A missing
 `config.issues.template` path falls back to that file.

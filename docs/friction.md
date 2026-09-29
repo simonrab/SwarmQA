@@ -68,8 +68,10 @@ score =
   5  * clip(rage_events / 2, 0, 1)
 ```
 
-`step_ratio = steps_observed / steps_gold`. When `klm = true`, `klm_ratio`
-tracks the same length ratio as a simple operator-act proxy. Session counters
+`step_ratio = steps_observed / steps_gold`. When `klm = true`, `klm_ratio` is
+the average Keystroke-Level Model operator time per step against the gold
+path (`klm_ratio_for`), so extra steps are not scored twice; with no KLM
+estimate it is 1.0. Session counters
 also track unique state hashes (window labels + sorted actionable
 role/label/enabled), revisits, rage clicks (same target ≥3× with no state
 change), dead clicks, stall length, choice entropy, and actionable counts.

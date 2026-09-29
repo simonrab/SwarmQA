@@ -17,7 +17,7 @@ Pull requests target `cursor/aqa-foundation-d827`.
 | C12 | `swarmqa/decision/` (`protocol`, `heuristic`, `system_one`, `cascade`, `cache`, `providers`, …), `tests/test_decision.py`, `docs/decision.md`; extends C5 observe→decide→act |
 | C13 | `swarmqa/friction/` (`session`, `score`, `gold`, `emit`, `personas`), `tests/test_friction.py`, `docs/friction.md`; hooks in C5 exploratory; extends report summary + `[explorer.friction]` config |
 | C6 | `swarmqa/visual/diff.py`, `swarmqa/visual/baseline.py`, `tests/test_visual.py`, `docs/visual.md` |
-| C7 | `swarmqa/prloop/loop.py`, `tests/test_prloop.py`, `docs/agents.md` |
+| C7 | Removed in WP-C3: coding agents open fix PRs through `aqa mcp` |
 | C8 | `swarmqa/orchestrator/campaign.py`, `swarmqa/orchestrator/status.py`, `swarmqa/backends/local.py`, `swarmqa/worker.py`, `tests/test_orchestrator.py`, `docs/orchestrator.md` |
 | C9 | `swarmqa/backends/tart.py`, `swarmqa/backends/cloud.py`, `tests/test_backends.py`, `docs/backends.md` |
 | C10 | `swarmqa/driver/ios.py`, `tests/test_ios_driver.py`, `docs/driver.md`; `app.platform` / `app.simulator` / `app.simulators` on `AppTarget` |
@@ -30,7 +30,7 @@ Web targets (C11) are out of this delivery.
 
 ## Build-plan waves
 
-From Phase 2 on, work packages from `docs/build-plan.md` replace chunks. Each WP owns only the paths below. The Phase 1 contract modules (`swarmqa/driver/protocol.py`, `swarmqa/driver/runner_schema.py`, `agents/swarm-runner/PROTOCOL.md`, `swarmqa/llm/protocol.py`, `swarmqa/devices/protocol.py`, `swarmqa/mcp/tools.py`, `swarmqa/schemas/`, and the v2 types in `swarmqa/models.py`) are read-only for every WP; the lead changes them.
+From Phase 2 on, work packages from `docs/build-plan.md` replace chunks. Each WP owns only the paths below. The Phase 1 contract modules (`swarmqa/driver/protocol.py`, `swarmqa/driver/runner_schema.py`, `agents/swarm-runner/PROTOCOL.md`, `swarmqa/llm/protocol.py`, `swarmqa/devices/protocol.py`, `swarmqa/mcp/tools.py`, `swarmqa/checks/protocol.py`, `swarmqa/schemas/`, and the v2 types in `swarmqa/models.py`) are read-only for every WP; the lead changes them.
 
 | WP | Owns |
 | --- | --- |
@@ -40,7 +40,13 @@ From Phase 2 on, work packages from `docs/build-plan.md` replace chunks. Each WP
 | A4 Device pools | `swarmqa/devices/**` except `protocol.py`; `swarmqa/backends/tart.py`; `tests/test_devices*.py`, `tests/test_backends.py` |
 | B1 Runner drivers | `swarmqa/driver/runner_client.py`, `ios_runner.py`, `macos_runner.py`; `tests/test_runner_driver*.py` |
 | B2 Explorer v2 | `swarmqa/explorer/agent_loop.py`, `swarmqa/explorer/screen_graph.py`; `tests/test_agent_loop*.py` |
-| B3 Checks | `swarmqa/checks/**`; `tests/test_checks*.py` |
+| B3 Checks | `swarmqa/checks/**` except `protocol.py`; `swarmqa/friction/emit.py` (KLM fix only); `swarmqa/intent/ingest.py` (Shard.tags only); `tests/test_checks*.py` |
 | B4 Evidence and findings v2 | `swarmqa/report/**`, `swarmqa/reporter/findings.py`; `tests/test_report*.py`, `tests/test_reporter.py` |
+
+| C1 MCP server | `swarmqa/mcp/**` (bodies of `tools.py`, not its signatures); the `mcp` extra in `pyproject.toml`; `tests/test_mcp*.py`; `docs/mcp.md` |
+| C2 verify_fix | `swarmqa/verify/**` (bodies of `__init__.py`, not its signatures); `tests/test_verify*.py`; `docs/verify.md` |
+| C3 Integrations and cleanup | `integrations/**`; `swarmqa/doctor.py`; `swarmqa/cli.py`; removing `swarmqa/prloop/`, `tests/test_prloop.py` and the `[pr]` config; `swarmqa/reporter/issues.py` behind `aqa file-issues`; `README.md`; `docs/agents.md` |
+
+The lead adds the `aqa mcp` and `aqa verify` commands to `cli.py` after C1 and C2 land.
 
 Never add references to the private validation app to tracked files.

@@ -313,6 +313,7 @@ def test_visual_missing_baseline_fails_shard(tmp_path: Path):
     config = sample_config(app)
     config.report_root = str(tmp_path / "reports")
     config.workers = 1
+    # The fake driver on every host: on a Mac, "auto" would pick the real one.
     config.driver.kind = "fake"
     shard = _shard("s-vis", kind="visual", visual_names=["home"])
     result = run_campaign(config, [shard])

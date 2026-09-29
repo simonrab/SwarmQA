@@ -367,7 +367,8 @@ class TartBackend:
         result = self._result_from_disk(shard, worker_id, campaign, started_at)
         elapsed = timer.minutes()
         result.worker_minutes = elapsed
-        result.estimated_cost = self.cost_per_worker_minute() * elapsed
+        # Model spend reported by the worker, plus machine time.
+        result.estimated_cost = (result.estimated_cost or 0.0) + self.cost_per_worker_minute() * elapsed
         result.backend = "vm"
         result.finished_at = result.finished_at or _now()
         return result

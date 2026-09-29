@@ -78,11 +78,21 @@ def metrics_for(
     *,
     klm: bool = True,
     wizard_discount: bool = False,
+    klm_ratio: float | None = None,
 ) -> dict[str, float | int | str | bool]:
+    """Session metrics and the friction score.
+
+    ``klm_ratio`` is the per-step KLM operator cost relative to gold (see
+    ``swarmqa.checks.friction.klm_ratio_for``). It must not be derived from
+    the step count: path length is already scored through ``step_ratio``.
+    When the caller has no operator estimate (or ``klm`` is off) the KLM
+    term is neutral (1.0).
+    """
     steps_gold = max(1, gold.steps_gold)
     step_ratio = session.steps_observed / float(steps_gold)
-    # Simple KLM proxy: each observed step ≈ one operator act; ratio tracks path length.
-    klm_ratio = step_ratio if klm else 1.0
+    # KLM measures operator cost per step, not path length: using step_ratio
+    # here scored the same extra steps twice (35 + 10 points).
+    klm_ratio = float(klm_ratio) if (klm and klm_ratio is not None) else 1.0
     backtrack_rate = session.backtrack_rate
     if wizard_discount:
         # Field-to-field wizard transitions backtrack often; discount for gates/score.
@@ -131,6 +141,7 @@ def gates_pass(
     intent_id: str = "",
     locus: str = "",
     tags: list[str] | None = None,
+    klm_ratio: float | None = None,
 ) -> bool:
     """Return True when an advisory friction finding should be emitted."""
     if not config.enabled:
@@ -141,7 +152,9 @@ def gates_pass(
         return False
 
     wizard = suggests_wizard(intent_id=intent_id, locus=locus, tags=tags)
-    metrics = metrics_for(session, gold, klm=config.klm, wizard_discount=wizard)
+    metrics = metrics_for(
+        session, gold, klm=config.klm, wizard_discount=wizard, klm_ratio=klm_ratio
+    )
     resolved_score = score if score is not None else int(metrics["score"])
     resolved_ratio = step_ratio if step_ratio is not None else float(metrics["step_ratio"])
     extra_steps = session.steps_observed - gold.steps_gold
@@ -202,12 +215,15 @@ def build_friction_finding(
     locus: str = "",
     tags: list[str] | None = None,
     allow_ratio: float | None = None,
+    klm_ratio: float | None = None,
     fingerprint_fn,
 ) -> Finding | None:
     """Construct a ``friction_path`` finding when gates pass, else ``None``."""
     goal_directed = bool(intent_id or locus or steps)
     wizard = suggests_wizard(intent_id=intent_id, locus=locus, tags=tags)
-    metrics = metrics_for(session, gold, klm=config.klm, wizard_discount=wizard)
+    metrics = metrics_for(
+        session, gold, klm=config.klm, wizard_discount=wizard, klm_ratio=klm_ratio
+    )
     score = int(metrics["score"])
     step_ratio = float(metrics["step_ratio"])
     if allow_ratio is None:
@@ -223,6 +239,7 @@ def build_friction_finding(
         intent_id=intent_id,
         locus=locus,
         tags=tags,
+        klm_ratio=klm_ratio,
     ):
         return None
 
@@ -271,6 +288,7 @@ def maybe_emit_friction(
     locus: str = "",
     tags: list[str] | None = None,
     allow_ratio: float | None = None,
+    klm_ratio: float | None = None,
     fingerprint_fn,
 ) -> Finding | None:
     if session is None or not config.enabled:
@@ -297,6 +315,7 @@ def maybe_emit_friction(
         locus=locus,
         tags=tags,
         allow_ratio=allow_ratio,
+        klm_ratio=klm_ratio,
         fingerprint_fn=fingerprint_fn,
     )
 

@@ -7,10 +7,9 @@ when every chunk needs the field; otherwise keep chunk-local types local.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 BackendName = Literal["local", "vm", "cloud"]
-PrMode = Literal["off", "human", "autonomous"]
 VideoMode = Literal["always", "on_failure", "exploratory_only"]
 OverrunPolicy = Literal["drain", "cancel"]
 Maturity = Literal["prototype", "shipped"]
@@ -31,6 +30,7 @@ FindingKind = Literal[
     "launch",
     "friction_path",
 ]
+ExplorerEngine = Literal["legacy", "agent"]
 FindingCategory = Literal["broken", "visual", "confusing", "crash"]
 FINDINGS_SCHEMA_VERSION = 2
 DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
@@ -49,6 +49,8 @@ ActionType = Literal[
     "assert",
     "launch",
     "relaunch",
+    "tap_point",
+    "swipe",
 ]
 StepFailurePolicy = Literal["stop", "continue"]
 FailOn = Literal["scripted", "any", "never"]
@@ -68,6 +70,9 @@ class AppTarget:
     platform: TargetPlatform = "macos"
     simulator: str | None = None
     simulators: list[str] = field(default_factory=list)
+    # The app's source checkout: enables suspected-source lookup and the
+    # cross-run findings store in <source_dir>/.aqa/state/.
+    source_dir: str | None = None
 
 
 @dataclass
@@ -82,15 +87,6 @@ class SpendConfig:
     max_spend: float | None = None
     currency: str = "USD"
     overrun: OverrunPolicy = "drain"
-
-
-@dataclass
-class PrConfig:
-    mode: PrMode = "off"
-    max_iterations: int = 3
-    max_wall_time_s: float = 3600
-    max_pr_updates: int = 5
-    fix_command: str | None = None
 
 
 @dataclass
@@ -191,6 +187,10 @@ class FrictionConfig:
 
 @dataclass
 class ExplorerConfig:
+    """`engine = "agent"` runs the observe-decide-act loop (explorer/agent_loop.py)
+    with the `[checks]` set; `legacy` keeps the original exploratory explorer."""
+
+    engine: ExplorerEngine = "legacy"
     max_steps: int = 40
     max_time_s: float = 120
     on_step_failure: StepFailurePolicy = "stop"
@@ -240,6 +240,30 @@ class DriverConfig:
 
 
 @dataclass
+class LLMConfig:
+    """The `[llm]` table. Off unless `enabled`, so nothing spends money by default.
+
+    `settings` holds the rest of the table as written; `swarmqa.config.llm_settings`
+    turns it into `swarmqa.llm.settings.LLMSettings` (kept raw here so this
+    module does not import the llm package).
+    """
+
+    enabled: bool = False
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ChecksConfig:
+    """The `[checks]` table, kept raw; `swarmqa.checks.config.checks_settings`
+    builds `ChecksSettings` from it. Sub-tables `functional`, `layout`,
+    `baseline` and `judge` take that check's settings, or `false` to turn it
+    off. Used by `explorer.engine = "agent"`.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class LocalConfig:
     isolation: LocalIsolation = "thread"
 
@@ -255,7 +279,6 @@ class CampaignConfig:
     shard_strategy: ShardStrategy = "intent"
     budgets: CampaignBudgets = field(default_factory=CampaignBudgets)
     spend: SpendConfig = field(default_factory=SpendConfig)
-    pr: PrConfig = field(default_factory=PrConfig)
     video: VideoConfig = field(default_factory=VideoConfig)
     issues: IssuesConfig = field(default_factory=IssuesConfig)
     visual: VisualConfig = field(default_factory=VisualConfig)
@@ -266,6 +289,8 @@ class CampaignConfig:
     vm: VmConfig = field(default_factory=VmConfig)
     local: LocalConfig = field(default_factory=LocalConfig)
     driver: DriverConfig = field(default_factory=DriverConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    checks: ChecksConfig = field(default_factory=ChecksConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2
@@ -283,7 +308,6 @@ class CliOverrides:
     max_spend: float | None = None
     spend_currency: str | None = None
     video_mode: str | None = None
-    pr_mode: str | None = None
     config_path: str | None = None
 
 
@@ -291,6 +315,9 @@ class CliOverrides:
 class RunOptions:
     resume_campaign_id: str | None = None
     reset_spend: bool = False
+    # A run limited to some intents (e.g. `--intent`). It never marks
+    # findings from the rest as fixed in the cross-run store.
+    partial: bool = False
 
 
 @dataclass
@@ -325,6 +352,8 @@ class Action:
     timeout_s: float | None = None
     name: str | None = None
     exists: bool | None = None
+    point: tuple[float, float] | None = None
+    end: tuple[float, float] | None = None
 
 
 @dataclass
@@ -507,27 +536,6 @@ class IssueRef:
     identifier: str
     url: str | None = None
     finding_id: str = ""
-
-
-@dataclass
-class FixProposal:
-    branch: str
-    title: str
-    body: str
-    commit_message: str
-    changed_files: list[str] = field(default_factory=list)
-
-
-@dataclass
-class FixLoopResult:
-    mode: PrMode
-    iterations: int
-    pr_updates: int
-    branch: str | None = None
-    pr_url: str | None = None
-    stop_reason: str | None = None
-    remaining_finding_ids: list[str] = field(default_factory=list)
-    draft_path: str | None = None
 
 
 @dataclass

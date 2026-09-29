@@ -24,13 +24,19 @@
         "value": {"type": "string"}
       }
     },
+    "point": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2
+    },
     "step": {
       "type": "object",
       "required": ["action"],
       "additionalProperties": false,
       "properties": {
         "action": {
-          "enum": ["click", "type", "key", "scroll", "menu", "wait", "screenshot", "assert", "launch", "relaunch"]
+          "enum": ["click", "type", "key", "scroll", "menu", "wait", "screenshot", "assert", "launch", "relaunch", "tap_point", "swipe"]
         },
         "target": {"$ref": "#/$defs/query"},
         "text": {"type": "string"},
@@ -39,8 +45,14 @@
         "path": {"type": "array", "items": {"type": "string"}},
         "timeout_s": {"type": "number"},
         "name": {"type": "string"},
-        "exists": {"type": "boolean"}
-      }
+        "exists": {"type": "boolean"},
+        "point": {"$ref": "#/$defs/point", "description": "tap_point and swipe start, in points"},
+        "end": {"$ref": "#/$defs/point", "description": "swipe end, in points"}
+      },
+      "allOf": [
+        {"if": {"properties": {"action": {"enum": ["tap_point", "swipe"]}}}, "then": {"required": ["point"]}},
+        {"if": {"properties": {"action": {"const": "swipe"}}}, "then": {"required": ["end"]}}
+      ]
     }
   }
 }
