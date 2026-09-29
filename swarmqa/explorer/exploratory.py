@@ -52,6 +52,7 @@ from swarmqa.models import (
 )
 from swarmqa.serialize import dump_json
 from swarmqa.video_policy import keep_video, should_start_video
+from swarmqa.visual.judge import apply_judgment
 
 _TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "issue.md"
 
@@ -235,6 +236,7 @@ class _Session:
         self.video_started = False
         self.abort = False
         self.fatal: str | None = None
+        self.judge_note: str | None = None
         self._reported_missing: set[str] = set()
         self._tried_clicks: set[str] = set()
         self._tried_menus: set[tuple[str, ...]] = set()
@@ -304,7 +306,7 @@ class _Session:
             steps=list(self.steps),
             started_at=started_at,
             finished_at=_iso_now(),
-            error=self.fatal,
+            error=self.fatal or self.judge_note,
             worker_minutes=elapsed / 60.0,
             backend=self.config.backend,
             shard_name=self.shard.name,
@@ -718,7 +720,29 @@ class _Session:
         self.narrative.append(f"screenshot {name}")
         self.performed.append({"action": "screenshot", "name": name})
         self._note("screenshot", "passed", name)
-        return _relative(path, self.campaign)
+        public = _relative(path, self.campaign)
+        if self.config.visual.judgment.enabled:
+            self._judge_screenshot(path, public, name)
+        return public
+
+    def _judge_screenshot(self, path: Path, public: str, name: str) -> None:
+        finding, noted = apply_judgment(
+            path,
+            self.config,
+            worker_id=self.worker_id,
+            shard_id=self.shard.id,
+            backend=self.config.backend,
+            error=self.judge_note,
+            name=name,
+            evidence=public,
+            steps=list(self.narrative),
+            environment=dict(self.environment),
+        )
+        self.judge_note = noted
+        if finding is None:
+            return
+        self.findings.append(finding)
+        self.replays.append([dict(step) for step in self.performed])
 
     def _capture_environment(self) -> None:
         try:

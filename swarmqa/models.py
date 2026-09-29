@@ -24,6 +24,7 @@ FindingKind = Literal[
     "assertion",
     "missing_control",
     "visual",
+    "visual_judgment",
     "suite_failure",
     "unresponsive",
     "error_state",
@@ -33,6 +34,7 @@ FindingKind = Literal[
 DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
 SystemOneProvider = Literal["http", "fake"]
 ComputerUseProvider = Literal["command", "fake"]
+VisualJudgmentProvider = Literal["command", "fake"]
 FrictionCompareTo = Literal["gold", "prior_p50"]
 ActionType = Literal[
     "click",
@@ -106,10 +108,31 @@ class IssuesConfig:
 
 
 @dataclass
+class VisualJudgmentConfig:
+    """Appearance check for one saved screenshot. Off unless ``enabled``.
+
+    ``provider="command"`` runs the shell command from the environment
+    variable named by ``command_env`` (default ``AQA_VISUAL_JUDGE_COMMAND``),
+    or from ``command`` when that variable is unset. The PNG path is the
+    last argument. ``provider="fake"`` returns ``judgment`` and does not
+    spawn a process. An empty ``judgment``, or the text ``fine``, means
+    the screen is fine.
+    """
+
+    enabled: bool = False
+    provider: VisualJudgmentProvider = "command"
+    command_env: str = "AQA_VISUAL_JUDGE_COMMAND"
+    command: str = ""
+    judgment: str = ""
+    timeout_s: float = 60.0
+
+
+@dataclass
 class VisualConfig:
     enabled: bool = False
     baseline_dir: str = "baselines"
     threshold: float = 0.01
+    judgment: VisualJudgmentConfig = field(default_factory=VisualJudgmentConfig)
 
 
 @dataclass

@@ -26,6 +26,7 @@ from swarmqa.models import (
 )
 from swarmqa.reporter.findings import fingerprint_for, write_finding, write_replay
 from swarmqa.video_policy import keep_video, should_start_video
+from swarmqa.visual.judge import apply_judgment
 
 
 class _AssertionFailed(Exception):
@@ -59,6 +60,7 @@ def run_scripted(
     steps: list[StepResult] = []
     replays: dict[str, list[dict]] = {}
     status = "passed"
+    judge_error: str | None = None
     video_started = False
     video_path: Path | None = None
 
@@ -85,7 +87,7 @@ def run_scripted(
                     video_started = True
                 except Exception:
                     video_started = False
-            status = _run_actions(
+            status, judge_error = _run_actions(
                 shard,
                 driver,
                 config,
@@ -129,7 +131,7 @@ def run_scripted(
         steps=steps,
         started_at=started_at,
         finished_at=_timestamp(),
-        error=None,
+        error=judge_error,
         backend=config.backend,
         shard_name=shard.name,
         shard_kind=shard.kind,
@@ -149,21 +151,41 @@ def _run_actions(
     findings: list[Finding],
     steps: list[StepResult],
     replays: dict[str, list[dict]],
-) -> str:
+) -> tuple[str, str | None]:
     executed: list[Action] = []
     descriptions: list[str] = []
     screenshots: list[Path] = []
     status = "passed"
+    judge_error: str | None = None
     stop = config.explorer.on_step_failure != "continue"
     for index, action in enumerate(shard.actions):
         description = _describe(action, index)
         try:
             shot = _execute(driver, action, index)
+            owned: Path | None = None
             if shot is not None:
-                screenshots.append(_own_media(shot, work_dir))
+                owned = _own_media(shot, work_dir)
+                screenshots.append(owned)
             executed.append(action)
             descriptions.append(description)
             steps.append(StepResult(index=index, action=action.action, status="passed", message=description))
+            if owned is not None and config.visual.judgment.enabled:
+                judged, judge_error = apply_judgment(
+                    owned,
+                    config,
+                    worker_id=worker_id,
+                    shard_id=shard.id,
+                    backend=config.backend,
+                    error=judge_error,
+                    name=_screenshot_name(action, index),
+                    evidence=_public_path(owned, campaign_dir, relative),
+                    steps=list(descriptions),
+                    environment=environment,
+                )
+                if judged is not None:
+                    findings.append(judged)
+                    replays[judged.id] = [_action_dict(item) for item in executed]
+                    status = "failed"
         except _STEP_FAILURES as exc:
             executed.append(action)
             descriptions.append(description)
@@ -196,7 +218,7 @@ def _run_actions(
             if stop:
                 _skip_rest(shard.actions, index, steps)
                 break
-    return status
+    return status, judge_error
 
 
 def _record_launch_failure(

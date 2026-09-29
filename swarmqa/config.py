@@ -30,6 +30,7 @@ _STEP_FAILURE = ("stop", "continue")
 _DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
 _SYSTEM_ONE_PROVIDERS = ("http", "fake")
 _COMPUTER_USE_PROVIDERS = ("command", "fake")
+_VISUAL_JUDGMENT_PROVIDERS = ("command", "fake")
 _FRICTION_COMPARE = ("gold", "prior_p50")
 
 _NOT_FOUND = "config: not found"
@@ -67,6 +68,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "app.maturity", config.app.maturity, _MATURITIES)
     _enum(errors, "app.platform", config.app.platform, _PLATFORMS)
     _number_between(errors, "visual.threshold", config.visual.threshold, 0, 1)
+    _validate_visual_judgment(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "pr.max_iterations", config.pr.max_iterations, 1)
@@ -236,6 +238,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(visual, "enabled", config.visual, "enabled")
     _assign(visual, "baseline_dir", config.visual, "baseline_dir")
     _assign(visual, "threshold", config.visual, "threshold")
+    _apply_visual_judgment(visual, config, errors)
 
     coverage = _section(document, "coverage", errors)
     _assign(coverage, "scripted", config.coverage, "scripted")
@@ -251,6 +254,36 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
 
     suite = _section(document, "suite", errors)
     _assign(suite, "command", config.suite, "command")
+
+
+def _apply_visual_judgment(
+    visual: dict[str, Any], config: CampaignConfig, errors: list[str]
+) -> None:
+    judgment = _section(visual, "judgment", errors, path="visual.judgment")
+    _assign(judgment, "enabled", config.visual.judgment, "enabled")
+    if "provider" in judgment:
+        _assign(judgment, "provider", config.visual.judgment, "provider")
+    elif "mode" in judgment:
+        _assign(judgment, "mode", config.visual.judgment, "provider")
+    _assign(judgment, "command_env", config.visual.judgment, "command_env")
+    _assign(judgment, "command", config.visual.judgment, "command")
+    _assign(judgment, "judgment", config.visual.judgment, "judgment")
+    _assign(judgment, "timeout_s", config.visual.judgment, "timeout_s")
+
+
+def _validate_visual_judgment(errors: list[str], config: CampaignConfig) -> None:
+    judgment = config.visual.judgment
+    _bool_field(errors, "visual.judgment.enabled", judgment.enabled)
+    _enum(
+        errors,
+        "visual.judgment.provider",
+        judgment.provider,
+        _VISUAL_JUDGMENT_PROVIDERS,
+    )
+    _nonempty_str(errors, "visual.judgment.command_env", judgment.command_env)
+    _optional_str(errors, "visual.judgment.command", judgment.command)
+    _optional_str(errors, "visual.judgment.judgment", judgment.judgment)
+    _number_above(errors, "visual.judgment.timeout_s", judgment.timeout_s, 0)
 
 
 def _apply_decision(

@@ -90,6 +90,16 @@ enabled = false
 baseline_dir = "baselines"
 threshold = 0.01
 
+# Appearance judgment. Off by default. Pixel diff does not call this.
+# Claude Code or Codex can be the command. It receives the PNG path and
+# prints {"ok": true} or {"ok": false, "judgment": "what looks wrong"}.
+[visual.judgment]
+enabled = false
+provider = "command" # command | fake
+command_env = "AQA_VISUAL_JUDGE_COMMAND"
+# command = ""  # used when AQA_VISUAL_JUDGE_COMMAND is unset
+# judgment = ""  # canned text for provider = "fake"
+
 [coverage]
 scripted = true
 exploratory = true

@@ -26,6 +26,8 @@
 | `explorer.decision.mode` | `heuristic` |
 | `explorer.friction.enabled` / `fail_ci` | `true` / `false` |
 | `visual.threshold` | `0.01` |
+| `visual.judgment.enabled` | `false` |
+| `visual.judgment.provider` | `command` |
 
 `spend.max_spend` stays unset until the file or `--max-spend` sets it. The template comment suggests `10` USD when you turn on `backend = cloud`. Set that cap yourself. A cloud campaign without a positive cap fails fast.
 
@@ -109,6 +111,14 @@ enabled = false
 baseline_dir = "baselines"
 threshold = 0.01
 
+[visual.judgment]
+enabled = false
+provider = "command" # command | fake. `mode` is accepted as an alias.
+command_env = "AQA_VISUAL_JUDGE_COMMAND"
+# command = ""  # used when the env var is unset
+# judgment = ""  # canned text for provider = "fake"; empty or "fine" means the screen is fine
+timeout_s = 60
+
 [coverage]
 scripted = true
 exploratory = true
@@ -170,6 +180,7 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
 | `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
+| `[visual.judgment]` | `visual.judgment` (`VisualJudgmentConfig`) |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
 | `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 
@@ -200,6 +211,8 @@ Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (defa
 `video.mode` is `always` (default), `on_failure`, or `exploratory_only`.
 
 `coverage.scripted`, `coverage.exploratory`, and `coverage.visual` toggle those passes. Visual comparison uses `visual.baseline_dir` and `visual.threshold` (0 through 1 inclusive).
+
+`visual.judgment` is separate from that pixel compare. It stays off until `visual.judgment.enabled` is true, so existing campaigns do not call out. `provider = "command"` runs the command in `AQA_VISUAL_JUDGE_COMMAND` (or `command` when that variable is unset). Claude Code or Codex can be the command. It receives the PNG path as its last argument and must print one JSON object: `{"ok": true}` when the screen is fine, or `{"ok": false, "judgment": "what looks wrong"}` when it is not. A non-zero exit or unparseable output does not fail the campaign. `provider = "fake"` reads the canned `judgment` string and runs nothing. See `docs/visual.md`.
 
 `issues.github` and `issues.linear` enable trackers. `issues.template` is the markdown ticket body. When it is unset, reporters use `swarmqa/templates/issue.md`. Tokens stay in the environment variables named by the config.
 
@@ -239,6 +252,7 @@ Every message starts with its field path. `load_config` collects them and raises
 | `app.maturity` is `prototype` or `shipped` | `app.maturity:` |
 | `app.platform` is `macos` or `ios` | `app.platform:` |
 | `visual.threshold` is from 0 to 1 inclusive | `visual.threshold:` |
+| `visual.judgment.provider` is `command` or `fake`; `timeout_s` is `> 0` | `visual.judgment.provider:`, `visual.judgment.timeout_s:` |
 | `spend.currency` is a non-empty string | `spend.currency:` |
 | cloud `spend.max_spend` is present and `> 0` | `spend.max_spend:` |
 | `pr.max_iterations` and `pr.max_pr_updates` are integers `>= 1` | `pr.max_iterations:`, `pr.max_pr_updates:` |

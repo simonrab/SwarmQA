@@ -1,1 +1,1 @@
-"""Screenshot baselines and visual diff."""
+"""Screenshot baselines, pixel diff, and appearance judgment."""
