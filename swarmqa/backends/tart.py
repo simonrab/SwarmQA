@@ -438,7 +438,7 @@ def _findings(raw: Any) -> list[Finding]:
             findings.append(item)
         elif isinstance(item, dict):
             try:
-                findings.append(Finding(**item))
+                findings.append(Finding.from_dict(item))
             except TypeError:
                 continue
     return findings

@@ -20,7 +20,7 @@ build-backend = "setuptools.build_meta"
 include = ["swarmqa*"]
 
 [tool.setuptools.package-data]
-swarmqa = ["templates/*"]
+swarmqa = ["templates/*", "schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -2,14 +2,21 @@
 
 The fake records every action, serves a scripted accessibility tree, and
 writes a real (tiny) PNG plus an optional video file so reporters can attach
-paths without a display.
+paths without a display. It implements AppDriverV2: `tap_point` clicks the
+element under the point, and tests script logs and crash reports with
+`add_log` and `add_crash`. `transitions` maps a clicked label to the tree
+that replaces the current one, so multi-screen flows can be faked.
 """
 
 from __future__ import annotations
 
+import itertools
+import time
 from pathlib import Path
 
+from swarmqa.driver.protocol import CrashReport, LogEntry, LogLevel, ScreenObservation
 from swarmqa.driver.query import find_element
+from swarmqa.driver.v1_adapter import element_at
 from swarmqa.errors import AppCrashedError, AppMissingError, UITimeoutError
 from swarmqa.models import AppTarget, BuildMetadata, ElementQuery, UIElement
 
@@ -42,6 +49,11 @@ class FakeDriver:
         self._video_on = False
         self.video_path: Path | None = None
         self.version = "1.0.0-fake"
+        self.transitions: dict[str, list[UIElement]] = {}
+        self.logs: list[LogEntry] = []
+        self.crashes: list[CrashReport] = []
+        self.screen_size: tuple[float, float] = (390.0, 844.0)
+        self._observations = itertools.count(1)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
     def set_tree(self, elements: list[UIElement]) -> None:
@@ -72,6 +84,7 @@ class FakeDriver:
         element = self._resolve(target)
         self._maybe_fail(element)
         self.actions_log.append(f"click:{element.label}")
+        self._transition(element)
 
     def type_text(self, target: ElementQuery, text: str) -> None:
         element = self._resolve(target)
@@ -128,6 +141,54 @@ class FakeDriver:
         self.actions_log.append("video:stop")
         return self.video_path
 
+    def observe(self, name: str | None = None, *, screenshot: bool = True) -> ScreenObservation:
+        self._require_launched()
+        shot = None
+        if screenshot:
+            shot = self.screenshot(name or f"observe-{next(self._observations):04d}")
+        return ScreenObservation(
+            tree=self.tree,
+            ts=time.time(),
+            screenshot=shot,
+            size=self.screen_size,
+        )
+
+    def tap_point(self, x: float, y: float) -> None:
+        self._require_launched()
+        element = element_at(self.tree, x, y)
+        self.actions_log.append(f"tap:{x:g},{y:g}")
+        if element is not None:
+            self._maybe_fail(element)
+            self._transition(element)
+
+    def swipe(
+        self,
+        start: tuple[float, float],
+        end: tuple[float, float],
+        duration_s: float = 0.3,
+    ) -> None:
+        self._require_launched()
+        self.actions_log.append(f"swipe:{start[0]:g},{start[1]:g}->{end[0]:g},{end[1]:g}")
+
+    def logs_since(self, ts: float) -> list[LogEntry]:
+        return [entry for entry in self.logs if entry.ts >= ts]
+
+    def crash_reports_since(self, ts: float) -> list[CrashReport]:
+        return [report for report in self.crashes if report.ts >= ts]
+
+    def add_log(self, message: str, level: LogLevel = "info", *, ts: float | None = None) -> None:
+        self.logs.append(LogEntry(ts=time.time() if ts is None else ts, level=level, message=message))
+
+    def add_crash(self, summary: str = "", *, ts: float | None = None) -> CrashReport:
+        report = CrashReport(
+            ts=time.time() if ts is None else ts,
+            process=self.target.bundle_id or "FakeApp",
+            path=str(self.work_dir / "crashes" / f"crash-{len(self.crashes) + 1}.ips"),
+            summary=summary,
+        )
+        self.crashes.append(report)
+        return report
+
     def metadata(self) -> BuildMetadata:
         return BuildMetadata(
             path=self.target.path,
@@ -139,6 +200,10 @@ class FakeDriver:
     def _resolve(self, target: ElementQuery) -> UIElement:
         self._require_launched()
         return find_element(self.tree, target)
+
+    def _transition(self, element: UIElement) -> None:
+        if element.label in self.transitions:
+            self.tree = self.transitions[element.label]
 
     def _maybe_fail(self, element: UIElement) -> None:
         if element.label in self.crash_labels:

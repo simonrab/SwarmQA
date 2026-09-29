@@ -31,6 +31,8 @@ FindingKind = Literal[
     "launch",
     "friction_path",
 ]
+FindingCategory = Literal["broken", "visual", "confusing", "crash"]
+FINDINGS_SCHEMA_VERSION = 2
 DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
 SystemOneProvider = Literal["http", "fake"]
 ComputerUseProvider = Literal["command", "fake"]
@@ -356,6 +358,21 @@ class BuildMetadata:
 
 
 @dataclass
+class BuildArtifact:
+    """One built app for one platform, produced by the builder.
+
+    `app_path` is the `.app` bundle (simulator build for ios). `sha` is empty
+    when the build did not come from a specific commit.
+    """
+
+    platform: TargetPlatform
+    app_path: str
+    bundle_id: str
+    sha: str = ""
+    log_path: str | None = None
+
+
+@dataclass
 class StepResult:
     index: int
     action: str
@@ -364,7 +381,44 @@ class StepResult:
 
 
 @dataclass
+class Evidence:
+    """Media attached to a finding beyond the full-session video.
+
+    `video_clip` is a short clip trimmed around the failure. `frames` are
+    screenshots in time order. Paths are relative to the campaign report
+    directory, like every other media path on `Finding`.
+    """
+
+    video_clip: str | None = None
+    frames: list[str] = field(default_factory=list)
+
+
+_CATEGORY_BY_KIND: dict[str, FindingCategory] = {
+    "crash": "crash",
+    "launch": "crash",
+    "visual": "visual",
+    "visual_judgment": "visual",
+    "friction_path": "confusing",
+}
+
+
+def category_for_kind(kind: str) -> FindingCategory:
+    """Default category for a finding kind: crash, visual, confusing, or broken."""
+    return _CATEGORY_BY_KIND.get(kind, "broken")
+
+
+@dataclass
 class Finding:
+    """One problem found by a worker. Findings v2 (`schemas/findings.v2.json`).
+
+    v2 adds `category`, `confidence`, `advisory`, `repro`,
+    `suspected_sources`, and `evidence`. All v2 fields have defaults, so v1
+    constructors keep working. `category` defaults from `kind`. A finding
+    that only a model reported is `advisory` with its `confidence` below 1.
+    `repro` is the path to a replay script. `suspected_sources` are
+    repo-relative `path` or `path:line` strings.
+    """
+
     id: str
     title: str
     severity: Severity
@@ -380,10 +434,25 @@ class Finding:
     environment: dict[str, str] = field(default_factory=dict)
     details: str = ""
     worker_ids: list[str] = field(default_factory=list)
+    category: FindingCategory | None = None
+    confidence: float = 1.0
+    advisory: bool = False
+    repro: str | None = None
+    suspected_sources: list[str] = field(default_factory=list)
+    evidence: Evidence = field(default_factory=Evidence)
 
     def __post_init__(self) -> None:
         if self.worker_id and self.worker_id not in self.worker_ids:
             self.worker_ids.insert(0, self.worker_id)
+        if self.category is None:
+            self.category = category_for_kind(self.kind)
+        if isinstance(self.evidence, dict):
+            self.evidence = Evidence(**self.evidence)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Finding":
+        """Build a Finding from v1 or v2 JSON. Unknown keys raise TypeError."""
+        return cls(**data)
 
 
 @dataclass

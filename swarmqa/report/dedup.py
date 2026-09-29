@@ -6,6 +6,8 @@ title, severity, and narrative stay; later duplicates contribute media.
 
 from __future__ import annotations
 
+import copy
+
 from swarmqa.models import Finding
 
 
@@ -34,26 +36,24 @@ def dedup_findings(findings: list[Finding]) -> list[Finding]:
             current.environment["extra_videos"] = ",".join(videos)
         if finding.replay_json and not current.replay_json:
             current.replay_json = finding.replay_json
+        for frame in finding.evidence.frames:
+            if frame not in current.evidence.frames:
+                current.evidence.frames.append(frame)
+        if finding.evidence.video_clip and not current.evidence.video_clip:
+            current.evidence.video_clip = finding.evidence.video_clip
+        if finding.repro and not current.repro:
+            current.repro = finding.repro
+        for source in finding.suspected_sources:
+            if source not in current.suspected_sources:
+                current.suspected_sources.append(source)
+        # A duplicate confirmed without a model makes the merged finding firm.
+        if not finding.advisory:
+            current.advisory = False
+        current.confidence = max(current.confidence, finding.confidence)
         if finding.details and finding.details not in current.details:
             current.details = (current.details + "\n" + finding.details).strip()
     return [merged[key] for key in order]
 
 
 def _clone(finding: Finding) -> Finding:
-    return Finding(
-        id=finding.id,
-        title=finding.title,
-        severity=finding.severity,
-        kind=finding.kind,
-        steps=list(finding.steps),
-        fingerprint=finding.fingerprint,
-        worker_id=finding.worker_id,
-        backend=finding.backend,
-        shard_id=finding.shard_id,
-        screenshots=list(finding.screenshots),
-        video=finding.video,
-        replay_json=finding.replay_json,
-        environment=dict(finding.environment),
-        details=finding.details,
-        worker_ids=list(finding.worker_ids),
-    )
+    return copy.deepcopy(finding)
