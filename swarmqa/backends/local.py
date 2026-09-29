@@ -257,11 +257,51 @@ def _run_scripted(shard, worker_id, work_dir, config, driver_factory, on_step) -
 
 def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step) -> WorkerResult:
     _emit(on_step, worker_id, shard, "explore")
+    if config.explorer.engine == "agent":
+        return _run_agent(shard, worker_id, work_dir, config, driver_factory)
     driver = _make_driver(config, work_dir, driver_factory)
     try:
         from swarmqa.explorer.exploratory import run_exploratory
 
         return run_exploratory(shard, driver, config, worker_id=worker_id, work_dir=work_dir)
+    finally:
+        _close_driver(driver)
+
+
+def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResult:
+    """Run the agent loop with the configured checks and, when `[llm]` is on, a model.
+
+    A provider that cannot be built (missing SDK extra, bad settings) ends the
+    shard as an error before the app is launched, so no half-configured run
+    spends time or money.
+    """
+    from swarmqa.checks import default_checks
+    from swarmqa.checks.config import checks_settings
+    from swarmqa.explorer.agent_loop import AgentLoopSettings, run_agent_loop
+
+    provider = None
+    if config.llm.enabled:
+        from swarmqa.config import llm_settings
+        from swarmqa.llm.settings import create_provider
+
+        try:
+            provider = create_provider(llm_settings(config))
+        except Exception as exc:
+            return make_error_result(shard, worker_id, f"llm: {exc}", config.backend)
+    checks = default_checks(checks_settings(config), provider)
+    driver = _make_driver(config, work_dir, driver_factory)
+    try:
+        return run_agent_loop(
+            shard,
+            driver,
+            config,
+            provider=provider,
+            checks=checks,
+            settings=AgentLoopSettings.from_config(config),
+            work_dir=work_dir,
+            worker_id=worker_id,
+            backend=config.backend,
+        )
     finally:
         _close_driver(driver)
 

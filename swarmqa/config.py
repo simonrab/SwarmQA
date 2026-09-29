@@ -26,6 +26,7 @@ _OVERRUN = ("drain", "cancel")
 _FAIL_ON = ("scripted", "any", "never")
 _ISOLATION = ("thread", "subprocess")
 _DRIVER_KINDS = ("auto", "fake", "legacy", "runner")
+_ENGINES = ("legacy", "agent")
 _STEP_FAILURE = ("stop", "continue")
 _DECISION_MODES = ("heuristic", "system_one", "computer_use", "cascade")
 _SYSTEM_ONE_PROVIDERS = ("http", "fake")
@@ -70,6 +71,8 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _number_between(errors, "visual.threshold", config.visual.threshold, 0, 1)
     _validate_visual_judgment(errors, config)
     _validate_llm(errors, config)
+    _enum(errors, "explorer.engine", config.explorer.engine, _ENGINES)
+    _validate_checks(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "pr.max_iterations", config.pr.max_iterations, 1)
@@ -197,6 +200,8 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     driver = _section(document, "driver", errors)
     _assign(driver, "kind", config.driver, "kind")
 
+    config.checks.settings = dict(_section(document, "checks", errors))
+
     llm = dict(_section(document, "llm", errors))
     if "enabled" in llm:
         config.llm.enabled = llm.pop("enabled")
@@ -252,6 +257,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     _assign(coverage, "visual", config.coverage, "visual")
 
     explorer = _section(document, "explorer", errors)
+    _assign(explorer, "engine", config.explorer, "engine")
     _assign(explorer, "max_steps", config.explorer, "max_steps")
     _assign(explorer, "max_time_s", config.explorer, "max_time_s")
     _assign(explorer, "on_step_failure", config.explorer, "on_step_failure")
@@ -490,6 +496,15 @@ def _validate_llm(errors: list[str], config: CampaignConfig) -> None:
         llm_settings(config)
     except (TypeError, ValueError) as exc:
         errors.append(f"llm: {exc}")
+
+
+def _validate_checks(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.checks.config import checks_settings
+
+    try:
+        checks_settings(config)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"checks: {exc}")
 
 
 def _section(

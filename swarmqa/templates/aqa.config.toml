@@ -32,6 +32,14 @@ enabled = false
 # step_model = ""      # blank = the provider's default (see docs/llm.md)
 # judge_model = ""
 
+[checks]
+# Used by explorer.engine = "agent". Each check is on unless set to false;
+# a table overrides its settings. See docs/checks.md.
+# functional = true
+# layout = { contrast = false }
+# baseline = false   # on by default only when [visual] enabled = true
+# judge = true       # model judge; needs [llm] enabled = true
+
 [campaign]
 # local = this machine; vm = Tart on Apple Silicon; cloud = metered adapter
 backend = "local"
@@ -115,6 +123,9 @@ exploratory = true
 visual = false
 
 [explorer]
+# legacy = the original explorer; agent = observe-decide-act loop with [checks]
+# (and a model when [llm] enabled = true). See docs/explorer-v2.md.
+engine = "legacy" # legacy | agent
 max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue

@@ -378,17 +378,24 @@ def _backend_rate(config: CampaignConfig) -> float:
 
 
 def _open_meter(config: CampaignConfig, rate: float) -> tuple[SpendMeter, bool, str | None]:
-    metered = rate > 0
+    # Model calls cost money on any backend, so an enabled [llm] meters the
+    # campaign even when the machines are free.
+    models_cost = _models_cost(config)
+    metered = rate > 0 or models_cost
     note = None
     cap = config.spend.max_spend
     currency = config.spend.currency or "USD"
-    if config.backend == "local" and cap is not None:
+    if config.backend == "local" and cap is not None and not models_cost:
         note = LOCAL_SPEND_NOTE
     if metered and cap is not None and cap > 0:
         meter = SpendMeter(cap, currency)
     else:
         meter = SpendMeter(None, currency)
     return meter, metered, note
+
+
+def _models_cost(config: CampaignConfig) -> bool:
+    return config.llm.enabled and config.explorer.engine == "agent"
 
 
 def _warn_gui(config: CampaignConfig, queue: list[Shard]) -> None:
@@ -464,7 +471,7 @@ def _settle_spend(meter, metered: bool, rate: float, config: CampaignConfig, res
         result.estimated_cost = result.estimated_cost or 0.0
         return
     actual = result.estimated_cost
-    if actual <= 0:
+    if actual <= 0 and rate > 0:
         actual = reserved_cost if reserved_cost > 0 else rate * float(config.cloud.estimated_shard_minutes)
         result.estimated_cost = actual
     extra = actual - reserved_cost

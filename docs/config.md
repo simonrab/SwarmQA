@@ -129,6 +129,7 @@ exploratory = true
 visual = false
 
 [explorer]
+engine = "legacy" # legacy | agent
 max_steps = 40
 max_time_s = 120
 on_step_failure = "stop" # stop | continue
@@ -183,6 +184,7 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `campaign.backend`, `workers`, `shard_strategy`, `fail_on`, `report_root`, `gui_worker_warn_threshold` | the same fields |
 | `campaign.max_wall_time` | `budgets.max_wall_time_s` |
 | `campaign.max_worker_minutes`, `campaign.on_budget` | `budgets.max_worker_minutes`, `budgets.on_budget` |
+| `[checks]` | `checks.settings`, read by `swarmqa.checks.config.checks_settings` |
 | `[llm]` | `llm.enabled`; every other key goes to `llm.settings` and is read by `swarmqa.config.llm_settings` |
 | `[driver]`, `[local]`, `[vm]`, `[cloud]`, `[spend]`, `[video]`, `[pr]`, `[issues]`, `[visual]`, `[coverage]`, `[explorer]`, `[suite]` | the matching nested config |
 | `[visual.judgment]` | `visual.judgment` (`VisualJudgmentConfig`) |
@@ -210,6 +212,14 @@ Several GUI sessions on one display get flaky. `gui_worker_warn_threshold` (defa
 `driver.kind` picks the session driver. `auto` (default) uses `legacy` on a Mac or when `app.platform = "ios"`, and `fake` elsewhere. `fake` is a dry run that needs no Accessibility permission. `legacy` is the AppleScript macOS driver or the simctl/idb iOS driver, chosen by `app.platform`. `runner` is reserved for the XCUITest runner and is rejected until it ships.
 
 `pr.mode` defaults to `off`: the campaign writes its report and no branch or PR is made. Set `human` or `autonomous` to opt into the fix loop.
+
+### Explorer engine and checks
+
+`explorer.engine` picks the exploratory explorer. `legacy` (the default) is the original one. `agent` runs the observe-decide-act loop in `docs/explorer-v2.md` with the checks from `[checks]`, plus the model from `[llm]` when `llm.enabled = true`; without a model it uses the free heuristic and breadth-first crawling. A model provider that cannot be built (for example a missing `swarmqa[anthropic]` extra) ends the shard as an error before the app launches.
+
+`[checks]` takes `functional`, `layout`, `baseline` and `judge`. Each is on unless set to `false`, and a table overrides that check's settings (see `docs/checks.md`); an unknown check or setting fails validation. `layout.platform` defaults to `app.platform`. `baseline` defaults to on only when `visual.enabled`, using `visual.baseline_dir` and `visual.threshold`. When the model judge has no provider, `visual.judgment` (the command judge) is the fallback. The session-level friction check does not run under the agent engine yet.
+
+With the agent engine and `[llm]` enabled, model spend counts toward `spend.max_spend` on every backend, including `local`.
 
 ### Models
 

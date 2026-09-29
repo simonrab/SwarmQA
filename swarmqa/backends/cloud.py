@@ -126,7 +126,8 @@ class SimulatedCloudBackend:
         produced.shard_name = produced.shard_name or shard.name
         produced.shard_kind = produced.shard_kind or shard.kind
         produced.worker_minutes = measured
-        produced.estimated_cost = self.cost_per_worker_minute() * measured
+        # Model spend reported by the worker, plus machine time.
+        produced.estimated_cost = (produced.estimated_cost or 0.0) + self.cost_per_worker_minute() * measured
         produced.backend = "cloud"
         produced.started_at = produced.started_at or started_at
         produced.finished_at = produced.finished_at or _now()

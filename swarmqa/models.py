@@ -31,6 +31,7 @@ FindingKind = Literal[
     "launch",
     "friction_path",
 ]
+ExplorerEngine = Literal["legacy", "agent"]
 FindingCategory = Literal["broken", "visual", "confusing", "crash"]
 FINDINGS_SCHEMA_VERSION = 2
 DecisionMode = Literal["heuristic", "system_one", "computer_use", "cascade"]
@@ -193,6 +194,10 @@ class FrictionConfig:
 
 @dataclass
 class ExplorerConfig:
+    """`engine = "agent"` runs the observe-decide-act loop (explorer/agent_loop.py)
+    with the `[checks]` set; `legacy` keeps the original exploratory explorer."""
+
+    engine: ExplorerEngine = "legacy"
     max_steps: int = 40
     max_time_s: float = 120
     on_step_failure: StepFailurePolicy = "stop"
@@ -255,6 +260,17 @@ class LLMConfig:
 
 
 @dataclass
+class ChecksConfig:
+    """The `[checks]` table, kept raw; `swarmqa.checks.config.checks_settings`
+    builds `ChecksSettings` from it. Sub-tables `functional`, `layout`,
+    `baseline` and `judge` take that check's settings, or `false` to turn it
+    off. Used by `explorer.engine = "agent"`.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class LocalConfig:
     isolation: LocalIsolation = "thread"
 
@@ -282,6 +298,7 @@ class CampaignConfig:
     local: LocalConfig = field(default_factory=LocalConfig)
     driver: DriverConfig = field(default_factory=DriverConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    checks: ChecksConfig = field(default_factory=ChecksConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2
