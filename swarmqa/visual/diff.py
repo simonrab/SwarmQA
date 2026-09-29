@@ -98,40 +98,15 @@ def _score_and_highlight(
     baseline: Image.Image,
     current: Image.Image,
 ) -> tuple[float, Image.Image]:
+    # C6 compares after scaling the current image to the baseline size. The
+    # diff itself is the vectorised one the baseline check uses.
+    from swarmqa.checks.baseline import diff_images, highlight
+
     if current.size != baseline.size:
         current = current.resize(baseline.size, _RESAMPLE)
-    width, height = baseline.size
-    total = width * height
-    if total == 0:
-        return 0.0, Image.new("RGB", (width, height))
-
-    base_bytes = baseline.tobytes()
-    curr_bytes = current.tobytes()
-    highlight = bytearray(total * 3)
-    changed = 0
-    for index in range(total):
-        offset = index * 4
-        dest = index * 3
-        if _channel_changed(base_bytes, curr_bytes, offset):
-            changed += 1
-            # Bright red, with a trace of the current pixel so the region stays readable.
-            highlight[dest] = 255
-            highlight[dest + 1] = curr_bytes[offset + 1] // 8
-            highlight[dest + 2] = curr_bytes[offset + 2] // 8
-        else:
-            highlight[dest] = curr_bytes[offset]
-            highlight[dest + 1] = curr_bytes[offset + 1]
-            highlight[dest + 2] = curr_bytes[offset + 2]
-    return changed / total, Image.frombytes("RGB", (width, height), bytes(highlight))
-
-
-def _channel_changed(baseline: bytes, current: bytes, offset: int) -> bool:
-    return (
-        abs(baseline[offset] - current[offset]) > CHANNEL_DELTA
-        or abs(baseline[offset + 1] - current[offset + 1]) > CHANNEL_DELTA
-        or abs(baseline[offset + 2] - current[offset + 2]) > CHANNEL_DELTA
-        or abs(baseline[offset + 3] - current[offset + 3]) > CHANNEL_DELTA
-    )
+    result = diff_images(baseline, current, channel_delta=CHANNEL_DELTA)
+    assert result is not None
+    return result.score, highlight(current, result.mask)
 
 
 def _same_path(left: Path, right: Path) -> bool:

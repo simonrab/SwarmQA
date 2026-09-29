@@ -53,6 +53,7 @@ _ASSERT = re.compile(
     r'^assert(?:\s+([A-Za-z][\w-]*))?\s+"([^"]*)"\s+(exists|missing|absent|not\s+exists)\s*$'
 )
 _LAUNCH = re.compile(r"^(launch|relaunch)\s*$")
+_FRONT_MATTER_TAGS = re.compile(r"^tags\s*:\s*(.*?)\s*$", re.IGNORECASE)
 
 
 def build_queue(config: CampaignConfig) -> list[Shard]:
@@ -234,6 +235,7 @@ def _expand_intents(intents: list[str]) -> list[Path]:
 
 def _markdown_shards(path: Path, config: CampaignConfig) -> list[Shard]:
     parsed = _parse_markdown(path)
+    tags = _intent_tags(parsed["name"], parsed["tags"])
     shards: list[Shard] = []
     if parsed["actions"] is not None:
         if config.coverage.scripted:
@@ -246,11 +248,16 @@ def _markdown_shards(path: Path, config: CampaignConfig) -> list[Shard]:
                     actions=list(parsed["actions"]),
                     goal=parsed["goal"],
                     constraints=list(parsed["constraints"]),
+                    tags=list(tags),
                 )
             )
         # A scripted markdown intent also contributes an exploratory seed when
-        # that coverage flag is on. JSON flows do not.
+        # that coverage flag is on. JSON flows do not. The seed carries the
+        # scripted step count as its friction gold path.
         if config.coverage.exploratory:
+            seed_tags = list(tags)
+            if not any(tag.startswith(("gold_steps:", "gold:")) for tag in seed_tags):
+                seed_tags.append(f"gold_steps:{len(parsed['actions'])}")
             shards.append(
                 Shard(
                     id="",
@@ -260,6 +267,7 @@ def _markdown_shards(path: Path, config: CampaignConfig) -> list[Shard]:
                     goal=parsed["goal"],
                     constraints=list(parsed["constraints"]),
                     seed="explore",
+                    tags=seed_tags,
                 )
             )
         return shards
@@ -272,9 +280,62 @@ def _markdown_shards(path: Path, config: CampaignConfig) -> list[Shard]:
                 source_path=str(path),
                 goal=parsed["goal"],
                 constraints=list(parsed["constraints"]),
+                tags=list(tags),
             )
         )
     return shards
+
+
+def _intent_tags(name: str, declared: list[str]) -> list[str]:
+    """Shard tags: declared tags (front matter, then `## Tags`), then `flow:<slug>`.
+
+    Tags are trimmed, lower-cased, inner whitespace becomes `-`, and
+    duplicates are dropped in order.
+    """
+    out: list[str] = []
+    for raw in [*declared, f"flow:{slug(name)}"]:
+        tag = str(raw).strip().strip("'\"").strip().lower()
+        tag = re.sub(r"\s*:\s*", ":", tag)
+        tag = re.sub(r"\s+", "-", tag)
+        if tag and tag not in out:
+            out.append(tag)
+    return out
+
+
+def _split_tags(text: str) -> list[str]:
+    text = text.strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    return [part.strip() for part in text.split(",") if part.strip()]
+
+
+def _front_matter(lines: list[str]) -> tuple[list[str], int]:
+    """Tags from a leading `---` block, and the number of lines it spans (0 when absent).
+
+    Only `tags:` is read: `tags: [a, b]`, `tags: a, b`, or `tags:` followed
+    by `- a` lines. Other keys are ignored and kept out of the goal.
+    """
+    if not lines or lines[0].strip() != "---":
+        return [], 0
+    for end in range(1, len(lines)):
+        if lines[end].strip() in ("---", "..."):
+            break
+    else:
+        return [], 0
+    tags: list[str] = []
+    in_list = False
+    for line in lines[1:end]:
+        match = _FRONT_MATTER_TAGS.match(line.strip())
+        if match:
+            tags.extend(_split_tags(match.group(1)))
+            in_list = not match.group(1)
+            continue
+        stripped = line.strip()
+        if in_list and stripped.startswith("- "):
+            tags.append(stripped[2:].strip())
+            continue
+        in_list = False
+    return tags, end + 1
 
 
 def _parse_markdown(path: Path) -> dict:
@@ -290,7 +351,11 @@ def _parse_markdown(path: Path) -> dict:
     section = "body"
     saw_steps = False
 
-    for line_no, line in enumerate(text.splitlines(), start=1):
+    lines = text.splitlines()
+    tags, skip = _front_matter(lines)
+    for line_no, line in enumerate(lines, start=1):
+        if line_no <= skip:
+            continue
         h2 = _H2.match(line)
         if h2:
             heading = h2.group(1).strip().rstrip(":").strip().lower()
@@ -299,6 +364,8 @@ def _parse_markdown(path: Path) -> dict:
                 saw_steps = True
             elif heading == "constraints":
                 section = "constraints"
+            elif heading == "tags":
+                section = "tags"
             else:
                 section = "body"
                 body_lines.append(h2.group(1).strip())
@@ -314,6 +381,11 @@ def _parse_markdown(path: Path) -> dict:
             item = _constraint_text(line)
             if item:
                 constraints.append(item)
+            continue
+        if section == "tags":
+            item = _constraint_text(line)
+            if item:
+                tags.extend(_split_tags(item))
             continue
         if section == "steps":
             if not line.strip():
@@ -332,6 +404,7 @@ def _parse_markdown(path: Path) -> dict:
         "goal": goal,
         "constraints": constraints,
         "actions": actions if saw_steps and actions else None,
+        "tags": tags,
     }
 
 
@@ -364,6 +437,7 @@ def _load_json_flow(path: Path) -> Shard:
         name=flow_name.strip(),
         source_path=str(path),
         actions=actions,
+        tags=_intent_tags(flow_name.strip(), []),
     )
 
 
