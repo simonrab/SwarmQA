@@ -1,0 +1,39 @@
+{
+  "id": "resp_0Refusal",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-5.5",
+  "output": [
+    {
+      "id": "rs_0Refusal",
+      "type": "reasoning",
+      "summary": []
+    },
+    {
+      "id": "msg_0Refusal",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "refusal",
+          "refusal": "I can't help with that."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1500,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 20,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 1520
+  }
+}

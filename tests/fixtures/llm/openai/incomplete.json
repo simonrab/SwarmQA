@@ -1,0 +1,29 @@
+{
+  "id": "resp_0Incomplete",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "incomplete",
+  "error": null,
+  "incomplete_details": {
+    "reason": "max_output_tokens"
+  },
+  "model": "gpt-5.4-mini",
+  "output": [
+    {
+      "id": "rs_0Incomplete",
+      "type": "reasoning",
+      "summary": []
+    }
+  ],
+  "usage": {
+    "input_tokens": 1900,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 4096,
+    "output_tokens_details": {
+      "reasoning_tokens": 4096
+    },
+    "total_tokens": 5996
+  }
+}

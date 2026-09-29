@@ -1,0 +1,41 @@
+{
+  "id": "resp_0CompUse",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-5.5",
+  "output": [
+    {
+      "id": "rs_0CompUse",
+      "type": "reasoning",
+      "summary": []
+    },
+    {
+      "id": "msg_0CompUse",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"kind\": \"tap_point\", \"x\": 361, \"y\": 784, \"end_x\": null, \"end_y\": null, \"text\": null, \"keys\": [], \"rationale\": \"The Save button is centred here.\", \"confidence\": 0.9}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1750,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 210,
+    "output_tokens_details": {
+      "reasoning_tokens": 96
+    },
+    "total_tokens": 1960
+  }
+}

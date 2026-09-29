@@ -1,0 +1,27 @@
+{
+  "id": "msg_01Flows",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "",
+      "signature": "EqQBCkYIBRgCKkB0c2lnbmF0dXJl"
+    },
+    {
+      "type": "text",
+      "text": "{\"flows\": [{\"name\": \"Validate email on save\", \"goal\": \"Enter an invalid email in Settings and try to save it.\", \"priority\": 2, \"steps\": [\"Open Settings\", \"Type 'not-an-email' into Email\", \"Tap Save\"], \"expected\": [\"An inline validation error appears\", \"The email is not saved\"], \"touched_files\": [\"App/Settings/EmailValidator.swift\"]}, {\"name\": \"Edit account email\", \"goal\": \"Change the account email in Settings and save it.\", \"priority\": 1, \"steps\": [\"Open Settings\", \"Replace the Email field\", \"Tap Save\"], \"expected\": [\"The new email shows after relaunch\"], \"touched_files\": [\"App/Settings/SettingsView.swift\", \"App/Settings/EmailValidator.swift\"]}]}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "stop_details": null,
+  "usage": {
+    "input_tokens": 2640,
+    "cache_creation_input_tokens": 950,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 612,
+    "service_tier": "standard"
+  }
+}

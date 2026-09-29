@@ -1,0 +1,41 @@
+{
+  "id": "resp_0JudgeVis",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-5.5",
+  "output": [
+    {
+      "id": "rs_0JudgeVis",
+      "type": "reasoning",
+      "summary": []
+    },
+    {
+      "id": "msg_0JudgeVis",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"summary\": \"Settings screen with an email field and Save and Delete buttons.\", \"issues\": [{\"category\": \"visual\", \"title\": \"Save button label is clipped\", \"severity\": \"medium\", \"confidence\": 0.82, \"rationale\": \"The trailing letters of 'Save' are cut off by the button edge.\", \"element_id\": \"e6\", \"bbox\": {\"x\": 30, \"y\": 1101, \"width\": 663, \"height\": 90}}, {\"category\": \"visual\", \"title\": \"Section header may be slightly low contrast\", \"severity\": \"low\", \"confidence\": 0.3, \"rationale\": \"Grey on white header text.\", \"element_id\": null, \"bbox\": null}]}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 2400,
+    "input_tokens_details": {
+      "cached_tokens": 1280
+    },
+    "output_tokens": 520,
+    "output_tokens_details": {
+      "reasoning_tokens": 256
+    },
+    "total_tokens": 2920
+  }
+}

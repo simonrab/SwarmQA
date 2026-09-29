@@ -1,0 +1,41 @@
+{
+  "id": "resp_0Flows",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-5.5",
+  "output": [
+    {
+      "id": "rs_0Flows",
+      "type": "reasoning",
+      "summary": []
+    },
+    {
+      "id": "msg_0Flows",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"flows\": [{\"name\": \"Validate email on save\", \"goal\": \"Enter an invalid email in Settings and try to save it.\", \"priority\": 2, \"steps\": [\"Open Settings\", \"Type 'not-an-email' into Email\", \"Tap Save\"], \"expected\": [\"An inline validation error appears\", \"The email is not saved\"], \"touched_files\": [\"App/Settings/EmailValidator.swift\"]}, {\"name\": \"Edit account email\", \"goal\": \"Change the account email in Settings and save it.\", \"priority\": 1, \"steps\": [\"Open Settings\", \"Replace the Email field\", \"Tap Save\"], \"expected\": [\"The new email shows after relaunch\"], \"touched_files\": [\"App/Settings/SettingsView.swift\", \"App/Settings/EmailValidator.swift\"]}]}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 3100,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 900,
+    "output_tokens_details": {
+      "reasoning_tokens": 384
+    },
+    "total_tokens": 4000
+  }
+}

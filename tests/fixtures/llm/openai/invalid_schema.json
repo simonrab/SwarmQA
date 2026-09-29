@@ -1,0 +1,41 @@
+{
+  "id": "resp_0Invalid",
+  "object": "response",
+  "created_at": 1790000000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-5.4-mini",
+  "output": [
+    {
+      "id": "rs_0Invalid",
+      "type": "reasoning",
+      "summary": []
+    },
+    {
+      "id": "msg_0Invalid",
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"kind\": \"tap\", \"element_id\": \"e99\", \"x\": null, \"y\": null, \"end_x\": null, \"end_y\": null, \"text\": null, \"keys\": [], \"rationale\": \"Save commits the edited email, which the goal asks for.\", \"confidence\": 0.86}",
+          "annotations": [],
+          "logprobs": []
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1900,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 70,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 1970
+  }
+}
