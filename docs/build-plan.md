@@ -77,12 +77,12 @@ Update `driver/fake.py` and the fake decision provider to the new contracts.
 
 **Gate:** the planted-bug benchmark on 2 iOS simulators and 1 macOS VM (or the local Mac) runs end to end with the Anthropic provider, and again with OpenAI.
 
-## Phase 4, Wave C: agent interface, builder and hand-off (4 subagents)
+## Phase 4, Wave C: agent interface, builder and hand-off (4 subagents) — C1, C2 and C3 done; C4 (builder) not started
 
 - **WP-C4: Builder.** Owns `swarmqa/build/**`. Checks out a SHA into `~/.aqa/checkouts/<repo>/<sha>`, never touching the user's working copy. Builds the iOS simulator and macOS `.app` from `build.ios.command` / `build.macos.command` or by auto-detecting with `xcodebuild -list`. DerivedData per repo. Returns `BuildArtifact(sha, platform, app_path, bundle_id, log_path)`. A build failure is a critical finding with the log tail.
-- **WP-C1: MCP server.** Owns `swarmqa/mcp/**`, the optional `mcp` extra and `aqa mcp`. Stdio transport. `start_campaign` launches a detached campaign and returns an id right away. Status comes from `orchestrator/status.py`.
-- **WP-C2: verify_fix and replay.** Owns `swarmqa/verify/**`. Builds, replays a finding's repro across N devices, returns pass or fail with evidence.
-- **WP-C3: Integrations, packaging and cleanup.** Owns `integrations/claude-code/` (a `/qa` skill plus an `.mcp.json` snippet), `integrations/codex/`, and `aqa doctor` (Xcode, runtimes, permissions, API keys, tart). Deletes `swarmqa/prloop/` because the coding agent opens PRs. Moves `reporter/issues.py` behind `aqa file-issues`. Keeps `uv tool install` working with the optional extras (`uv tool install 'swarmqa[anthropic,mcp] @ git+…'`) and documents it.
+- **WP-C1: MCP server (done).** Owns `swarmqa/mcp/**`, the optional `mcp` extra and `aqa mcp`. Stdio transport. `start_campaign` launches a detached campaign and returns an id right away. Status comes from `orchestrator/status.py`.
+- **WP-C2: verify_fix and replay (done).** Owns `swarmqa/verify/**`. Builds, replays a finding's repro across N devices, returns pass or fail with evidence.
+- **WP-C3: Integrations, packaging and cleanup (done).** Owns `integrations/claude-code/` (a `/qa` skill plus an `.mcp.json` snippet), `integrations/codex/`, and `aqa doctor` (Xcode, runtimes, permissions, API keys, tart). Deletes `swarmqa/prloop/` because the coding agent opens PRs. Moves `reporter/issues.py` behind `aqa file-issues`. Keeps `uv tool install` working with the optional extras (`uv tool install 'swarmqa[anthropic,mcp] @ git+…'`) and documents it.
 
 **Gate:** from Claude Code, run `/qa` on the fixture app, fix one planted bug, call `verify_fix`, and see it pass. Repeat from Codex CLI.
 

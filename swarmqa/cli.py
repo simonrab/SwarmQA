@@ -17,7 +17,14 @@ from swarmqa.models import CliOverrides
 _TRACKERS = ("github", "linear")
 
 
+_PASSTHROUGH = {"mcp": "cmd_mcp", "verify": "cmd_verify"}
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in _PASSTHROUGH:
+        # These parse their own flags, including --help.
+        return int(globals()[_PASSTHROUGH[argv[0]]](argparse.Namespace(rest=argv[1:])))
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "command", None):
@@ -122,8 +129,31 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_p.add_argument("--json", action="store_true", help="Print the checks as JSON")
     doctor_p.set_defaults(func=cmd_doctor)
 
-    # `aqa mcp` and `aqa verify` are registered here once their packages land.
+    # These two parse their own flags; the rest of argv is handed over as is.
+    mcp_p = sub.add_parser("mcp", help="Run the MCP server over stdio (needs swarmqa[mcp])", add_help=False)
+    mcp_p.add_argument("rest", nargs=argparse.REMAINDER)
+    mcp_p.set_defaults(func=cmd_mcp)
+
+    verify_p = sub.add_parser(
+        "verify",
+        help="Rebuild and replay a finding on N devices (exit 0 fixed, 1 reproduces, 2 could not verify)",
+        add_help=False,
+    )
+    verify_p.add_argument("rest", nargs=argparse.REMAINDER)
+    verify_p.set_defaults(func=cmd_verify)
     return parser
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from swarmqa.mcp.server import main as mcp_main
+
+    return mcp_main(args.rest)
+
+
+def cmd_verify(args: argparse.Namespace) -> int:
+    from swarmqa.verify.cli import main as verify_main
+
+    return verify_main(args.rest)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
