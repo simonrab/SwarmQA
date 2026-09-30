@@ -32,6 +32,15 @@ enabled = false
 # step_model = ""      # blank = the provider's default (see docs/llm.md)
 # judge_model = ""
 
+# Per-SHA builds in a clean checkout under ~/.aqa (see docs/build.md). Used by
+# `aqa build --sha` and by `aqa verify` when this table is present.
+# [build]
+# repo = "git@github.com:owner/app.git"   # default: the repo containing app.source_dir
+# project = "App.xcodeproj"               # or a subdirectory / .xcworkspace; auto-detected when unset
+# scheme = "App"                          # auto-detected with `xcodebuild -list` when unset
+# [build.ios]
+# command = ""                            # optional: build yourself and print the .app path
+
 [checks]
 # Used by explorer.engine = "agent". Each check is on unless set to false;
 # a table overrides its settings. See docs/checks.md.

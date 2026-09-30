@@ -17,7 +17,7 @@ from swarmqa.models import CliOverrides
 _TRACKERS = ("github", "linear")
 
 
-_PASSTHROUGH = {"mcp": "cmd_mcp", "verify": "cmd_verify"}
+_PASSTHROUGH = {"mcp": "cmd_mcp", "verify": "cmd_verify", "build": "cmd_build"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -141,6 +141,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_p.add_argument("rest", nargs=argparse.REMAINDER)
     verify_p.set_defaults(func=cmd_verify)
+
+    build_p = sub.add_parser("build", help="Check out a SHA and build its iOS/macOS apps", add_help=False)
+    build_p.add_argument("rest", nargs=argparse.REMAINDER)
+    build_p.set_defaults(func=cmd_build)
     return parser
 
 
@@ -154,6 +158,12 @@ def cmd_verify(args: argparse.Namespace) -> int:
     from swarmqa.verify.cli import main as verify_main
 
     return verify_main(args.rest)
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    from swarmqa.build.cli import main as build_main
+
+    return build_main(args.rest)
 
 
 def cmd_init(args: argparse.Namespace) -> int:

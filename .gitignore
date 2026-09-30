@@ -6,6 +6,7 @@ __pycache__/
 venv/
 dist/
 build/
+!swarmqa/build/
 reports/
 .aqa/
 *.app/
