@@ -1,4 +1,4 @@
-"""Functional checks: crashes, hangs, dead taps, error alerts, console errors.
+"""Functional checks: crashes, hangs, dead taps, endless spinners, error alerts, console errors.
 
 `FunctionalCheck` runs after every step (`per_screen = False`). Every rule is
 conservative: when the evidence is ambiguous it reports nothing. See
@@ -8,6 +8,7 @@ docs/checks.md for the rules and thresholds.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,14 +16,18 @@ from swarmqa.checks._tree import (
     FIELD_ROLES,
     INTERACTIVE_ROLES,
     MODAL_ROLES,
+    PROGRESS_ROLES,
     TEXT_ROLES,
     TOGGLE_ROLES,
     describe,
+    nodes,
     norm_role,
     query_for,
-    structure_signature,
+    screen_frame,
+    stale_nodes,
     subtree_text,
     usable_frame,
+    visible_signature,
     walk,
 )
 from swarmqa.checks.protocol import CheckIssue, StepContext
@@ -38,6 +43,21 @@ _TIMEOUT_TEXT = re.compile(
     r"(uitimeouterror|timed out|timeout|time out|not responding|unresponsive|\bhung\b|\bhang(?:s|ing)?\b)",
     re.IGNORECASE,
 )
+# Framework and test-harness log lines that show up at error level in every
+# healthy iOS app run under XCUITest. Matched against the message.
+SYSTEM_LOG_NOISE = (
+    r"System gesture gate timed out",
+    r"animationDidStop without a matching animationDidStart",
+    r"UIKeyboardLayoutStar",
+    r"Automation type mismatch",
+    r"fopen failed for data file",
+    r"Snapshotting a view .* not in a visible window",
+    r"Failed to send CA Event",
+    r"\[UIKeyboard",
+    r"RTIInputSystemClient",
+    r"Could not find cached accumulator",
+    r"CHHapticPattern",
+)
 _NUMBERS = re.compile(r"0x[0-9a-f]+|\d+", re.IGNORECASE)
 _TITLE_LIMIT = 100
 
@@ -50,7 +70,15 @@ class FunctionalSettings:
     seconds after the action started (0 turns the timing rule off).
     `pixel_change_tolerance` is the fraction of changed screenshot pixels
     above which a tap with an unchanged tree still counts as having done
-    something. `console_ignore` are regexes for log lines to drop.
+    something. `console_ignore` are regexes for log lines to drop, on top of
+    `SYSTEM_LOG_NOISE`. With `console_app_only`, lines from system
+    subsystems (`console_system_subsystems` prefixes, `com.apple.` by
+    default) are dropped unless the subsystem is the app's own bundle id:
+    the app process hosts UIKit, SwiftUI and XCTest, which log errors in
+    healthy runs. `spinner_timeout_s` is how long an activity indicator may
+    stay on screen before it counts as endless; with `spinner_wait` the check
+    re-observes the screen (tree only) until the spinner goes or the time is
+    up, instead of relying on the explorer to linger.
     """
 
     crashes: bool = True
@@ -60,8 +88,14 @@ class FunctionalSettings:
     console_errors: bool = True
     hang_after_s: float = 15.0
     pixel_change_tolerance: float = 0.005
+    endless_spinners: bool = True
     console_ignore: list[str] = field(default_factory=list)
+    console_app_only: bool = True
+    console_system_subsystems: list[str] = field(default_factory=lambda: ["com.apple."])
     max_console_lines: int = 5
+    spinner_timeout_s: float = 10.0
+    spinner_wait: bool = True
+    spinner_poll_s: float = 1.0
 
 
 class FunctionalCheck:
@@ -70,8 +104,14 @@ class FunctionalCheck:
 
     def __init__(self, settings: FunctionalSettings | None = None):
         self.settings = settings or FunctionalSettings()
-        self._ignore = [re.compile(pattern) for pattern in self.settings.console_ignore]
+        self._ignore = [
+            re.compile(pattern) for pattern in (*SYSTEM_LOG_NOISE, *self.settings.console_ignore)
+        ]
         self.last_error: str | None = None
+        # Spinner key -> first time it was seen on screen, and keys already reported.
+        self._spinners: dict[str, float] = {}
+        self._spinners_reported: set[str] = set()
+        self.sleep = time.sleep
 
     def run(self, ctx: StepContext) -> list[CheckIssue]:
         self.last_error = None
@@ -88,6 +128,8 @@ class FunctionalCheck:
             issues.extend(self._hang(ctx))
         if settings.dead_taps and not issues:
             issues.extend(self._dead_tap(ctx))
+        if settings.endless_spinners:
+            issues.extend(self._endless_spinner(ctx))
         if settings.error_alerts:
             issues.extend(self._error_alerts(ctx))
         if settings.console_errors:
@@ -108,6 +150,12 @@ class FunctionalCheck:
                 reports = list(ctx.driver.crash_reports_since(ctx.since_ts))
         except Exception as exc:  # driver trouble is not an app finding
             self.last_error = f"crash_reports_since failed: {exc}"
+        if not ctx.crashed and ctx.after.tree:
+            # The app answered after this step, so a report whose crash
+            # happened before the step started is a late-written report from
+            # an earlier session (ReportCrash can take seconds to write the
+            # .ips, and the driver filters by file time).
+            reports = [r for r in reports if not _crashed_before(r, ctx.since_ts)]
         if not ctx.crashed and not reports:
             return None
         lines: list[str] = []
@@ -201,11 +249,27 @@ class FunctionalCheck:
             return []
         if role in ("slider", "stepper", "incrementor"):
             return []
-        if structure_signature(before.tree) != structure_signature(ctx.after.tree):
+        if _has_interactive_descendant(element):
+            # A labelled row around the real control (a SwiftUI Toggle row
+            # holds the switch): a tap on the row's centre can miss the
+            # control without the app being at fault.
+            return []
+        if _near_keyboard(before.tree, element):
+            return []  # the tap may have landed on the keyboard or its suggestion bar
+        if visible_signature(before.tree, before.size) != visible_signature(ctx.after.tree, ctx.after.size):
             return []  # something moved, appeared, or changed value
         if _new_modal(before.tree, ctx.after.tree):
             return []
-        if _pixels_changed(before.screenshot, ctx.after.screenshot, self.settings.pixel_change_tolerance):
+        # A screenshot taken while a page was still sliding in cannot be
+        # compared; the tree (which already has the final frames) decides.
+        settled = not _in_transition(before) and not _in_transition(ctx.after)
+        if settled and _pixels_changed(
+            before.screenshot,
+            ctx.after.screenshot,
+            self.settings.pixel_change_tolerance,
+            ignore=usable_frame(element),
+            scale=before.scale or 1.0,
+        ):
             return []
         what = "toggle" if role in TOGGLE_ROLES else "control"
         return [
@@ -225,6 +289,81 @@ class FunctionalCheck:
                 check=self.name,
             )
         ]
+
+    # Endless spinner ----------------------------------------------------
+
+    def _endless_spinner(self, ctx: StepContext) -> list[CheckIssue]:
+        """An activity indicator still spinning `spinner_timeout_s` after it first appeared.
+
+        The first sighting starts a clock. With `spinner_wait`, the check then
+        polls `driver.observe(screenshot=False)` until the spinner goes or the
+        time runs out, so the verdict does not depend on the explorer staying
+        on the screen. Each spinner is reported once per session.
+        """
+        settings = self.settings
+        spinners = _spinners_on_screen(ctx.after)
+        now = ctx.after.ts or time.time()
+        for key in list(self._spinners):
+            if key not in spinners:
+                del self._spinners[key]  # it finished
+        issues: list[CheckIssue] = []
+        for key, element in spinners.items():
+            if key in self._spinners_reported:
+                continue
+            first = self._spinners.setdefault(key, now)
+            elapsed = now - first
+            if elapsed < settings.spinner_timeout_s and settings.spinner_wait:
+                elapsed, element = self._wait_for_spinner(ctx, key, first, element)
+                if element is None:
+                    self._spinners.pop(key, None)
+                    continue
+            if elapsed < settings.spinner_timeout_s:
+                continue
+            self._spinners_reported.add(key)
+            name = element.label or element.identifier or "activity indicator"
+            issues.append(
+                CheckIssue(
+                    kind="timeout",
+                    category="broken",
+                    title=f"Loading never finished: {_clip(name)}",
+                    severity="medium",
+                    confidence=0.8,
+                    details=(
+                        f"An activity indicator was still on screen {elapsed:.0f}s after it "
+                        f"appeared (limit {settings.spinner_timeout_s:g}s), with no content, "
+                        "error or retry in its place."
+                    ),
+                    element=query_for(element),
+                    bbox=usable_frame(element),
+                    check=self.name,
+                )
+            )
+        return issues
+
+    def _wait_for_spinner(
+        self, ctx: StepContext, key: str, first: float, element: UIElement
+    ) -> tuple[float, UIElement | None]:
+        """Poll until `key` leaves the screen or the timeout passes. Returns (elapsed, element or None)."""
+        settings = self.settings
+        observe = getattr(ctx.driver, "observe", None)
+        if observe is None:
+            return 0.0, element
+        start = time.monotonic()
+        waited_from = (ctx.after.ts or time.time()) - first
+        while True:
+            elapsed = waited_from + (time.monotonic() - start)
+            if elapsed >= settings.spinner_timeout_s:
+                return elapsed, element
+            self.sleep(max(0.05, settings.spinner_poll_s))
+            try:
+                obs = observe(None, screenshot=False)
+            except Exception as exc:  # driver trouble is not an app finding
+                self.last_error = f"observe while waiting for a spinner failed: {exc}"
+                return 0.0, None
+            current = _spinners_on_screen(obs).get(key)
+            if current is None:
+                return waited_from + (time.monotonic() - start), None
+            element = current
 
     # Error alert --------------------------------------------------------
 
@@ -254,6 +393,13 @@ class FunctionalCheck:
 
     # Console errors -----------------------------------------------------
 
+    def _system_subsystem(self, subsystem: str, app_subsystem: str) -> bool:
+        if not self.settings.console_app_only or not subsystem:
+            return False
+        if app_subsystem and (subsystem == app_subsystem or subsystem.startswith(app_subsystem + ".")):
+            return False
+        return any(subsystem.startswith(prefix) for prefix in self.settings.console_system_subsystems)
+
     def _console(self, ctx: StepContext) -> list[CheckIssue]:
         if ctx.since_ts <= 0:
             return []
@@ -262,10 +408,12 @@ class FunctionalCheck:
         except Exception as exc:
             self.last_error = f"logs_since failed: {exc}"
             return []
+        app_subsystem = str(getattr(ctx.driver, "bundle_id", "") or "")
         errors = [
             entry
             for entry in entries
             if entry.level in ("error", "fault")
+            and not self._system_subsystem(entry.subsystem, app_subsystem)
             and not any(pattern.search(entry.message) for pattern in self._ignore)
         ]
         if not errors:
@@ -289,6 +437,52 @@ class FunctionalCheck:
                 extra={"log_lines": str(len(errors))},
             )
         ]
+
+
+def _spinners_on_screen(obs) -> dict[str, UIElement]:
+    """Visible activity indicators on the page on screen, keyed for tracking across steps.
+
+    A progress element nested in another (SwiftUI's `ProgressView("…")`
+    wraps the system spinner) counts once, as the outermost one.
+    """
+    flat = nodes(obs.tree)
+    stale = stale_nodes(flat, screen_frame(obs.tree, obs.size))
+    found: dict[str, UIElement] = {}
+    for node in flat:
+        if node.index in stale or node.role not in PROGRESS_ROLES:
+            continue
+        if any(flat[index].role in PROGRESS_ROLES for index in node.ancestors):
+            continue
+        element = node.element
+        if usable_frame(element) is None:
+            continue
+        if node.role == "activityindicator" and (element.value or "").strip() in ("0", "false"):
+            continue  # a stopped (hidden) spinner
+        key = element.identifier or element.label or "spinner"
+        found.setdefault(key, element)
+    return found
+
+
+def _crashed_before(report, ts: float, slack: float = 2.0) -> bool:
+    """The report's own crash time (`extra["capture_time"]`) is before `ts`. False when unknown."""
+    text = (getattr(report, "extra", {}) or {}).get("capture_time", "")
+    if not text:
+        return False
+    from datetime import datetime
+
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f %z", "%Y-%m-%d %H:%M:%S %z"):
+        try:
+            when = datetime.strptime(text.strip(), fmt).timestamp()
+        except ValueError:
+            continue
+        return when < ts - slack
+    return False
+
+
+def _in_transition(obs) -> bool:
+    """The observation caught a navigation transition (a page off the origin)."""
+    flat = nodes(obs.tree)
+    return bool(stale_nodes(flat, screen_frame(obs.tree, obs.size)))
 
 
 def _action_target(ctx: StepContext) -> tuple[ElementQuery | None, str]:
@@ -353,19 +547,70 @@ def _first_text(element: UIElement) -> str:
     return ""
 
 
-def _pixels_changed(before: Path | None, after: Path | None, tolerance: float) -> bool:
-    """True when both screenshots exist and differ in more than `tolerance` of pixels."""
+def _pixels_changed(
+    before: Path | None,
+    after: Path | None,
+    tolerance: float,
+    *,
+    ignore: tuple[float, float, float, float] | None = None,
+    scale: float = 1.0,
+    padding: float = 4.0,
+) -> bool:
+    """True when both screenshots exist and differ in more than `tolerance` of pixels.
+
+    `ignore` is a frame in points (the tapped control) blanked in both images
+    first: its own press highlight fading out is not a response to the tap.
+    """
     if before is None or after is None:
         return False
-    from swarmqa.checks.baseline import diff_files
+    from PIL import ImageDraw
+
+    from swarmqa.checks.baseline import diff_images, load_rgba
 
     try:
-        result = diff_files(Path(before), Path(after))
+        left = load_rgba(Path(before))
+        right = load_rgba(Path(after))
     except Exception:
         return True  # unreadable evidence: do not accuse the app
+    try:
+        if ignore is not None and left.size == right.size:
+            x, y, width, height = ignore
+            box = (
+                int((x - padding) * scale),
+                int((y - padding) * scale),
+                int((x + width + padding) * scale),
+                int((y + height + padding) * scale),
+            )
+            for image in (left, right):
+                ImageDraw.Draw(image).rectangle(box, fill=(0, 0, 0, 255))
+        result = diff_images(left, right)
+    finally:
+        left.close()
+        right.close()
     if result is None:
         return True  # sizes differ: the screen changed
-    return result > tolerance
+    return result.score > tolerance
+
+
+def _has_interactive_descendant(element: UIElement) -> bool:
+    for item in walk(element.children):
+        if norm_role(item.role) in INTERACTIVE_ROLES:
+            return True
+    return False
+
+
+def _near_keyboard(tree: list[UIElement], element: UIElement, margin: float = 60.0) -> bool:
+    """A keyboard is up and the element reaches into it or the bar just above it."""
+    frame = usable_frame(element)
+    if frame is None:
+        return False
+    for item in walk(tree):
+        if norm_role(item.role) != "keyboard":
+            continue
+        keyboard = usable_frame(item)
+        if keyboard is not None and frame[1] + frame[3] > keyboard[1] - margin:
+            return True
+    return False
 
 
 def _normalise(text: str) -> str:

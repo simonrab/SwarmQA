@@ -80,6 +80,62 @@ def nodes(tree: list[UIElement]) -> list[Node]:
     return out
 
 
+BAR_ROLES = frozenset({"navigationbar", "toolbar", "tabbar"})
+PROGRESS_ROLES = frozenset({"activityindicator", "progressindicator", "busyindicator"})
+
+
+def screen_frame(tree: list[UIElement], size: tuple[float, float] | None) -> Frame | None:
+    """The screen in points: `size` when known, else the first root frame."""
+    if size is not None and size[0] > 0 and size[1] > 0:
+        return (0.0, 0.0, float(size[0]), float(size[1]))
+    for element in tree:
+        frame = usable_frame(element)
+        if frame is not None:
+            return frame
+    return None
+
+
+def stale_nodes(flat: list[Node], screen: Frame | None, *, tolerance: float = 1.0) -> set[int]:
+    """Indices of nodes on a page that is sliding in or out, not the page on screen.
+
+    During (and briefly after) a navigation push or pop on iOS, the snapshot
+    holds both pages. The page that is leaving or arriving sits in a
+    container exactly the size of the screen but shifted off the origin (the
+    previous page is parallaxed to about x = -30% of the width). A node
+    belongs to the page of its nearest screen-sized ancestor (or itself); it
+    is stale when that page is off the origin. The page on screen starts
+    again at the origin, so it is not stale even when the snapshot nests it
+    inside the old page's container.
+    """
+    if screen is None:
+        return set()
+    _, _, width, height = screen
+    state: dict[int, bool] = {}
+    stale: set[int] = set()
+    for node in flat:
+        frame = node.element.frame
+        own: bool | None = None
+        if frame is not None:
+            x, y, w, h = frame
+            if abs(w - width) <= tolerance and abs(h - height) <= tolerance:
+                own = abs(x - screen[0]) > tolerance or abs(y - screen[1]) > tolerance
+        if own is None:
+            own = state.get(node.ancestors[-1], False) if node.ancestors else False
+        state[node.index] = own
+        if own:
+            stale.add(node.index)
+    return stale
+
+
+def has_ancestor_role(node: Node, flat: list[Node], roles: frozenset[str]) -> bool:
+    return any(flat[index].role in roles for index in node.ancestors)
+
+
+def is_scroll_bar(element: UIElement) -> bool:
+    """UIKit's scroll indicators ("Vertical scroll bar, 1 page"); they flash on any touch."""
+    return "scroll bar" in (element.label or "").lower()
+
+
 def walk(tree: list[UIElement]) -> Iterator[UIElement]:
     for element in tree:
         yield element
@@ -163,6 +219,45 @@ def structure_signature(tree: list[UIElement]) -> str:
 
     visit(tree, 0)
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
+def visible_signature(tree: list[UIElement], size: tuple[float, float] | None = None) -> str:
+    """Hash of what is on the page on screen, for telling whether an action changed anything.
+
+    Like `structure_signature` but order- and nesting-free, and it leaves out
+    nodes on a stale (sliding) page, scroll indicators and their children
+    (UIKit flashes them on any touch in a scroll view), and anonymous
+    containers (role `other` with no label, identifier or value), whose
+    nesting changes while a navigation transition settles.
+    """
+    flat = nodes(tree)
+    stale = stale_nodes(flat, screen_frame(tree, size))
+    scroll_bars: set[int] = set()
+    items: list[str] = []
+    for node in flat:
+        element = node.element
+        if is_scroll_bar(element) or any(index in scroll_bars for index in node.ancestors):
+            scroll_bars.add(node.index)
+            continue
+        if node.index in stale:
+            continue
+        if node.role == "other" and not (element.label or element.identifier or element.value):
+            continue
+        frame = element.frame
+        frame_text = "" if frame is None else ",".join(str(round(v)) for v in frame)
+        items.append(
+            "\x1f".join(
+                (
+                    node.role,
+                    element.label or "",
+                    element.identifier or "",
+                    element.value or "",
+                    "1" if element.enabled else "0",
+                    frame_text,
+                )
+            )
+        )
+    return hashlib.sha256("\n".join(sorted(items)).encode("utf-8")).hexdigest()
 
 
 def subtree_text(element: UIElement) -> str:

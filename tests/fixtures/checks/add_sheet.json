@@ -1,0 +1,729 @@
+{
+ "ts": 1790747471.370109,
+ "size": [
+  402.0,
+  874.0
+ ],
+ "scale": 3.0,
+ "elements": [
+  {
+   "role": "application",
+   "label": "Planted Bugs",
+   "identifier": null,
+   "value": null,
+   "enabled": true,
+   "frame": [
+    0.0,
+    0.0,
+    402.0,
+    874.0
+   ],
+   "children": [
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          -402.0,
+          -874.0,
+          1206.0,
+          2622.0
+         ],
+         "children": []
+        },
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          62.0,
+          402.0,
+          812.0
+         ],
+         "children": [
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            62.0,
+            402.0,
+            812.0
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              62.0,
+              402.0,
+              812.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                62.0,
+                402.0,
+                812.0
+               ],
+               "children": [
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  62.0,
+                  402.0,
+                  812.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    62.0,
+                    402.0,
+                    812.0
+                   ],
+                   "children": [
+                    {
+                     "role": "navigationbar",
+                     "label": null,
+                     "identifier": "New Task",
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      78.0,
+                      402.0,
+                      106.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": "Cancel",
+                       "identifier": "add.cancelButton",
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        20.0,
+                        82.0,
+                        76.66666666666667,
+                        36.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          20.0,
+                          82.0,
+                          76.66666666666667,
+                          36.0
+                         ],
+                         "children": [
+                          {
+                           "role": "button",
+                           "label": "Cancel",
+                           "identifier": "add.cancelButton",
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            20.0,
+                            82.0,
+                            76.66666666666666,
+                            36.0
+                           ],
+                           "children": []
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Save",
+                       "identifier": "add.saveButton",
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        319.6666666666667,
+                        82.0,
+                        62.333333333333314,
+                        36.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          319.6666666666667,
+                          82.0,
+                          62.333333333333314,
+                          36.0
+                         ],
+                         "children": [
+                          {
+                           "role": "button",
+                           "label": "Save",
+                           "identifier": "add.saveButton",
+                           "value": null,
+                           "enabled": false,
+                           "frame": [
+                            319.6666666666667,
+                            82.0,
+                            62.333333333333314,
+                            36.0
+                           ],
+                           "children": []
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "role": "text",
+                       "label": "New Task",
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        16.000000000000014,
+                        135.66666666666669,
+                        150.66666666666669,
+                        40.66666666666666
+                       ],
+                       "children": []
+                      }
+                     ]
+                    },
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      62.0,
+                      402.0,
+                      812.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        0.0,
+                        62.0,
+                        402.0,
+                        812.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          0.0,
+                          62.0,
+                          402.0,
+                          812.0
+                         ],
+                         "children": [
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            0.0,
+                            62.0,
+                            402.0,
+                            812.0
+                           ],
+                           "children": [
+                            {
+                             "role": "collectionview",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              0.0,
+                              62.0,
+                              402.0,
+                              812.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                -16.0,
+                                -1440.0,
+                                434.0,
+                                3372.0
+                               ],
+                               "children": []
+                              },
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                0.0,
+                                62.0,
+                                402.0,
+                                812.0
+                               ],
+                               "children": []
+                              },
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                0.0,
+                                62.0,
+                                402.0,
+                                812.0
+                               ],
+                               "children": []
+                              },
+                              {
+                               "role": "cell",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                184.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  184.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "other",
+                                   "label": null,
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    184.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                },
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  184.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "other",
+                                   "label": null,
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    184.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": [
+                                    {
+                                     "role": "other",
+                                     "label": null,
+                                     "identifier": null,
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      16.0,
+                                      184.0,
+                                      370.0,
+                                      52.0
+                                     ],
+                                     "children": [
+                                      {
+                                       "role": "textfield",
+                                       "label": null,
+                                       "identifier": "add.titleField",
+                                       "value": null,
+                                       "enabled": true,
+                                       "frame": [
+                                        32.0,
+                                        199.0,
+                                        338.0,
+                                        22.0
+                                       ],
+                                       "children": []
+                                      }
+                                     ]
+                                    }
+                                   ]
+                                  }
+                                 ]
+                                }
+                               ]
+                              },
+                              {
+                               "role": "cell",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                236.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  236.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "other",
+                                   "label": null,
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    236.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                },
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  236.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "other",
+                                   "label": null,
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    236.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": [
+                                    {
+                                     "role": "other",
+                                     "label": null,
+                                     "identifier": null,
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      16.0,
+                                      236.0,
+                                      370.0,
+                                      52.0
+                                     ],
+                                     "children": [
+                                      {
+                                       "role": "text",
+                                       "label": "Priority",
+                                       "identifier": null,
+                                       "value": null,
+                                       "enabled": true,
+                                       "frame": [
+                                        32.0,
+                                        251.83333333333334,
+                                        54.33333333333333,
+                                        20.333333333333343
+                                       ],
+                                       "children": []
+                                      },
+                                      {
+                                       "role": "button",
+                                       "label": "Priority, Normal",
+                                       "identifier": "add.priorityPicker",
+                                       "value": null,
+                                       "enabled": true,
+                                       "frame": [
+                                        32.0,
+                                        245.0,
+                                        338.0,
+                                        34.333343505859375
+                                       ],
+                                       "children": [
+                                        {
+                                         "role": "text",
+                                         "label": "Normal",
+                                         "identifier": null,
+                                         "value": null,
+                                         "enabled": true,
+                                         "frame": [
+                                          298.3333333333333,
+                                          252.0,
+                                          55.333333333333314,
+                                          20.333333333333314
+                                         ],
+                                         "children": []
+                                        }
+                                       ]
+                                      }
+                                     ]
+                                    }
+                                   ]
+                                  }
+                                 ]
+                                }
+                               ]
+                              },
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                32.0,
+                                235.0,
+                                338.0,
+                                1.0
+                               ],
+                               "children": []
+                              },
+                              {
+                               "role": "other",
+                               "label": "Vertical scroll bar, 1 page",
+                               "identifier": null,
+                               "value": "0%",
+                               "enabled": true,
+                               "frame": [
+                                369.0,
+                                116.0,
+                                30.0,
+                                696.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  396.0,
+                                  816.0,
+                                  3.0,
+                                  7.0
+                                 ],
+                                 "children": []
+                                }
+                               ]
+                              },
+                              {
+                               "role": "other",
+                               "label": "Vertical scroll bar, 1 page",
+                               "identifier": null,
+                               "value": "0%",
+                               "enabled": true,
+                               "frame": [
+                                369.0,
+                                116.0,
+                                30.0,
+                                696.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  396.0,
+                                  816.0,
+                                  3.0,
+                                  7.0
+                                 ],
+                                 "children": []
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      62.0,
+                      402.0,
+                      812.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        0.0,
+                        62.0,
+                        402.0,
+                        812.0
+                       ],
+                       "children": []
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

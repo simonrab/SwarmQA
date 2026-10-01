@@ -1,0 +1,303 @@
+{
+ "ts": 1790747499.806654,
+ "size": [
+  402.0,
+  874.0
+ ],
+ "scale": 3.0,
+ "elements": [
+  {
+   "role": "application",
+   "label": "Planted Bugs",
+   "identifier": null,
+   "value": null,
+   "enabled": true,
+   "frame": [
+    0.0,
+    0.0,
+    402.0,
+    874.0
+   ],
+   "children": [
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          0.0,
+          402.0,
+          874.0
+         ],
+         "children": [
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            0.0,
+            402.0,
+            874.0
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              0.0,
+              402.0,
+              874.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                0.0,
+                402.0,
+                874.0
+               ],
+               "children": [
+                {
+                 "role": "navigationbar",
+                 "label": null,
+                 "identifier": "About",
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  62.0,
+                  402.0,
+                  106.0
+                 ],
+                 "children": [
+                  {
+                   "role": "button",
+                   "label": "Settings",
+                   "identifier": "BackButton",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    16.0,
+                    62.0,
+                    44.0,
+                    44.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "text",
+                   "label": "About",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    16.0,
+                    119.66666666666667,
+                    97.0,
+                    40.66666666666667
+                   ],
+                   "children": []
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  0.0,
+                  402.0,
+                  874.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    0.0,
+                    402.0,
+                    874.0
+                   ],
+                   "children": [
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      0.0,
+                      402.0,
+                      874.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        0.0,
+                        0.0,
+                        402.0,
+                        874.0
+                       ],
+                       "children": [
+                        {
+                         "role": "image",
+                         "label": "checklist",
+                         "identifier": "checklist",
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          177.0,
+                          439.0,
+                          48.333335876464844,
+                          43.66666793823242
+                         ],
+                         "children": []
+                        },
+                        {
+                         "role": "text",
+                         "label": "Planted Bugs",
+                         "identifier": "about.nameLabel",
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          133.16666666666666,
+                          493.6666666666667,
+                          135.66666666666666,
+                          26.333333333333314
+                         ],
+                         "children": []
+                        },
+                        {
+                         "role": "text",
+                         "label": "Version 1.0 (1)",
+                         "identifier": "about.versionLabel",
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          147.83333333333334,
+                          528.0,
+                          106.33333333333334,
+                          20.33333333333337
+                         ],
+                         "children": []
+                        },
+                        {
+                         "role": "text",
+                         "label": "A small task list used as the SwarmQA benchmark app.",
+                         "identifier": "about.descriptionLabel",
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          34.83333333333334,
+                          556.3333333333334,
+                          332.33333333333326,
+                          15.666666666666629
+                         ],
+                         "children": []
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  0.0,
+                  402.0,
+                  874.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    0.0,
+                    402.0,
+                    874.0
+                   ],
+                   "children": []
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

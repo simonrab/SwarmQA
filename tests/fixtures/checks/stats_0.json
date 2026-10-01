@@ -1,0 +1,290 @@
+{
+ "ts": 1790747456.3188019,
+ "size": [
+  402.0,
+  874.0
+ ],
+ "scale": 3.0,
+ "elements": [
+  {
+   "role": "application",
+   "label": "Planted Bugs",
+   "identifier": null,
+   "value": null,
+   "enabled": true,
+   "frame": [
+    0.0,
+    0.0,
+    402.0,
+    874.0
+   ],
+   "children": [
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          0.0,
+          402.0,
+          874.0
+         ],
+         "children": [
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            0.0,
+            402.0,
+            874.0
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              0.0,
+              402.0,
+              874.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                0.0,
+                402.0,
+                874.0
+               ],
+               "children": [
+                {
+                 "role": "navigationbar",
+                 "label": null,
+                 "identifier": "Weekly stats",
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  62.0,
+                  402.0,
+                  106.0
+                 ],
+                 "children": [
+                  {
+                   "role": "button",
+                   "label": "Tasks",
+                   "identifier": "BackButton",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    16.0,
+                    62.0,
+                    44.0,
+                    44.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "text",
+                   "label": "Weekly stats",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    15.999999999999986,
+                    119.66666666666667,
+                    202.33333333333331,
+                    40.66666666666667
+                   ],
+                   "children": []
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  0.0,
+                  402.0,
+                  874.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    0.0,
+                    402.0,
+                    874.0
+                   ],
+                   "children": [
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      0.0,
+                      402.0,
+                      874.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        0.0,
+                        0.0,
+                        402.0,
+                        874.0
+                       ],
+                       "children": [
+                        {
+                         "role": "activityindicator",
+                         "label": "Loading weekly stats\u2026",
+                         "identifier": "stats.loadingSpinner",
+                         "value": "1",
+                         "enabled": true,
+                         "frame": [
+                          114.83333587646484,
+                          480.6666564941406,
+                          172.33331298828125,
+                          46.716949462890625
+                         ],
+                         "children": [
+                          {
+                           "role": "activityindicator",
+                           "label": null,
+                           "identifier": null,
+                           "value": "1",
+                           "enabled": true,
+                           "frame": [
+                            191.0,
+                            480.66666666666663,
+                            20.0,
+                            20.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "text",
+                           "label": "Loading weekly stats\u2026",
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                           ],
+                           "children": []
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  0.0,
+                  402.0,
+                  874.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    0.0,
+                    402.0,
+                    874.0
+                   ],
+                   "children": []
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

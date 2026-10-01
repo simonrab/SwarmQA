@@ -211,7 +211,7 @@ def test_missing_label(driver):
 
 def test_missing_label_guards(driver):
     elements = [
-        UIElement(role="button", identifier="close", frame=(0, 0, 44, 44)),
+        UIElement(role="switch", identifier="wifi", frame=(0, 0, 51, 31)),
         UIElement(role="textfield", value="Search", frame=(0, 50, 200, 34)),
         UIElement(role="button", frame=(0, 100, 100, 44), children=[UIElement(role="text", label="Go")]),
         UIElement(role="button", frame=(0, 0, 0, 0)),
@@ -264,12 +264,20 @@ def test_contrast_respects_scale(driver, tmp_path):
 
 
 def test_large_text_uses_lower_threshold(driver, tmp_path):
-    # ~3.5:1 fails normal text but passes large text.
+    # ~3.5:1 fails strict WCAG AA for normal text but passes large text.
     shot = _text_png(tmp_path / "mid.png", fg=(130, 130, 130), bg=(255, 255, 255))
     small = UIElement(role="text", label="Small", frame=(10, 10, 180, 18))
     large = UIElement(role="text", label="Large", frame=(10, 10, 180, 40))
-    assert len(_run(driver, "contrast", [small], shot=shot)) == 1
-    assert _run(driver, "contrast", [large], shot=shot) == []
+    strict = {"contrast_min": 4.5, "contrast_margin": 0.0}
+    assert len(_run(driver, "contrast", [small], shot=shot, **strict)) == 1
+    assert _run(driver, "contrast", [large], shot=shot, **strict) == []
+
+
+def test_default_contrast_accepts_system_secondary_grey(driver, tmp_path):
+    # iOS secondaryLabel on white measures ~3.4:1; the default flags only clear failures.
+    shot = _text_png(tmp_path / "secondary.png", fg=(138, 138, 142), bg=(255, 255, 255))
+    small = UIElement(role="text", label="Due Today", frame=(10, 10, 180, 18))
+    assert _run(driver, "contrast", [small], shot=shot) == []
 
 
 def test_contrast_skips_ambiguous_samples(tmp_path):
