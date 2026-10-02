@@ -1,0 +1,61 @@
+name: SwarmQA
+description: Build a commit, run SwarmQA campaigns on a self-hosted Mac, and report findings on the PR.
+inputs:
+  config:
+    description: Path to the SwarmQA config in the app repo.
+    default: aqa.config.toml
+  sha:
+    description: Commit to test. Default is the PR head, or the pushed commit.
+    default: ${{ github.event.pull_request.head.sha || github.sha }}
+  pr:
+    description: PR number to comment on. Default is the triggering PR; empty for pushes.
+    default: ${{ github.event.pull_request.number }}
+  clone-url:
+    description: Repo the builder clones from. Default is the checked-out workspace, which must contain the commit (fetch-depth 0).
+    default: ${{ github.workspace }}
+  swarmqa-spec:
+    description: What `uv tool install` installs.
+    default: swarmqa[anthropic] @ git+https://github.com/simonrab/swarmqa@main
+  github-token:
+    description: Token for gh. The workflow token can create check runs; give the job checks:write and pull-requests:write.
+    default: ${{ github.token }}
+  report-root:
+    description: Campaign report folder, uploaded as the `swarmqa-reports` artifact.
+    default: reports
+outputs:
+  exit-code:
+    description: 0 clean, 1 findings or a build failure, 2 could not run.
+    value: ${{ steps.run.outputs.exit-code }}
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v6
+    - name: Install SwarmQA
+      shell: bash
+      env:
+        SPEC: ${{ inputs.swarmqa-spec }}
+      run: |
+        uv tool install --reinstall "$SPEC"
+        echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+    - name: Run SwarmQA
+      id: run
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        CONFIG: ${{ inputs.config }}
+        SHA: ${{ inputs.sha }}
+        PR: ${{ inputs.pr }}
+        CLONE_URL: ${{ inputs.clone-url }}
+      run: |
+        set +e
+        aqa run --config "$CONFIG" --github-sha "$SHA" ${PR:+--github-pr "$PR"} --clone-url "$CLONE_URL"
+        code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        exit $code
+    - name: Upload reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: swarmqa-reports
+        path: ${{ inputs.report-root }}
+        if-no-files-found: ignore

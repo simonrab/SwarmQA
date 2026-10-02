@@ -95,6 +95,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _enum(errors, "explorer.engine", config.explorer.engine, _ENGINES)
     _validate_checks(errors, config)
     _validate_build(errors, config)
+    _validate_github(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "explorer.max_steps", config.explorer.max_steps, 1)
@@ -221,6 +222,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
 
     config.checks.settings = dict(_section(document, "checks", errors))
     config.build.settings = dict(_section(document, "build", errors))
+    config.github.settings = dict(_section(document, "github", errors))
 
     llm = dict(_section(document, "llm", errors))
     if "enabled" in llm:
@@ -518,6 +520,15 @@ def _validate_build(errors: list[str], config: CampaignConfig) -> None:
 
     try:
         BuildSettings.from_mapping(config.build.settings)
+    except ConfigError as exc:
+        errors.extend(exc.errors)
+
+
+def _validate_github(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.github.settings import GitHubSettings
+
+    try:
+        GitHubSettings.from_mapping(config.github.settings)
     except ConfigError as exc:
         errors.extend(exc.errors)
 

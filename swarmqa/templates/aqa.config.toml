@@ -41,6 +41,14 @@ enabled = false
 # [build.ios]
 # command = ""                            # optional: build yourself and print the .app path
 
+# GitHub trigger: `aqa watch` and `aqa run --github-sha` (see docs/github.md).
+# Nothing is posted to GitHub unless `report` is set.
+# [github]
+# repo = "owner/name"          # default: issues.github_repo, then `gh repo view`
+# platforms = ["ios", "macos"] # default: [app.platform]
+# report = "none"              # check | comment | both
+# handoff = "none"             # claude | codex: ask that agent to fix in the PR comment
+
 [checks]
 # Used by explorer.engine = "agent". Each check is on unless set to false;
 # a table overrides its settings. See docs/checks.md.

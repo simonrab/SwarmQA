@@ -115,6 +115,10 @@ aqa file-issues --tracker github --yes # file into GitHub
 
 Screenshot checks compare pixels with saved baselines. See [docs/visual.md](docs/visual.md).
 
+## GitHub
+
+`aqa watch` tests new and updated PRs and merges into the default branch: it builds each commit in a clean checkout, runs one campaign per platform, and prints the report. `aqa watch --pr 12` tests one PR now. On a self-hosted Mac runner, the GitHub Action in [integrations/github-action](integrations/github-action/README.md) runs `aqa run --github-sha` on every push. With `[github] report = "check"`, `"comment"` or `"both"`, results are posted as a check and one PR comment, edited in place; nothing is posted by default. See [docs/github.md](docs/github.md).
+
 ## Coding agents (MCP)
 
 Claude Code and Codex drive SwarmQA through its MCP server, `aqa mcp` (needs the `mcp` extra). The agent starts a campaign, reads the findings, fixes the code, calls `verify_fix` to rebuild and replay the finding on two devices, and opens the pull request itself once the fix passes. SwarmQA never edits code or opens PRs.
@@ -143,4 +147,6 @@ Tests use the fake driver. They do not need a Mac, Xcode, or `idb`.
 | Orchestrator | [docs/orchestrator.md](docs/orchestrator.md) |
 | Visual baselines | [docs/visual.md](docs/visual.md) |
 | Coding agents and MCP | [docs/agents.md](docs/agents.md) |
+| GitHub trigger | [docs/github.md](docs/github.md) |
+| Per-SHA builder | [docs/build.md](docs/build.md) |
 | `aqa doctor` | [docs/doctor.md](docs/doctor.md) |
