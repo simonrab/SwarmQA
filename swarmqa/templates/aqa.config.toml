@@ -49,6 +49,18 @@ enabled = false
 # report = "none"              # check | comment | both
 # handoff = "none"             # claude | codex: ask that agent to fix in the PR comment
 
+# Flows from the PR diff and the replay cache in .aqa/flows/ (see docs/flows.md).
+# [flows]
+# from_diff = true
+# max_flows = 10
+# cache = false               # true replays cached flows (faster, but skips the agent-loop checks)
+# heal = true
+
+# Lease a device per shard and split the crawl across them (see docs/swarm.md).
+# [swarm]
+# pool = "none"                # ios | local_mac | tart | auto
+# devices = 6                  # default: the pool's capacity
+
 [checks]
 # Used by explorer.engine = "agent". Each check is on unless set to false;
 # a table overrides its settings. See docs/checks.md.

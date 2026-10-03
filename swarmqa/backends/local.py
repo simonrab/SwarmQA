@@ -13,9 +13,9 @@ import sys
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-from swarmqa.errors import ChunkNotReady
+from swarmqa.errors import BackendUnavailable, ChunkNotReady
 from swarmqa.models import (
     CampaignConfig,
     Finding,
@@ -25,6 +25,10 @@ from swarmqa.models import (
 from swarmqa.orchestrator.status import format_worker_line
 from swarmqa.report.layout import ensure_campaign_layout, worker_dir
 from swarmqa.serialize import dump_json, load_json
+
+if TYPE_CHECKING:
+    from swarmqa.devices.protocol import Device
+    from swarmqa.orchestrator.swarm import ShardContext
 
 # (shard, worker_id, work_dir, config) -> WorkerResult
 Executor = Callable[[Shard, str, Path, CampaignConfig], WorkerResult]
@@ -56,7 +60,15 @@ class LocalBackend:
     def cost_per_worker_minute(self) -> float:
         return 0.0
 
-    def run_shard(self, shard: Shard, worker_id: str) -> WorkerResult:
+    def run_shard(
+        self,
+        shard: Shard,
+        worker_id: str,
+        *,
+        context: "ShardContext | None" = None,
+    ) -> WorkerResult:
+        """Run one shard. `context` (from the swarm scheduler) carries the
+        leased device and, for agent-loop shards, the seed graph and claim hook."""
         root = self._root()
         work = worker_dir(root, worker_id)
         if self._is_cancelled(worker_id):
@@ -64,7 +76,7 @@ class LocalBackend:
         if self.executor is not None:
             return self.executor(shard, worker_id, work, self.config)
         if self.config.local.isolation == "subprocess":
-            return self._run_subprocess(shard, worker_id, root, work)
+            return self._run_subprocess(shard, worker_id, root, work, context=context)
         return execute_shard(
             shard,
             worker_id,
@@ -73,6 +85,7 @@ class LocalBackend:
             driver_factory=self.driver_factory,
             campaign_root=root,
             on_step=self.on_step,
+            context=context,
         )
 
     def cancel(self, worker_id: str) -> None:
@@ -101,6 +114,8 @@ class LocalBackend:
         worker_id: str,
         root: Path,
         work: Path,
+        *,
+        context: "ShardContext | None" = None,
     ) -> WorkerResult:
         shard_path = work / "shard.json"
         config_path = work / "config.json"
@@ -109,6 +124,7 @@ class LocalBackend:
         env = os.environ.copy()
         repo_root = str(Path(__file__).resolve().parents[2])
         env["PYTHONPATH"] = repo_root + os.pathsep + env.get("PYTHONPATH", "")
+        env.update(device_env(context.device if context is not None else None))
         command = [
             sys.executable,
             "-m",
@@ -172,17 +188,24 @@ def execute_shard(
     driver_factory: Callable | None = None,
     campaign_root: Path | None = None,
     on_step: StepCallback | None = None,
+    context: "ShardContext | None" = None,
 ) -> WorkerResult:
-    """Run one shard in-process. ChunkNotReady from explorers becomes status error."""
+    """Run one shard in-process. ChunkNotReady from explorers becomes status error.
+
+    `context.device` pins the driver to a leased device; `context.seed_graph`
+    and `context.claim` reach the agent loop.
+    """
     root = campaign_root or _infer_campaign_root(work_dir)
     ensure_campaign_layout(root)
     work_dir.mkdir(parents=True, exist_ok=True)
     started = _now()
+    if context is not None and context.device is not None:
+        driver_factory = device_driver_factory(config, context.device, driver_factory)
     try:
         if shard.kind == "scripted":
             result = _run_scripted(shard, worker_id, work_dir, config, driver_factory, on_step)
         elif shard.kind == "exploratory":
-            result = _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step)
+            result = _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step, context)
         elif shard.kind == "suite":
             result = _run_suite(shard, worker_id, work_dir, config, root, on_step)
         elif shard.kind == "visual":
@@ -248,17 +271,35 @@ def _run_scripted(shard, worker_id, work_dir, config, driver_factory, on_step) -
     try:
         from swarmqa.explorer.scripted import run_scripted
 
+        from swarmqa.flows.cache import is_cached_shard
+        from swarmqa.flows.heal import Healer
+
         step = shard.actions[0].action if shard.actions else "scripted"
         _emit(on_step, worker_id, shard, step)
-        return run_scripted(shard, driver, config, worker_id=worker_id, work_dir=work_dir)
+        healer = None
+        if is_cached_shard(shard):
+            healer = Healer.for_shard(
+                shard, config, provider=_heal_provider(config), work_dir=work_dir / "heal", worker_id=worker_id
+            )
+        result = run_scripted(
+            shard,
+            driver,
+            config,
+            worker_id=worker_id,
+            work_dir=work_dir,
+            on_step_failed=healer if healer is not None and healer.active else None,
+        )
+        if healer is not None:
+            healer.finish(result)
+        return result
     finally:
         _close_driver(driver)
 
 
-def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step) -> WorkerResult:
+def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step, context=None) -> WorkerResult:
     _emit(on_step, worker_id, shard, "explore")
     if config.explorer.engine == "agent":
-        return _run_agent(shard, worker_id, work_dir, config, driver_factory)
+        return _run_agent(shard, worker_id, work_dir, config, driver_factory, context)
     driver = _make_driver(config, work_dir, driver_factory)
     try:
         from swarmqa.explorer.exploratory import run_exploratory
@@ -268,12 +309,13 @@ def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step
         _close_driver(driver)
 
 
-def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResult:
+def _run_agent(shard, worker_id, work_dir, config, driver_factory, context=None) -> WorkerResult:
     """Run the agent loop with the configured checks and, when `[llm]` is on, a model.
 
     A provider that cannot be built (missing SDK extra, bad settings) ends the
     shard as an error before the app is launched, so no half-configured run
-    spends time or money.
+    spends time or money. `context` (swarm scheduler) seeds the screen graph
+    and, for crawl shards, shares the campaign's frontier claims.
     """
     from swarmqa.checks import default_checks
     from swarmqa.checks.config import checks_settings
@@ -295,7 +337,7 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResu
         checks.append(FrictionCheck.for_shard(shard, config.explorer.friction))
     driver = _make_driver(config, work_dir, driver_factory)
     try:
-        return run_agent_loop(
+        result = run_agent_loop(
             shard,
             driver,
             config,
@@ -305,9 +347,40 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResu
             work_dir=work_dir,
             worker_id=worker_id,
             backend=config.backend,
+            seed_graph=context.seed_graph if context is not None else None,
+            claim=context.claim if context is not None else None,
         )
+        _record_flow(shard, config, work_dir)
+        return result
     finally:
         _close_driver(driver)
+
+
+def _record_flow(shard, config, work_dir: Path) -> None:
+    """Save a goal session that reached its goal to the replay cache (`[flows] cache`)."""
+    from swarmqa.flows.cache import FlowCache, cache_root, is_goal_shard
+    from swarmqa.flows.settings import FlowsSettings
+
+    flows = FlowsSettings.from_config(config)
+    if not flows.cache or not is_goal_shard(shard):
+        return
+    try:
+        FlowCache(cache_root(config, flows)).record_session(shard, work_dir / "session.json")
+    except (OSError, ValueError):
+        pass
+
+
+def _heal_provider(config):
+    """The model for healing a cached flow, or None (the heuristic heals alone)."""
+    if not config.llm.enabled:
+        return None
+    from swarmqa.config import llm_settings
+    from swarmqa.llm.settings import create_provider
+
+    try:
+        return create_provider(llm_settings(config))
+    except Exception:  # noqa: BLE001 - healing falls back to the heuristic
+        return None
 
 
 def _run_suite(shard, worker_id, work_dir, config, root: Path, on_step) -> WorkerResult:
@@ -440,6 +513,72 @@ def _default_driver_factory(config: CampaignConfig) -> Callable:
         return create_driver(target, work_dir, kind=kind, video_mode=config.video.mode)
 
     return factory
+
+
+# Leased devices (swarm scheduler) ------------------------------------------
+#
+# The driver factory contract is `factory(target, work_dir)`, and
+# `swarmqa.driver.create_driver` has no device argument, so a leased device
+# reaches the driver through this adapter: a custom factory that takes a
+# `device` keyword gets it; the default factory pins iOS drivers to the
+# lease's UDID through their `udid` argument (env vars are process-wide and
+# workers are threads).
+
+
+def device_driver_factory(config: CampaignConfig, device: "Device", driver_factory: Callable | None) -> Callable:
+    if driver_factory is not None:
+        if _accepts_device(driver_factory):
+            return lambda target, work_dir: driver_factory(target, work_dir, device=device)
+        return driver_factory
+
+    def factory(target, work_dir):
+        return create_device_driver(config, target, work_dir, device)
+
+    return factory
+
+
+def create_device_driver(config: CampaignConfig, target, work_dir: Path, device: "Device"):
+    """`create_driver` for a leased device."""
+    from swarmqa.driver import create_driver
+
+    kind = None if config.driver.kind == "auto" else config.driver.kind
+    if device.kind == "vm" or device.address:
+        raise BackendUnavailable(
+            f"the local backend cannot drive {device.kind} device {device.name or device.id}; "
+            "use the vm backend for Tart VMs"
+        )
+    if target.platform == "ios" and kind in (None, "ios", "runner", "legacy"):
+        if kind == "runner":
+            from swarmqa.driver.ios_runner import IOSRunnerDriver
+
+            return IOSRunnerDriver(target, work_dir, video_mode=config.video.mode, udid=device.id)
+        from swarmqa.driver.ios import IOSSimulatorDriver
+
+        return IOSSimulatorDriver(target, work_dir, video_mode=config.video.mode, udid=device.id)
+    return create_driver(target, work_dir, kind=kind, video_mode=config.video.mode)
+
+
+def device_env(device: "Device | None") -> dict[str, str]:
+    """Environment for a subprocess worker on a leased device."""
+    if device is None or device.platform != "ios" or device.kind != "simulator":
+        return {}
+    from swarmqa.driver.ios import _UDID_ENV
+
+    return {_UDID_ENV: device.id}
+
+
+def _accepts_device(factory: Callable) -> bool:
+    import inspect
+
+    try:
+        parameters = inspect.signature(factory).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        param.name == "device" and param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
+        or param.kind == param.VAR_KEYWORD
+        for param in parameters
+    )
 
 
 def _close_driver(driver) -> None:

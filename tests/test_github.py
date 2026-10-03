@@ -364,7 +364,7 @@ def test_evaluate_sha_runs_a_campaign_per_platform(tmp_path, monkeypatch):
         return CampaignResult("c1", str(report_dir), exit_code=1)
 
     builder = FakeBuilder(fail={"macos"})
-    monkeypatch.setattr("swarmqa.intent.ingest.build_queue", lambda cfg: [SimpleNamespace(id="s1")])
+    monkeypatch.setattr("swarmqa.intent.ingest.build_queue", lambda cfg, extra=None: [SimpleNamespace(id="s1")])
     monkeypatch.setattr("swarmqa.github.watch.use_gh_credentials", lambda env=None: None)
     event = Event("pr", SHA1[:7], 1)
     result = evaluate_sha(event, config, settings(platforms=["ios", "macos"]), repo=REPO,

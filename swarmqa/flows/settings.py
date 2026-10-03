@@ -6,7 +6,7 @@
     max_diff_chars = 60000    # diff text sent to the model; the rest is dropped
     max_file_chars = 20000    # per touched file
     file_globs = ["*.swift"]  # touched files whose content goes to the model
-    cache = true              # replay cached flows before exploring
+    cache = false             # replay cached flows instead of exploring (skips the agent-loop checks)
     cache_dir = ".aqa/flows"  # relative to the app repo (app.source_dir, else the config's dir)
     heal = true               # re-explore a failing cached step and rewrite the script
     heal_max_steps = 8        # agent-loop steps allowed to repair one step
@@ -33,7 +33,10 @@ class FlowsSettings:
     max_diff_chars: int = 60_000
     max_file_chars: int = 20_000
     file_globs: list[str] = field(default_factory=lambda: ["*.swift"])
-    cache: bool = True
+    # Off by default: a cached flow replays as a scripted shard, which runs none
+    # of the agent-loop checks, so a layout or dead-tap regression on that path
+    # would go unreported. Turn it on for speed when those checks matter less.
+    cache: bool = False
     cache_dir: str = ".aqa/flows"
     heal: bool = True
     heal_max_steps: int = 8

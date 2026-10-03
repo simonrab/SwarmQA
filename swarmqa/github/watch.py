@@ -64,7 +64,7 @@ class WatchState:
 
 
 def pr_event(pull: PullRequest) -> Event:
-    return Event("pr", pull.head_sha, pull.number, pull.head_ref, pull.title, pull.url)
+    return Event("pr", pull.head_sha, pull.number, pull.head_ref, pull.title, pull.url, base=pull.base_sha)
 
 
 def poll(client: GitHubClient, settings: GitHubSettings, state: WatchState, branch: str,
@@ -151,6 +151,7 @@ def evaluate_sha(
         use_gh_credentials()
     builder = builder or ShaBuilder(BuildSettings.from_config(config))
     result = EventResult(event)
+    diff_plan = None
     for platform in settings.platforms:
         outcome = PlatformOutcome(platform)
         result.outcomes.append(outcome)
@@ -170,7 +171,9 @@ def evaluate_sha(
         campaign_config.app.path = built.artifact.app_path
         campaign_config.app.bundle_id = built.artifact.bundle_id
         try:
-            queue = build_queue(campaign_config)
+            if diff_plan is None:
+                diff_plan = _diff_flows(event, campaign_config, builder, source, log)
+            queue = build_queue(campaign_config, extra=copy.deepcopy(diff_plan.shards))
             if not queue:
                 outcome.error = "no shards: add intents to the config"
                 outcome.exit_code = 2
@@ -189,6 +192,41 @@ def evaluate_sha(
         if findings_path.is_file():
             outcome.findings = load_findings_json(findings_path)
     return result
+
+
+def _diff_flows(event: Event, config: CampaignConfig, builder: Any, source: str | None, log: Log):
+    """Goal shards for what the event changed (`[flows] from_diff`); an empty plan on any failure."""
+    from swarmqa.flows import FlowPlan
+    from swarmqa.flows.from_diff import collect_change, flows_from_diff
+    from swarmqa.flows.settings import FlowsSettings
+
+    settings = FlowsSettings.from_config(config)
+    if not settings.from_diff:
+        return FlowPlan()
+    base = event.base or f"{event.sha}^"
+    try:
+        repo_dir = builder.repo_cache(source).mirror
+        change = collect_change(repo_dir, base, event.sha, settings=settings)
+    except Exception as exc:  # noqa: BLE001 - no diff means no diff flows, not a failed run
+        log(f"{event.label()}: no flows from the diff: {exc}")
+        return FlowPlan()
+    provider = None
+    if config.llm.enabled:
+        from swarmqa.config import llm_settings
+        from swarmqa.llm.settings import create_provider
+
+        try:
+            provider = create_provider(llm_settings(config))
+        except Exception as exc:  # noqa: BLE001 - fall back to the heuristic
+            log(f"{event.label()}: llm unavailable for flows: {exc}")
+    plan = flows_from_diff(config, change, provider=provider, settings=settings)
+    notes = list(plan.notes)
+    if plan.usage is not None and plan.usage.cost:
+        # Not on the campaign's spend meter: the call happens before any campaign.
+        notes.append(f"model cost {plan.usage.cost:.4f} {plan.usage.currency}, outside spend.max_spend")
+    note = f" ({'; '.join(notes)})" if notes else ""
+    log(f"{event.label()}: {len(plan.shards)} flow(s) from the diff, {plan.source}{note}")
+    return plan
 
 
 class Watcher:

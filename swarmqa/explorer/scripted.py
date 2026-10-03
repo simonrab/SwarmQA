@@ -1,12 +1,15 @@
 """C4 — execute a scripted shard against one driver.
 
-See docs/CONTRACTS.md section C4.
+See docs/CONTRACTS.md section C4. `on_step_failed` lets the replay cache
+repair a failing step (docs/flows.md); without it nothing changes.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Callable
 
 from swarmqa.driver.query import find_element
 from swarmqa.driver.v1_adapter import as_v2
@@ -43,6 +46,23 @@ _STEP_FAILURES = (
 )
 
 
+@dataclass
+class StepFailure:
+    """A failed step, handed to `on_step_failed` while the app is still open."""
+
+    index: int
+    action: Action
+    description: str
+    error: Exception
+    driver: Any
+
+
+# Return a note when the hook carried the run to its end itself (the failed
+# step and the rest are then recorded as healed and skipped, with no
+# finding), or None to record the failure as usual.
+StepFailedHook = Callable[[StepFailure], "str | None"]
+
+
 def run_scripted(
     shard: Shard,
     driver,
@@ -50,8 +70,13 @@ def run_scripted(
     *,
     worker_id: str,
     work_dir: Path,
+    on_step_failed: StepFailedHook | None = None,
 ) -> WorkerResult:
-    """Run shard.actions. Record step pass/fail and findings on failure."""
+    """Run shard.actions. Record step pass/fail and findings on failure.
+
+    `on_step_failed` is asked first about each failed step, before a finding
+    is recorded; see `StepFailedHook`.
+    """
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     campaign_dir, relative = _campaign_context(work_dir)
@@ -100,6 +125,7 @@ def run_scripted(
                 findings=findings,
                 steps=steps,
                 replays=replays,
+                on_step_failed=on_step_failed,
             )
     except Exception:
         if status == "passed":
@@ -152,6 +178,7 @@ def _run_actions(
     findings: list[Finding],
     steps: list[StepResult],
     replays: dict[str, list[dict]],
+    on_step_failed: StepFailedHook | None = None,
 ) -> tuple[str, str | None]:
     executed: list[Action] = []
     descriptions: list[str] = []
@@ -190,6 +217,18 @@ def _run_actions(
         except _STEP_FAILURES as exc:
             executed.append(action)
             descriptions.append(description)
+            note = _ask_hook(on_step_failed, StepFailure(index, action, description, exc, driver))
+            if note:
+                steps.append(
+                    StepResult(
+                        index=index,
+                        action=action.action,
+                        status="passed",
+                        message=f"{description}: healed: {note}",
+                    )
+                )
+                _skip_rest(shard.actions, index, steps, message="replaced by the healed steps")
+                break
             failure_shot = _capture_failure_shot(driver, index, work_dir)
             if failure_shot is not None:
                 screenshots.append(failure_shot)
@@ -396,16 +435,32 @@ def _persist_findings(
         write_finding(finding, campaign_dir)
 
 
-def _skip_rest(actions: list[Action], failed_index: int, steps: list[StepResult]) -> None:
+def _skip_rest(
+    actions: list[Action],
+    failed_index: int,
+    steps: list[StepResult],
+    *,
+    message: str = "stopped after step failure",
+) -> None:
     for index, action in enumerate(actions[failed_index + 1 :], start=failed_index + 1):
         steps.append(
             StepResult(
                 index=index,
                 action=action.action,
                 status="skipped",
-                message="stopped after step failure",
+                message=message,
             )
         )
+
+
+def _ask_hook(hook: StepFailedHook | None, failure: StepFailure) -> str | None:
+    """The hook's note, or None when there is no hook or it raised."""
+    if hook is None:
+        return None
+    try:
+        return hook(failure) or None
+    except Exception:  # noqa: BLE001 - a broken repair never hides the real failure
+        return None
 
 
 def _kind_from(exc: BaseException) -> str:

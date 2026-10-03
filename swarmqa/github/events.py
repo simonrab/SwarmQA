@@ -19,6 +19,7 @@ class Event:
     ref: str = ""
     title: str = ""
     url: str = ""
+    base: str = ""  # the revision to diff against: the PR's base, else the parent
 
     def label(self) -> str:
         where = f"PR #{self.pr}" if self.pr is not None else (self.ref or "push")

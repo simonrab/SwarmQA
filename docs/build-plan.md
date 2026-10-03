@@ -94,11 +94,11 @@ Update `driver/fake.py` and the fake decision provider to the new contracts.
 
 **Gate:** on a scratch repo containing the fixture, `aqa watch` detects a PR, builds it, runs 3 simulators plus the macOS app, and posts a check run and a comment. The hand-off produces a fix PR, a re-run clears the finding, and merging triggers the post-merge run.
 
-## Phase 6, Wave D: flows and speed (3 subagents)
+## Phase 6, Wave D: flows and speed (3 subagents) — built; target not measured on devices yet
 
-- **WP-D1: Flows from the diff.** Owns `swarmqa/flows/from_diff.py`. The diff and touched SwiftUI files go to `propose_flows`, which returns prioritised intents in the existing intent format.
-- **WP-D2: Replay cache and self-heal.** Owns `swarmqa/flows/cache.py`. Successful explorations are saved to the target repo's `.aqa/flows/` and replayed first; a failing step is re-explored alone and the script updated.
-- **WP-D3: Swarm scheduler.** Owns changes to `swarmqa/orchestrator/campaign.py`. Pulls devices from DevicePools, splits the crawl frontier across devices, merges screen graphs across the campaign.
+- **WP-D1: Flows from the diff.** Owns `swarmqa/flows/from_diff.py`. The diff and touched SwiftUI files go to `propose_flows`, which returns prioritised intents in the existing intent format. **Done:** `collect_change` and `flows_from_diff`, with a heuristic fallback (view names and new controls) when there is no model or it fails. The GitHub trigger diffs a PR against its base, or a push against its parent, and puts the flows first in each platform's queue.
+- **WP-D2: Replay cache and self-heal.** Owns `swarmqa/flows/cache.py`. Successful explorations are saved to the target repo's `.aqa/flows/` and replayed first; a failing step is re-explored alone and the script updated. **Done, off by default:** a cached flow replays as a scripted shard, which skips the agent-loop checks, so `[flows] cache = true` trades detection for speed. Follow-up: replay cached steps inside the agent loop so the checks still run.
+- **WP-D3: Swarm scheduler.** Owns changes to `swarmqa/orchestrator/campaign.py`. Pulls devices from DevicePools, splits the crawl frontier across devices, merges screen graphs across the campaign. **Done:** `[swarm] pool` leases one device per shard; crawl workers claim controls on a shared board; graphs merge into `<campaign>/screen_graph.json`. On fake devices, 3 devices run 2.6x faster than 1 and 6 run 4.9x faster.
 
 **Target:** 20 flows on 6 iOS simulators in under 10 minutes on cached runs.
 

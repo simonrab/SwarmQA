@@ -60,12 +60,16 @@ _LAUNCH = re.compile(r"^(launch|relaunch)\s*$")
 _FRONT_MATTER_TAGS = re.compile(r"^tags\s*:\s*(.*?)\s*$", re.IGNORECASE)
 
 
-def build_queue(config: CampaignConfig) -> list[Shard]:
+def build_queue(config: CampaignConfig, *, extra: list[Shard] | None = None) -> list[Shard]:
     """Return shard units for one campaign.
 
     Raise IntentError when the intent set is empty or paths are missing.
     Mix markdown, JSON flows, and config.suite.command in one queue.
+    `extra` shards (flows from the diff) go first, in their own order. Goal
+    shards with a replay-cache hit become scripted replays (`[flows] cache`).
     """
+    from swarmqa.flows.cache import cached_shards
+
     shards: list[Shard] = []
     for path in _expand_intents(config.intents):
         if path.suffix.lower() == ".json":
@@ -87,9 +91,10 @@ def build_queue(config: CampaignConfig) -> list[Shard]:
     if config.visual.enabled or config.coverage.visual:
         shards.append(_visual_shard(config))
 
-    shards = _order_shards(shards, config.shard_strategy)
+    shards = list(extra or []) + _order_shards(shards, config.shard_strategy)
     if not shards:
         raise IntentError("intent set is empty")
+    shards = cached_shards(config, shards)
     _assign_ids(shards)
     return shards
 

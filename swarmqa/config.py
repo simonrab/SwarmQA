@@ -97,6 +97,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _validate_build(errors, config)
     _validate_github(errors, config)
     _validate_flows(errors, config)
+    _validate_swarm(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "explorer.max_steps", config.explorer.max_steps, 1)
@@ -543,6 +544,18 @@ def _validate_flows(errors: list[str], config: CampaignConfig) -> None:
         FlowsSettings.from_config(config)
     except ConfigError as exc:
         errors.extend(exc.errors)
+
+
+def _validate_swarm(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.orchestrator.swarm import SwarmSettings, pool_errors
+
+    try:
+        settings = SwarmSettings.from_config(config)
+    except ConfigError as exc:
+        errors.extend(exc.errors)
+        return
+    if config.backend == "local":
+        errors.extend(pool_errors(config, settings))
 
 
 def _validate_checks(errors: list[str], config: CampaignConfig) -> None:

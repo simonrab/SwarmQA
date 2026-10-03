@@ -20,6 +20,7 @@ from swarmqa.backends.local import (
     persist_finding,
 )
 from swarmqa.budgets import CampaignClock
+from swarmqa.devices.protocol import DevicePool
 from swarmqa.models import (
     CampaignConfig,
     CampaignResult,
@@ -37,6 +38,7 @@ from swarmqa.orchestrator.status import (
     model_from_plain,
     write_status,
 )
+from swarmqa.orchestrator.swarm import Swarm
 from swarmqa.report.dedup import dedup_findings
 from swarmqa.report.layout import campaign_dir, ensure_campaign_layout, worker_dir
 from swarmqa.report.summary import write_summary
@@ -56,8 +58,15 @@ def run_campaign(
     options: RunOptions | None = None,
     driver_factory: Callable | None = None,
     executor: Executor | None = None,
+    device_pool: DevicePool | None = None,
 ) -> CampaignResult:
-    """Run up to config.workers sessions. Merge artifacts. Survive a worker crash."""
+    """Run up to config.workers sessions. Merge artifacts. Survive a worker crash.
+
+    With a `[swarm]` pool (or `device_pool`, which the campaign then owns and
+    closes), each interactive shard leases a device, worker slots are capped
+    by the pool's capacity, crawl workers split the frontier and screen
+    graphs merge into `<campaign>/screen_graph.json`. See docs/swarm.md.
+    """
     options = options or RunOptions()
     root, campaign_id, previous = _open_campaign(config, options)
     resume = previous is not None and bool(options.resume_campaign_id)
@@ -71,9 +80,11 @@ def run_campaign(
         max_wall_time_s=config.budgets.max_wall_time_s,
         max_worker_minutes=config.budgets.max_worker_minutes,
     )
-    _warn_gui(config, queue)
+    swarm = Swarm.open(config, root, pool=device_pool)
+    if swarm.pool is None:
+        _warn_gui(config, queue)
 
-    slots = max(1, int(config.workers))
+    slots = swarm.slots(config.workers)
     if config.backend == "local":
         backend: LocalBackend | object = LocalBackend(
             config,
@@ -151,6 +162,10 @@ def run_campaign(
         backend.on_step = on_step
 
     publish()
+    use_swarm = swarm.active and isinstance(backend, LocalBackend)
+
+    def make_swarm_error(shard: Shard, worker_id: str, message: str) -> WorkerResult:
+        return make_error_result(shard, worker_id, message, config.backend)
 
     def start_shard(pool: ThreadPoolExecutor, shard: Shard) -> None:
         nonlocal worker_seq
@@ -177,11 +192,21 @@ def run_campaign(
         worker_dir(root, worker_id)
         line = format_worker_line(worker_id, shard.name, shard.kind, _initial_step(shard))
         publish(worker_line=line)
-        future = pool.submit(backend.run_shard, shard, worker_id)
+        if use_swarm:
+            future = pool.submit(
+                swarm.run,
+                backend.run_shard,
+                shard,
+                worker_id,
+                on_step=on_step,
+                make_error=make_swarm_error,
+            )
+        else:
+            future = pool.submit(backend.run_shard, shard, worker_id)
         inflight[future] = (shard, worker_id, time.monotonic())
 
     inflight: dict[Future, tuple[Shard, str, float]] = {}
-    with ThreadPoolExecutor(max_workers=slots) as pool:
+    with swarm, ThreadPoolExecutor(max_workers=slots) as pool:
         while pending or inflight:
             if stop_reason is None:
                 decision = clock.can_schedule(time.monotonic() - started)
@@ -234,6 +259,8 @@ def run_campaign(
                 _settle_spend(meter, metered, rate, config, result, reserved.pop(worker_id, 0.0))
                 clock.add_worker_minutes(result.worker_minutes)
                 dump_json(result, worker_dir(root, worker_id) / "result.json")
+                if use_swarm:
+                    _finish_swarm_worker(swarm, worker_id, worker_dir(root, worker_id))
                 results[shard.id] = result
                 with state_lock:
                     active.pop(worker_id, None)
@@ -275,7 +302,8 @@ def run_campaign(
         exit_code=exit_code,
         backend=config.backend,
     )
-    write_summary(result, root)
+    summary_md = write_summary(result, root)
+    _append_swarm_summary(swarm, summary_md)
     status.state = "stopped" if stop_reason else "finished"
     status.active_workers = []
     status.queue_depth = len(not_started)
@@ -288,6 +316,25 @@ def run_campaign(
     write_status(status, root)
     print(format_campaign_line(status), file=sys.stderr, flush=True)
     return result
+
+
+def _finish_swarm_worker(swarm: Swarm, worker_id: str, work_dir: Path) -> None:
+    try:
+        swarm.finish(worker_id, work_dir)
+    except Exception as exc:
+        print(f"warning: merging {worker_id} into the swarm failed: {exc}", file=sys.stderr, flush=True)
+
+
+def _append_swarm_summary(swarm: Swarm, summary_md: Path) -> None:
+    lines = swarm.summary_lines()
+    if not lines:
+        return
+    try:
+        text = summary_md.read_text(encoding="utf-8")
+        separator = "" if text.endswith("\n\n") or not text else ("\n" if text.endswith("\n") else "\n\n")
+        summary_md.write_text(text + separator + "\n".join(lines), encoding="utf-8")
+    except OSError as exc:
+        print(f"warning: writing the swarm summary failed: {exc}", file=sys.stderr, flush=True)
 
 
 def _open_campaign(config: CampaignConfig, options: RunOptions):

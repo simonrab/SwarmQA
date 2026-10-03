@@ -35,6 +35,7 @@ class PullRequest:
     head_sha: str
     head_ref: str = ""
     base_ref: str = ""
+    base_sha: str = ""
     title: str = ""
     url: str = ""
     state: str = "open"
@@ -51,6 +52,7 @@ class PullRequest:
             head_sha=str(head.get("sha") or ""),
             head_ref=str(head.get("ref") or ""),
             base_ref=str(base.get("ref") or ""),
+            base_sha=str(base.get("sha") or ""),
             title=str(data.get("title") or ""),
             url=str(data.get("html_url") or ""),
             state=str(data.get("state") or "open"),
