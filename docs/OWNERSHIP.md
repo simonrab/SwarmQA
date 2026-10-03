@@ -47,6 +47,12 @@ From Phase 2 on, work packages from `docs/build-plan.md` replace chunks. Each WP
 | C2 verify_fix | `swarmqa/verify/**` (bodies of `__init__.py`, not its signatures); `tests/test_verify*.py`; `docs/verify.md` |
 | C3 Integrations and cleanup | `integrations/**`; `swarmqa/doctor.py`; `swarmqa/cli.py`; removing `swarmqa/prloop/`, `tests/test_prloop.py` and the `[pr]` config; `swarmqa/reporter/issues.py` behind `aqa file-issues`; `README.md`; `docs/agents.md` |
 
+| D1 Flows from the diff | `swarmqa/flows/from_diff.py`; `tests/test_flows_from_diff*.py`; `docs/flows.md` (the from-diff section) |
+| D2 Replay cache and self-heal | `swarmqa/flows/cache.py`, `swarmqa/flows/heal.py`; `swarmqa/explorer/scripted.py` (an optional heal hook only); `tests/test_flows_cache*.py`; `docs/flows.md` (the cache section) |
+| D3 Swarm scheduler | `swarmqa/orchestrator/campaign.py`, `swarmqa/orchestrator/swarm.py`, `swarmqa/backends/local.py`; `tests/test_swarm*.py`, `tests/test_orchestrator.py`; `docs/swarm.md` |
+
+Wave D contracts, read-only for D1 to D3: `swarmqa/flows/__init__.py`, `swarmqa/flows/settings.py`, the `[flows]` and `[swarm]` raw tables, and the `seed_graph`, `claim` and `session.json` hooks in `swarmqa/explorer/agent_loop.py`. The lead wires D1 and D2 into `intent/ingest.py`, `cli.py` and `github/watch.py` after the wave merges.
+
 The lead adds the `aqa mcp` and `aqa verify` commands to `cli.py` after C1 and C2 land.
 
 Never add references to the private validation app to tracked files.

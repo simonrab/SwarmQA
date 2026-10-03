@@ -931,3 +931,69 @@ def test_a_crash_during_back_stays_in_the_replay(tmp_path):
     crash = next(f for f in result.findings if f.kind == "crash")
     document = json.loads((tmp_path / "campaign" / crash.replay_json).read_text())
     assert document["steps"][-1] == {"action": "tap_point", "point": [60.0, 222.0]}
+
+
+# Wave D hooks: claim, seed graph, session.json ------------------------------
+
+
+def test_claim_refusal_skips_the_control(tmp_path):
+    driver = make_driver(tmp_path)
+    asked: list[str] = []
+
+    def claim(screen_id: str, key: str) -> bool:
+        asked.append(key)
+        return "Profile" not in key
+
+    result = run_agent_loop(
+        Shard(id="s1", kind="exploratory", name="hunt"),
+        driver,
+        config_for(tmp_path),
+        settings=AgentLoopSettings(max_steps=60),
+        work_dir=work_dir(tmp_path),
+        worker_id="w1",
+        claim=claim,
+    )
+    assert result.status == "passed"
+    assert any("Profile" in key for key in asked)
+    assert "click:Profile" not in driver.actions_log
+    assert "click:Settings" in driver.actions_log
+
+
+def test_seed_graph_carries_tried_controls_into_the_loop(tmp_path):
+    first = make_driver(tmp_path)
+    run(tmp_path, first)
+    seed = load_graph(tmp_path)
+    second = make_driver(tmp_path)
+    run_agent_loop(
+        Shard(id="s2", kind="exploratory", name="hunt"),
+        second,
+        config_for(tmp_path),
+        settings=AgentLoopSettings(max_steps=60),
+        work_dir=work_dir(tmp_path),
+        worker_id="w2",
+        seed_graph=seed,
+    )
+    clicks = [entry for entry in second.actions_log if entry.startswith("click:")]
+    assert clicks == []
+
+
+def test_session_json_records_the_replay_and_goal_reached(tmp_path):
+    provider = FakeModelProvider(steps=[tap("Settings"), tap("About"), StepDecision(kind="done")])
+    run(
+        tmp_path,
+        make_driver(tmp_path),
+        goal="Find the version number in About",
+        provider=provider,
+        settings_=AgentLoopSettings(heuristic_first=False),
+    )
+    session = json.loads((work_dir(tmp_path) / "session.json").read_text())
+    assert session["goal_reached"] is True
+    assert session["stop_reason"] == "done"
+    assert session["replay"][0] == {"action": "launch"}
+    assert [step.get("target", {}).get("label") for step in session["replay"][1:]] == ["Settings", "About"]
+
+
+def test_crawl_session_never_counts_as_goal_reached(tmp_path):
+    run(tmp_path, make_driver(tmp_path))
+    session = json.loads((work_dir(tmp_path) / "session.json").read_text())
+    assert session["mode"] == "crawl" and session["goal_reached"] is False

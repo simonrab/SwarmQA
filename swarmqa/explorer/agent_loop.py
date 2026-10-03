@@ -36,6 +36,7 @@ from swarmqa.explorer.screen_graph import (
 from swarmqa.llm.protocol import HistoryStep, ModelError, ModelProvider, StepDecision
 from swarmqa.models import CampaignConfig, ElementQuery, Finding, Shard, StepResult, UIElement, WorkerResult
 from swarmqa.reporter.findings import fingerprint_for, write_finding, write_replay
+from swarmqa.serialize import dump_json
 from swarmqa.video_policy import keep_video, should_start_video
 
 LoopMode = Literal["goal", "crawl"]
@@ -248,6 +249,8 @@ class _AgentLoop:
         worker_id: str,
         backend: str,
         clock: Callable[[], float],
+        seed_graph: ScreenGraph | None = None,
+        claim: Callable[[str, str], bool] | None = None,
     ):
         self.shard = shard
         self.driver = as_v2(driver)
@@ -264,7 +267,8 @@ class _AgentLoop:
         self.mode: LoopMode = "crawl" if settings.mode == "crawl" or not self.goal else "goal"
         self.tokens, self.expected = parse_goal(self.goal)
         self.platform = (settings.platform or config.app.platform or "macos").lower()
-        self.graph = ScreenGraph()
+        self.graph = ScreenGraph().merge(seed_graph) if seed_graph is not None else ScreenGraph()
+        self.claim = claim
         self.started = clock()
         self.steps_used = 0
         self.model_calls = 0
@@ -700,6 +704,10 @@ class _AgentLoop:
                 # "Delete 2 items" under the same fingerprint): never retry it.
                 self.graph.mark_tried(self.current_id, control.key)
                 continue
+            if self.claim is not None and not self.claim(self.current_id, control.key):
+                # Another worker in the campaign has this control.
+                self.graph.mark_tried(self.current_id, control.key)
+                continue
             return _Plan(_control_decision(control, self.settings.sample_text), "crawl", control=control.key)
         nearest = self.graph.nearest_frontier(self.current_id, skip=self.unreachable)
         if nearest is not None:
@@ -1032,6 +1040,29 @@ class _AgentLoop:
             return "error"
         return "passed"
 
+    def session_record(self, status: str) -> dict[str, Any]:
+        """What `session.json` holds: the replay of the whole session and how it ended.
+
+        `goal_reached` is true only in goal mode when the loop stopped on `done`
+        with no findings and no crash, so the replay cache never stores a
+        broken path as the way to a goal.
+        """
+        return {
+            "version": 1,
+            "shard": self.shard.name,
+            "goal": self.goal,
+            "mode": self.mode,
+            "status": status,
+            "stop_reason": self.stop_reason,
+            "goal_reached": self.mode == "goal"
+            and self.stop_reason == "done"
+            and not self.findings
+            and self.crashes == 0
+            and self.fatal is None,
+            "steps_used": self.steps_used,
+            "replay": [dict(step) for step in self.replay],
+        }
+
     def finish(self, started_at: str, started_mono: float) -> WorkerResult:
         if self.stop_reason:
             self._note("stop", "passed", self.stop_reason)
@@ -1056,6 +1087,10 @@ class _AgentLoop:
             self.graph.save(self.work_dir / "screen_graph.json")
         except OSError as exc:
             self._note("screen_graph", "failed", str(exc))
+        try:
+            dump_json(self.session_record(status), self.work_dir / "session.json")
+        except OSError as exc:
+            self._note("session", "failed", str(exc))
         return WorkerResult(
             worker_id=self.worker_id,
             shard_id=self.shard.id,
@@ -1085,10 +1120,16 @@ def run_agent_loop(
     worker_id: str,
     backend: str = "local",
     clock: Callable[[], float] = time.monotonic,
+    seed_graph: ScreenGraph | None = None,
+    claim: Callable[[str, str], bool] | None = None,
 ) -> WorkerResult:
     """Explore `shard` with an observe-decide-act loop and return the worker result.
 
-    The screen graph is saved to `<work_dir>/screen_graph.json`. Findings and
+    The screen graph is saved to `<work_dir>/screen_graph.json` and the
+    session's replay to `<work_dir>/session.json` (see `session_record`).
+    `seed_graph` starts the loop with screens other workers already mapped.
+    `claim(screen_id, control_key)` is asked before crawl mode tries an
+    untried control; False means another worker has it, and it is skipped. Findings and
     their replay flows go to `<campaign>/findings/`. The caller owns the
     driver and closes it.
     """
@@ -1107,6 +1148,8 @@ def run_agent_loop(
         worker_id=worker_id,
         backend=backend,
         clock=clock,
+        seed_graph=seed_graph,
+        claim=claim,
     )
     try:
         loop.run()
