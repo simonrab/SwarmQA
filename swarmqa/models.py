@@ -282,6 +282,24 @@ class ChecksConfig:
 
 
 @dataclass
+class FlowsConfig:
+    """The `[flows]` table, kept raw; `swarmqa.flows.settings.FlowsSettings.from_mapping`
+    parses it. Flows from the diff (WP-D1) and the replay cache (WP-D2). See docs/flows.md.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SwarmConfig:
+    """The `[swarm]` table, kept raw; `swarmqa.orchestrator.swarm.SwarmSettings.from_mapping`
+    parses it. Device pools and frontier splitting for a campaign (WP-D3). See docs/swarm.md.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class LocalConfig:
     isolation: LocalIsolation = "thread"
 
@@ -311,6 +329,8 @@ class CampaignConfig:
     checks: ChecksConfig = field(default_factory=ChecksConfig)
     build: BuildConfig = field(default_factory=BuildConfig)
     github: GitHubConfig = field(default_factory=GitHubConfig)
+    flows: FlowsConfig = field(default_factory=FlowsConfig)
+    swarm: SwarmConfig = field(default_factory=SwarmConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2

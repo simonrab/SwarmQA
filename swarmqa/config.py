@@ -96,6 +96,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _validate_checks(errors, config)
     _validate_build(errors, config)
     _validate_github(errors, config)
+    _validate_flows(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "explorer.max_steps", config.explorer.max_steps, 1)
@@ -223,6 +224,8 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     config.checks.settings = dict(_section(document, "checks", errors))
     config.build.settings = dict(_section(document, "build", errors))
     config.github.settings = dict(_section(document, "github", errors))
+    config.flows.settings = dict(_section(document, "flows", errors))
+    config.swarm.settings = dict(_section(document, "swarm", errors))
 
     llm = dict(_section(document, "llm", errors))
     if "enabled" in llm:
@@ -529,6 +532,15 @@ def _validate_github(errors: list[str], config: CampaignConfig) -> None:
 
     try:
         GitHubSettings.from_mapping(config.github.settings)
+    except ConfigError as exc:
+        errors.extend(exc.errors)
+
+
+def _validate_flows(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.flows.settings import FlowsSettings
+
+    try:
+        FlowsSettings.from_config(config)
     except ConfigError as exc:
         errors.extend(exc.errors)
 
