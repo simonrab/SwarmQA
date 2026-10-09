@@ -253,6 +253,24 @@ class LLMConfig:
 
 
 @dataclass
+class BuildConfig:
+    """The `[build]` table, kept raw; `swarmqa.build.settings.BuildSettings.from_mapping`
+    parses it. See docs/build.md.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class GitHubConfig:
+    """The `[github]` table, kept raw; `swarmqa.github.settings.GitHubSettings.from_mapping`
+    parses it. See docs/github.md.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ChecksConfig:
     """The `[checks]` table, kept raw; `swarmqa.checks.config.checks_settings`
     builds `ChecksSettings` from it. Sub-tables `functional`, `layout`,
@@ -291,6 +309,8 @@ class CampaignConfig:
     driver: DriverConfig = field(default_factory=DriverConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     checks: ChecksConfig = field(default_factory=ChecksConfig)
+    build: BuildConfig = field(default_factory=BuildConfig)
+    github: GitHubConfig = field(default_factory=GitHubConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2

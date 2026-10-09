@@ -146,3 +146,39 @@ driver = IOSSimulatorDriver(target, work_dir, runner=fake_runner, platform="darw
 - `background=True` (`simctl io recordVideo`) returns a handle with `pid`, `poll()`, `wait()`, and `kill()`.
 
 Tests in `tests/test_ios_driver.py` use that seam. They do not need Xcode, idb, or a Simulator.
+
+## Runner drivers
+
+`driver.kind = "runner"` drives the app through the XCUITest swarm runner in `agents/swarm-runner` (wire protocol in `agents/swarm-runner/PROTOCOL.md`). `create_driver` returns `IOSRunnerDriver` (`swarmqa.driver.ios_runner`) when `app.platform = "ios"` and `MacOSRunnerDriver` (`swarmqa.driver.macos_runner`) otherwise. Both implement AppDriver v1 and v2, and `observe` is a single `/observe` call.
+
+### Starting the runner
+
+`RunnerProcess` (`swarmqa.driver.runner_client`) runs the same `xcodebuild test-without-building` command as `run.sh` on a free port. It passes the port as `TEST_RUNNER_SWARM_RUNNER_PORT`, waits up to 300 s for `GET /health`, writes the log to `<work_dir>/runner/`, and stops the whole process group on close.
+
+- It uses the newest `.xctestrun` under `$SWARM_RUNNER_DERIVED_DATA` (default `~/.aqa/swarm-runner/DerivedData`). `$SWARM_RUNNER_XCTESTRUN` names one directly. When none exists, it runs `agents/swarm-runner/build.sh <platform>` once, under a host lock.
+- It retries a failed start once, because the first start on a freshly booted simulator can fail with "Timed out waiting for AX loaded notification".
+- On macOS, "Timed out while enabling automation mode" raises `BackendUnavailable`. macOS asks for an administrator password the first time. Approve that prompt, or run `automationmodetool enable-automationmode-without-authentication` yourself once.
+
+### iOS
+
+`IOSRunnerDriver` picks its simulator the same way the legacy iOS driver does: the `udid=` argument, then `SWARMQA_SIMULATOR_UDID`, then the first free entry of `app.simulators`, then `app.simulator`. The last two are locked with `simulator-<udid>`. It then boots the simulator with `simctl bootstatus -b`, installs `app.path` and starts the runner for that UDID.
+
+### macOS
+
+`MacOSRunnerDriver` registers `app.path` with LaunchServices and launches it by bundle id. `/observe` asks for JPEG, which the runner encodes at one pixel per point. It takes no desktop lock: one runner drives the real mouse and keyboard, so run one macOS session per desktop or VM, with the screen unlocked.
+
+### Timing
+
+After a launch, the driver calls `/tree` with a 90 s timeout, because the first snapshot can take up to about 26 s while accessibility warms up. Later calls take 0.1–0.3 s, and taps, typing and keys take 0.5–2 s each, because XCTest waits for the app to idle. A timed-out call drops its connection, so a late reply is never read as the answer to the next request.
+
+### Crashes and logs
+
+A crash surfaces as `AppCrashedError`: the runner answers `app_crashed`, and `/health` reports `crashed` until the next launch.
+
+- `crash_reports_since(ts)` reads this app's `.ips` files from `~/Library/Logs/DiagnosticReports`. For iOS it also checks that the report's process path belongs to this simulator. ReportCrash can take a few seconds to write the file, so the first call after a crash waits up to 10 s.
+- A Swift trap in an app launched by XCUITest sometimes leaves no `.ips`. Then the driver saves the app's fatal log lines to `<work_dir>/crashes/` and returns them with `extra["source"] = "unified-log"`.
+- `logs_since(ts)` uses `log show --style ndjson`, through `simctl spawn` on iOS.
+
+### Linux tests
+
+`tests/test_runner_driver.py` serves the protocol from an in-process `http.server` built on the `runner_schema` encoders. It also fakes `xcodebuild` and `simctl` through the `runner` and `spawn` seams, so it needs no Xcode.

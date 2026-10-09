@@ -1,0 +1,744 @@
+{
+ "ts": 1790805656.426368,
+ "size": [
+  402.0,
+  874.0
+ ],
+ "scale": 3.0,
+ "elements": [
+  {
+   "role": "application",
+   "label": "Planted Bugs",
+   "identifier": null,
+   "value": null,
+   "enabled": true,
+   "frame": [
+    0.0,
+    0.0,
+    402.0,
+    874.0
+   ],
+   "children": [
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": "dismiss popup",
+         "identifier": "PopoverDismissRegion",
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          0.0,
+          402.0,
+          874.0
+         ],
+         "children": []
+        },
+        {
+         "role": "popover",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          81.0,
+          72.00000000000001,
+          240.0,
+          165.33333333333337
+         ],
+         "children": [
+          {
+           "role": "image",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            -69.0,
+            -77.99999999999999,
+            540.0,
+            452.33333333333337
+           ],
+           "children": []
+          },
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            81.0,
+            72.00000000000001,
+            240.0,
+            152.33333333333337
+           ],
+           "children": [
+            {
+             "role": "sheet",
+             "label": "Delete this task?",
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              81.0,
+              72.00000000000001,
+              240.0,
+              152.33333333333337
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                81.0,
+                72.00000000000001,
+                240.0,
+                152.33333333333337
+               ],
+               "children": [
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  81.0,
+                  72.00000000000001,
+                  240.0,
+                  152.33333333333337
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    81.0,
+                    72.00000000000001,
+                    240.0,
+                    152.33333333333337
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    81.0,
+                    72.00000000000001,
+                    240.0,
+                    152.33333333333337
+                   ],
+                   "children": [
+                    {
+                     "role": "scrollview",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      81.0,
+                      72.00000000000001,
+                      240.0,
+                      72.33333333333333
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        81.0,
+                        72.00000000000001,
+                        240.0,
+                        72.33333333333333
+                       ],
+                       "children": [
+                        {
+                         "role": "text",
+                         "label": "Delete this task?",
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          111.0,
+                          94.00000000000003,
+                          180.0,
+                          20.33333333333333
+                         ],
+                         "children": []
+                        },
+                        {
+                         "role": "text",
+                         "label": "This cannot be undone.",
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          111.0,
+                          122.00000000000001,
+                          180.0,
+                          17.999999999999986
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Horizontal scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        81.0,
+                        111.33333333333334,
+                        240.0,
+                        30.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          42.0,
+                          138.33333333333334,
+                          36.0,
+                          3.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Vertical scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        288.0,
+                        106.00000000000001,
+                        30.0,
+                        38.33333333333333
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          315.0,
+                          33.000000000000014,
+                          3.0,
+                          36.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Vertical scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        288.0,
+                        106.00000000000001,
+                        30.0,
+                        38.33333333333333
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          315.0,
+                          33.000000000000014,
+                          3.0,
+                          36.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Horizontal scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        81.0,
+                        111.33333333333334,
+                        240.0,
+                        30.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          42.0,
+                          138.33333333333334,
+                          36.0,
+                          3.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "role": "scrollview",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      81.0,
+                      144.33333333333337,
+                      240.0,
+                      80.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        81.0,
+                        144.33333333333337,
+                        240.0,
+                        80.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          97.0,
+                          160.33333333333337,
+                          208.0,
+                          48.0
+                         ],
+                         "children": [
+                          {
+                           "role": "button",
+                           "label": "Delete Task",
+                           "identifier": "detail.deleteConfirmButton",
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            97.0,
+                            160.33333333333337,
+                            208.0,
+                            48.0
+                           ],
+                           "children": [
+                            {
+                             "role": "button",
+                             "label": "Delete Task",
+                             "identifier": "detail.deleteConfirmButton",
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              97.0,
+                              160.33333333333337,
+                              208.0,
+                              48.0
+                             ],
+                             "children": []
+                            }
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Vertical scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        288.0,
+                        144.33333333333337,
+                        30.0,
+                        59.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          315.0,
+                          234.33333333333337,
+                          3.0,
+                          7.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Horizontal scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        102.0,
+                        191.33333333333337,
+                        198.0,
+                        30.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          171.0,
+                          218.33333333333337,
+                          7.0,
+                          3.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Vertical scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        288.0,
+                        144.33333333333337,
+                        30.0,
+                        59.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          315.0,
+                          234.33333333333337,
+                          3.0,
+                          7.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      },
+                      {
+                       "role": "other",
+                       "label": "Horizontal scroll bar, 1 page",
+                       "identifier": null,
+                       "value": "0%",
+                       "enabled": true,
+                       "frame": [
+                        102.0,
+                        191.33333333333337,
+                        198.0,
+                        30.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          171.0,
+                          218.33333333333337,
+                          7.0,
+                          3.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            81.0,
+            72.00000000000001,
+            240.0,
+            165.33333333333337
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              81.0,
+              72.00000000000001,
+              240.0,
+              165.33333333333331
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                81.0,
+                72.00000000000001,
+                240.0,
+                165.33333333333331
+               ],
+               "children": [
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  81.0,
+                  72.00000000000001,
+                  240.0,
+                  165.33333333333331
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    81.0,
+                    72.00000000000001,
+                    240.0,
+                    165.33333333333331
+                   ],
+                   "children": [
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      81.0,
+                      72.00000000000001,
+                      0.0,
+                      0.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        81.0,
+                        72.00000000000001,
+                        240.0,
+                        165.33333333333331
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          81.0,
+                          72.00000000000001,
+                          240.0,
+                          165.33333333333331
+                         ],
+                         "children": [
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            80.99999999999999,
+                            72.00000000000001,
+                            240.0,
+                            165.33333333333331
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              80.99999999999999,
+                              72.00000000000001,
+                              240.0,
+                              165.33333333333331
+                             ],
+                             "children": []
+                            }
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          0.0,
+          402.0,
+          874.0
+         ],
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

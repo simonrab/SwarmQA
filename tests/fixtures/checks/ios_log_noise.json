@@ -1,0 +1,51 @@
+[
+ {
+  "ts": 1790747425.47984,
+  "level": "error",
+  "message": "Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric",
+  "subsystem": "com.apple.app_launch_measurement",
+  "process": "PlantedBugs"
+ },
+ {
+  "ts": 1790747436.164049,
+  "level": "error",
+  "message": "Unexpectedly received animationDidStop without a matching animationDidStart. Monitoring for idle animations may no longer function correctly.",
+  "subsystem": "com.apple.dt.xctest",
+  "process": "PlantedBugs"
+ },
+ {
+  "ts": 1790747439.68493,
+  "level": "error",
+  "message": "<0x101d61cc0> Gesture: System gesture gate timed out.",
+  "subsystem": "com.apple.UIKit",
+  "process": "PlantedBugs"
+ },
+ {
+  "ts": 1790747419.763606,
+  "level": "error",
+  "message": "fopen failed for data file: errno = 2 (No such file or directory)",
+  "subsystem": "",
+  "process": "PlantedBugs"
+ },
+ {
+  "ts": 1790747419.763606,
+  "level": "error",
+  "message": "UIKeyboardLayoutStar implements focusItemsInRect: - caching for linear focus movement is limited as long as this view is on screen.",
+  "subsystem": "",
+  "process": "PlantedBugs"
+ },
+ {
+  "ts": 1790747419.763606,
+  "level": "error",
+  "message": "Automation type mismatch; legacy system derived element type 21 from class UIAccessibilityElement",
+  "subsystem": "",
+  "process": "PlantedBugs"
+ },
+ {
+  "ts": 1790747419.763606,
+  "level": "error",
+  "message": "Snapshotting a view (0x1051b1e00, _UINavigationBarLargeTitleView) that is not in a visible window requires afterScreenUpdates:YES.",
+  "subsystem": "",
+  "process": "PlantedBugs"
+ }
+]

@@ -17,7 +17,7 @@ from swarmqa.models import CliOverrides
 _TRACKERS = ("github", "linear")
 
 
-_PASSTHROUGH = {"mcp": "cmd_mcp", "verify": "cmd_verify"}
+_PASSTHROUGH = {"mcp": "cmd_mcp", "verify": "cmd_verify", "build": "cmd_build", "watch": "cmd_watch"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--video-mode", choices=["always", "on_failure", "exploratory_only"])
     run_p.add_argument("--resume", help="Campaign id whose pending and failed shards should rerun")
     run_p.add_argument("--reset-spend", action="store_true")
+    run_p.add_argument(
+        "--github-sha",
+        help="Build this commit, run one campaign per github.platforms, and report it (see docs/github.md)",
+    )
+    run_p.add_argument("--github-pr", type=int, help="With --github-sha: the PR to comment on (default: looked up)")
+    run_p.add_argument("--clone-url", help="With --github-sha: repo URL or path to build from (overrides github.clone_url)")
     run_p.set_defaults(func=cmd_run)
 
     rec_p = sub.add_parser("record", help="Write a JSON recorded flow")
@@ -141,6 +147,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_p.add_argument("rest", nargs=argparse.REMAINDER)
     verify_p.set_defaults(func=cmd_verify)
+
+    build_p = sub.add_parser("build", help="Check out a SHA and build its iOS/macOS apps", add_help=False)
+    build_p.add_argument("rest", nargs=argparse.REMAINDER)
+    build_p.set_defaults(func=cmd_build)
+
+    watch_p = sub.add_parser("watch", help="Test GitHub PRs and default-branch merges as they appear", add_help=False)
+    watch_p.add_argument("rest", nargs=argparse.REMAINDER)
+    watch_p.set_defaults(func=cmd_watch)
     return parser
 
 
@@ -154,6 +168,18 @@ def cmd_verify(args: argparse.Namespace) -> int:
     from swarmqa.verify.cli import main as verify_main
 
     return verify_main(args.rest)
+
+
+def cmd_build(args: argparse.Namespace) -> int:
+    from swarmqa.build.cli import main as build_main
+
+    return build_main(args.rest)
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    from swarmqa.github.cli import main as watch_main
+
+    return watch_main(args.rest)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
@@ -201,6 +227,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         config_path=args.config,
     )
     config = load_config(Path(args.config), overrides)
+    if args.github_sha:
+        from swarmqa.github.watch import run_sha
+
+        return run_sha(config, args.github_sha, pr=args.github_pr, clone_url=args.clone_url)
+    if args.github_pr or args.clone_url:
+        raise ConfigError(["--github-pr and --clone-url need --github-sha"])
     queue = build_queue(config)
     options = RunOptions(
         resume_campaign_id=args.resume,

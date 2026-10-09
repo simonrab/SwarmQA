@@ -1,0 +1,2316 @@
+{
+ "ts": 1790805448.295481,
+ "size": [
+  402.0,
+  874.0
+ ],
+ "scale": 3.0,
+ "elements": [
+  {
+   "role": "application",
+   "label": "Planted Bugs",
+   "identifier": null,
+   "value": null,
+   "enabled": true,
+   "frame": [
+    0.0,
+    0.0,
+    402.0,
+    874.0
+   ],
+   "children": [
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          0.0,
+          402.0,
+          874.0
+         ],
+         "children": [
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            0.0,
+            402.0,
+            874.0
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              0.0,
+              402.0,
+              874.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                0.0,
+                402.0,
+                874.0
+               ],
+               "children": [
+                {
+                 "role": "navigationbar",
+                 "label": null,
+                 "identifier": "Settings",
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  62.0,
+                  402.0,
+                  106.0
+                 ],
+                 "children": [
+                  {
+                   "role": "button",
+                   "label": "Tasks",
+                   "identifier": "BackButton",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    16.0,
+                    62.0,
+                    44.0,
+                    44.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "text",
+                   "label": "Settings",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    16.0,
+                    119.66666666666667,
+                    133.0,
+                    40.66666666666667
+                   ],
+                   "children": []
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  0.0,
+                  402.0,
+                  874.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    0.0,
+                    402.0,
+                    874.0
+                   ],
+                   "children": [
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      0.0,
+                      402.0,
+                      874.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        0.0,
+                        0.0,
+                        402.0,
+                        874.0
+                       ],
+                       "children": [
+                        {
+                         "role": "collectionview",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          0.0,
+                          0.0,
+                          402.0,
+                          874.0
+                         ],
+                         "children": [
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            -16.0,
+                            -1580.0,
+                            434.0,
+                            1858.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            0.0,
+                            0.0,
+                            402.0,
+                            874.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            0.0,
+                            0.0,
+                            402.0,
+                            874.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            168.0,
+                            370.0,
+                            40.33333333333334
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              168.0,
+                              370.0,
+                              40.33333333333334
+                             ],
+                             "children": []
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              168.0,
+                              370.0,
+                              40.33333333333334
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                168.0,
+                                370.0,
+                                40.333333333333314
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  168.0,
+                                  370.0,
+                                  40.333333333333314
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "text",
+                                   "label": "Profile",
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    168.0,
+                                    370.0,
+                                    40.33333333333334
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            208.33333333333334,
+                            370.0,
+                            52.00000000000003
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              208.33333333333334,
+                              370.0,
+                              52.00000000000003
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                208.33333333333334,
+                                370.0,
+                                52.00000000000003
+                               ],
+                               "children": []
+                              }
+                             ]
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              208.33333333333334,
+                              370.0,
+                              52.00000000000003
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                208.33333333333334,
+                                370.0,
+                                52.00000000000003
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  208.33333333333334,
+                                  370.0,
+                                  52.00000000000003
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "textfield",
+                                   "label": null,
+                                   "identifier": "settings.nameField",
+                                   "value": "Alextest",
+                                   "enabled": true,
+                                   "frame": [
+                                    32.0,
+                                    223.33333333333334,
+                                    338.0,
+                                    22.0
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            -16.0,
+                            278.0,
+                            434.0,
+                            110.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            278.0,
+                            370.0,
+                            40.333333333333314
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              278.0,
+                              370.0,
+                              40.333333333333314
+                             ],
+                             "children": []
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              278.0,
+                              370.0,
+                              40.333333333333314
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                278.0,
+                                370.0,
+                                40.333333333333314
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  278.0,
+                                  370.0,
+                                  40.333333333333314
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "text",
+                                   "label": "Notifications",
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    278.0,
+                                    370.0,
+                                    40.333333333333314
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            318.33333333333337,
+                            370.0,
+                            52.0
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              318.33333333333337,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                318.33333333333337,
+                                370.0,
+                                52.0
+                               ],
+                               "children": []
+                              }
+                             ]
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              318.33333333333337,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                318.33333333333337,
+                                370.0,
+                                52.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  318.33333333333337,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "switch",
+                                   "label": "Due date reminders",
+                                   "identifier": "settings.remindersToggle",
+                                   "value": "1",
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    318.33333333333337,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": [
+                                    {
+                                     "role": "text",
+                                     "label": "Due date reminders",
+                                     "identifier": null,
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      32.0,
+                                      334.1666666666667,
+                                      149.66666666666666,
+                                      20.33333333333337
+                                     ],
+                                     "children": []
+                                    },
+                                    {
+                                     "role": "switch",
+                                     "label": null,
+                                     "identifier": null,
+                                     "value": "1",
+                                     "enabled": true,
+                                     "frame": [
+                                      309.0,
+                                      330.33333333333337,
+                                      63.0,
+                                      28.0
+                                     ],
+                                     "children": []
+                                    }
+                                   ]
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            -16.0,
+                            387.66666666666663,
+                            434.0,
+                            110.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            387.66666666666663,
+                            370.0,
+                            40.333333333333314
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              387.66666666666663,
+                              370.0,
+                              40.333333333333314
+                             ],
+                             "children": []
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              387.66666666666663,
+                              370.0,
+                              40.333333333333314
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                387.66666666666663,
+                                370.0,
+                                40.333333333333314
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  387.66666666666663,
+                                  370.0,
+                                  40.333333333333314
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "text",
+                                   "label": "Sync",
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    387.66666666666663,
+                                    370.0,
+                                    40.333333333333314
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            428.0,
+                            370.0,
+                            52.0
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              428.0,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                428.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": []
+                              }
+                             ]
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              428.0,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                428.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  428.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "text",
+                                   "label": "Cloud sync",
+                                   "identifier": null,
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    32.0,
+                                    443.8333333333333,
+                                    84.66666666666666,
+                                    20.33333333333337
+                                   ],
+                                   "children": []
+                                  },
+                                  {
+                                   "role": "text",
+                                   "label": "Cloud sync, Off",
+                                   "identifier": "settings.syncStatus",
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    428.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": []
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            -16.0,
+                            497.66666666666663,
+                            434.0,
+                            1889.666666666667
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            515.0,
+                            370.0,
+                            52.0
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              515.0,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                515.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": []
+                              }
+                             ]
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              515.0,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                515.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  515.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "button",
+                                   "label": "Advanced",
+                                   "identifier": "settings.advancedLink",
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    515.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": [
+                                    {
+                                     "role": "text",
+                                     "label": "Advanced",
+                                     "identifier": null,
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      32.0,
+                                      530.8333333333334,
+                                      76.0,
+                                      20.333333333333258
+                                     ],
+                                     "children": []
+                                    },
+                                    {
+                                     "role": "image",
+                                     "label": null,
+                                     "identifier": "chevron.forward",
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      360.6666666666667,
+                                      535.0,
+                                      7.0,
+                                      12.0
+                                     ],
+                                     "children": []
+                                    }
+                                   ]
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "cell",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            16.0,
+                            567.0,
+                            370.0,
+                            52.0
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              567.0,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                567.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": []
+                              }
+                             ]
+                            },
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              16.0,
+                              567.0,
+                              370.0,
+                              52.0
+                             ],
+                             "children": [
+                              {
+                               "role": "other",
+                               "label": null,
+                               "identifier": null,
+                               "value": null,
+                               "enabled": true,
+                               "frame": [
+                                16.0,
+                                567.0,
+                                370.0,
+                                52.0
+                               ],
+                               "children": [
+                                {
+                                 "role": "other",
+                                 "label": null,
+                                 "identifier": null,
+                                 "value": null,
+                                 "enabled": true,
+                                 "frame": [
+                                  16.0,
+                                  567.0,
+                                  370.0,
+                                  52.0
+                                 ],
+                                 "children": [
+                                  {
+                                   "role": "button",
+                                   "label": "About",
+                                   "identifier": "settings.aboutLink",
+                                   "value": null,
+                                   "enabled": true,
+                                   "frame": [
+                                    16.0,
+                                    567.0,
+                                    370.0,
+                                    52.0
+                                   ],
+                                   "children": [
+                                    {
+                                     "role": "text",
+                                     "label": "About",
+                                     "identifier": null,
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      32.0,
+                                      582.8333333333334,
+                                      46.0,
+                                      20.333333333333258
+                                     ],
+                                     "children": []
+                                    },
+                                    {
+                                     "role": "image",
+                                     "label": null,
+                                     "identifier": "chevron.forward",
+                                     "value": null,
+                                     "enabled": true,
+                                     "frame": [
+                                      360.6666666666667,
+                                      587.0,
+                                      7.0,
+                                      12.0
+                                     ],
+                                     "children": []
+                                    }
+                                   ]
+                                  }
+                                 ]
+                                }
+                               ]
+                              }
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "other",
+                           "label": null,
+                           "identifier": null,
+                           "value": null,
+                           "enabled": true,
+                           "frame": [
+                            32.0,
+                            566.0,
+                            338.0,
+                            1.0
+                           ],
+                           "children": []
+                          },
+                          {
+                           "role": "other",
+                           "label": "Vertical scroll bar, 2 pages",
+                           "identifier": null,
+                           "value": "0%",
+                           "enabled": true,
+                           "frame": [
+                            369.0,
+                            116.0,
+                            30.0,
+                            423.0
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              396.0,
+                              119.0,
+                              3.0,
+                              374.3333333333333
+                             ],
+                             "children": []
+                            }
+                           ]
+                          },
+                          {
+                           "role": "other",
+                           "label": "Vertical scroll bar, 2 pages",
+                           "identifier": null,
+                           "value": "0%",
+                           "enabled": true,
+                           "frame": [
+                            369.0,
+                            116.0,
+                            30.0,
+                            423.0
+                           ],
+                           "children": [
+                            {
+                             "role": "other",
+                             "label": null,
+                             "identifier": null,
+                             "value": null,
+                             "enabled": true,
+                             "frame": [
+                              396.0,
+                              119.0,
+                              3.0,
+                              374.3333333333333
+                             ],
+                             "children": []
+                            }
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  0.0,
+                  402.0,
+                  874.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    0.0,
+                    402.0,
+                    874.0
+                   ],
+                   "children": []
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          0.0,
+          402.0,
+          874.0
+         ],
+         "children": []
+        },
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          539.0,
+          402.0,
+          335.0
+         ],
+         "children": [
+          {
+           "role": "other",
+           "label": null,
+           "identifier": "inputView",
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            539.0,
+            402.0,
+            335.0
+           ],
+           "children": []
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "role": "window",
+     "label": null,
+     "identifier": null,
+     "value": null,
+     "enabled": true,
+     "frame": [
+      0.0,
+      0.0,
+      402.0,
+      874.0
+     ],
+     "children": [
+      {
+       "role": "other",
+       "label": null,
+       "identifier": null,
+       "value": null,
+       "enabled": true,
+       "frame": [
+        0.0,
+        0.0,
+        402.0,
+        874.0
+       ],
+       "children": [
+        {
+         "role": "other",
+         "label": null,
+         "identifier": null,
+         "value": null,
+         "enabled": true,
+         "frame": [
+          0.0,
+          539.0,
+          402.0,
+          335.0
+         ],
+         "children": [
+          {
+           "role": "other",
+           "label": null,
+           "identifier": "SystemInputAssistantView",
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            539.0,
+            402.0,
+            44.0
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              539.0,
+              402.0,
+              44.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": "CenterPageView",
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                539.0,
+                402.0,
+                44.0
+               ],
+               "children": [
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  -61.0,
+                  402.0,
+                  1244.0
+                 ],
+                 "children": [
+                  {
+                   "role": "scrollview",
+                   "label": null,
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    539.0,
+                    402.0,
+                    44.0
+                   ],
+                   "children": []
+                  }
+                 ]
+                },
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": null,
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  539.0,
+                  402.0,
+                  44.0
+                 ],
+                 "children": [
+                  {
+                   "role": "other",
+                   "label": "Typing Predictions",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    539.0,
+                    402.0,
+                    44.0
+                   ],
+                   "children": [
+                    {
+                     "role": "other",
+                     "label": null,
+                     "identifier": null,
+                     "value": null,
+                     "enabled": true,
+                     "frame": [
+                      0.0,
+                      539.0,
+                      402.0,
+                      44.0
+                     ],
+                     "children": [
+                      {
+                       "role": "other",
+                       "label": null,
+                       "identifier": null,
+                       "value": null,
+                       "enabled": true,
+                       "frame": [
+                        0.0,
+                        539.0,
+                        402.0,
+                        44.0
+                       ],
+                       "children": [
+                        {
+                         "role": "other",
+                         "label": "\u201cAlext\u201d",
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          0.0,
+                          539.0,
+                          134.0,
+                          44.0
+                         ],
+                         "children": []
+                        },
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          134.0,
+                          539.0,
+                          134.0,
+                          44.0
+                         ],
+                         "children": []
+                        },
+                        {
+                         "role": "other",
+                         "label": null,
+                         "identifier": null,
+                         "value": null,
+                         "enabled": true,
+                         "frame": [
+                          268.0,
+                          539.0,
+                          134.0,
+                          44.0
+                         ],
+                         "children": []
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            539.0,
+            402.0,
+            335.0
+           ],
+           "children": [
+            {
+             "role": "other",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              539.0,
+              402.0,
+              335.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                539.0,
+                402.0,
+                335.0
+               ],
+               "children": []
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            583.0,
+            402.0,
+            233.0
+           ],
+           "children": [
+            {
+             "role": "keyboard",
+             "label": null,
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              0.0,
+              583.0,
+              402.0,
+              233.0
+             ],
+             "children": [
+              {
+               "role": "other",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                0.0,
+                583.0,
+                402.0,
+                233.0
+               ],
+               "children": [
+                {
+                 "role": "other",
+                 "label": null,
+                 "identifier": "UIKeyboardLayoutStar Preview",
+                 "value": null,
+                 "enabled": true,
+                 "frame": [
+                  0.0,
+                  583.0,
+                  402.0,
+                  233.0
+                 ],
+                 "children": [
+                  {
+                   "role": "key",
+                   "label": "Padding-Left",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    583.0,
+                    0.0,
+                    0.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "q",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    4.666666666666657,
+                    590.0,
+                    39.333333333333336,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "w",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    44.0,
+                    590.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "e",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    83.66666666666666,
+                    590.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "r",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    122.99999999999999,
+                    590.0,
+                    39.66666666666667,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "t",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    162.66666666666666,
+                    590.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "y",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    202.0,
+                    590.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "u",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    241.66666666666669,
+                    590.0,
+                    39.333333333333314,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "i",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    281.0,
+                    590.0,
+                    39.666666666666686,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "o",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    320.66666666666663,
+                    590.0,
+                    39.333333333333314,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "p",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    360.0,
+                    590.0,
+                    39.666666666666686,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "Padding-Right",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    583.0,
+                    0.0,
+                    0.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "Padding-Left",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    583.0,
+                    0.0,
+                    0.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "a",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    24.333333333333318,
+                    644.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "s",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    63.66666666666666,
+                    644.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "d",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    103.33333333333331,
+                    644.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "f",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    142.66666666666666,
+                    644.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "g",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    182.33333333333334,
+                    644.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "h",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    221.66666666666666,
+                    644.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "j",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    261.33333333333326,
+                    644.0,
+                    39.333333333333314,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "k",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    300.66666666666663,
+                    644.0,
+                    39.666666666666686,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "l",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    340.33333333333326,
+                    644.0,
+                    39.333333333333314,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "Padding-Right",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    583.0,
+                    0.0,
+                    0.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "button",
+                   "label": "shift",
+                   "identifier": "shift",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    4.666666666666657,
+                    698.0,
+                    51.333333333333336,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "Padding-Left",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    583.0,
+                    0.0,
+                    0.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "z",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    63.66666666666666,
+                    698.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "x",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    103.33333333333331,
+                    698.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "c",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    142.66666666666666,
+                    698.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "v",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    182.33333333333334,
+                    698.0,
+                    39.33333333333334,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "b",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    221.66666666666666,
+                    698.0,
+                    39.66666666666666,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "n",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    261.33333333333326,
+                    698.0,
+                    39.333333333333314,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "m",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    300.66666666666663,
+                    698.0,
+                    39.666666666666686,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "Padding-Right",
+                   "identifier": null,
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    0.0,
+                    583.0,
+                    0.0,
+                    0.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "delete",
+                   "identifier": "delete",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    348.0,
+                    698.0,
+                    51.666666666666686,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": "numbers",
+                   "identifier": "more",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    4.666666666666657,
+                    752.0,
+                    98.66666666666667,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "key",
+                   "label": " ",
+                   "identifier": "space",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    103.3333333333333,
+                    752.0,
+                    197.33333333333331,
+                    54.0
+                   ],
+                   "children": []
+                  },
+                  {
+                   "role": "button",
+                   "label": "return",
+                   "identifier": "Return",
+                   "value": null,
+                   "enabled": true,
+                   "frame": [
+                    300.66666666666663,
+                    752.0,
+                    99.0,
+                    54.0
+                   ],
+                   "children": []
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "role": "other",
+           "label": null,
+           "identifier": null,
+           "value": null,
+           "enabled": true,
+           "frame": [
+            0.0,
+            583.0,
+            402.0,
+            291.0
+           ],
+           "children": [
+            {
+             "role": "button",
+             "label": "Emoji",
+             "identifier": null,
+             "value": null,
+             "enabled": true,
+             "frame": [
+              8.47726568115926,
+              805.6989567998571,
+              68.0852958475086,
+              68.73516393505099
+             ],
+             "children": [
+              {
+               "role": "text",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                8.47726568115926,
+                805.6989567998571,
+                0.0,
+                0.0
+               ],
+               "children": []
+              }
+             ]
+            },
+            {
+             "role": "button",
+             "label": "Dictate",
+             "identifier": "dictation",
+             "value": null,
+             "enabled": true,
+             "frame": [
+              325.43743847133214,
+              805.3656234665239,
+              68.08529584750863,
+              68.73516393505099
+             ],
+             "children": [
+              {
+               "role": "text",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                325.43743847133214,
+                805.3656234665239,
+                0.0,
+                0.0
+               ],
+               "children": []
+              }
+             ]
+            },
+            {
+             "role": "button",
+             "label": "Dictate",
+             "identifier": "dictation",
+             "value": null,
+             "enabled": true,
+             "frame": [
+              325.43743847133214,
+              805.3656234665239,
+              68.08529584750863,
+              68.73516393505099
+             ],
+             "children": [
+              {
+               "role": "text",
+               "label": null,
+               "identifier": null,
+               "value": null,
+               "enabled": true,
+               "frame": [
+                325.43743847133214,
+                805.3656234665239,
+                0.0,
+                0.0
+               ],
+               "children": []
+              }
+             ]
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

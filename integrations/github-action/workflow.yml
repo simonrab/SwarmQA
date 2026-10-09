@@ -1,0 +1,36 @@
+# Copy to .github/workflows/swarmqa.yml in the app repo.
+# Runs SwarmQA on every PR update and every push to the default branch, on a
+# self-hosted macOS runner (GitHub-hosted runners have no simulators to spare
+# and cannot nest VMs). Set `[github] report` in aqa.config.toml to post the
+# check and the PR comment; without it, results only land in the job log and
+# the `swarmqa-reports` artifact.
+name: SwarmQA
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same PR or branch cancels the older run.
+concurrency:
+  group: swarmqa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  swarmqa:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: simonrab/swarmqa/integrations/github-action@main
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

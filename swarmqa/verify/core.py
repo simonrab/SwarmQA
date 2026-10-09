@@ -170,7 +170,7 @@ def verify(
     base = dict(campaign_id=prepared.campaign_dir.name, pid=os.getpid())
     write_status(directory, run.result, phase="build" if build else "replay", started_at=time.time(), **base)
     try:
-        _run(run, prepared, config, count, build, driver_factory, builder or build_mod.build_app)
+        _run(run, prepared, config, count, build, driver_factory, builder or _default_builder(config))
     except Exception as exc:  # noqa: BLE001 - never leave status.json at running
         run.result.state = "error"
         run.result.message = f"verify crashed: {type(exc).__name__}: {exc}"
@@ -340,3 +340,17 @@ def _safe_close(driver) -> None:
         close()
     except Exception:  # noqa: BLE001 - already closed or never opened
         return
+
+
+def _default_builder(config: CampaignConfig) -> build_mod.Builder:
+    """The per-SHA builder when `[build]` is configured, else the in-place build.
+
+    `app.build_command` users keep building their working copy, uncommitted
+    changes included; a `[build]` table builds the committed ref in a clean checkout.
+    """
+    build = getattr(config, "build", None)
+    if build is not None and build.settings:
+        from swarmqa.build import verify_builder
+
+        return verify_builder()
+    return build_mod.build_app

@@ -47,8 +47,11 @@ class IOSSimulatorPool:
 
     Give `golden` (a name or UDID of a shut-down simulator to `simctl clone`),
     or `device_type` plus optional `runtime` for `simctl create`.
-    `erase_mode="erase"` shuts the clone down and runs `simctl erase` on
-    release; `"uninstall"` only removes the app and leaves it booted.
+    `erase_mode="uninstall"` (the default) removes the app on release and
+    leaves the clone booted, so the next lease starts in seconds. The app's
+    data container goes with it, but the keychain and system settings stay.
+    `"erase"` shuts the clone down and runs `simctl erase` for a fully clean
+    device, at the cost of a cold boot on every lease (minutes on a busy host).
     """
 
     def __init__(
@@ -64,8 +67,10 @@ class IOSSimulatorPool:
         lock_root: str | Path | None = None,
         work_root: str | Path | None = None,
         name_prefix: str = "aqa-sim",
-        erase_mode: EraseMode = "erase",
-        boot_timeout_s: float = 300.0,
+        erase_mode: EraseMode = "uninstall",
+        # A clone's first boot after `simctl erase` measured 336 s on a loaded
+        # 8 GB Mac (Xcode 26.5, iOS 26.5); a warm boot took 87 s.
+        boot_timeout_s: float = 600.0,
         poll_s: float = 0.5,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,

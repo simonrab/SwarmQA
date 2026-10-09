@@ -52,17 +52,19 @@ Slot `n` owns a clone named `aqa-sim-<source>-<n>`, where `<source>` is the gold
 
 1. `xcrun simctl list devices -j` — find an existing clone with that name (a leftover from an earlier run is reused and never deleted by this pool). Run once per slot per pool.
 2. When there is none: `xcrun simctl clone <golden> <clone-name>`, or `xcrun simctl create <clone-name> <device_type> [<runtime>]`. The last line of stdout is the new UDID. `simctl clone` needs the golden device shut down.
-3. `xcrun simctl bootstatus <udid> -b` — boots the clone if needed and blocks until it has finished booting. The runner gets `timeout=boot_timeout_s` (default 300 s); failure or timeout raises `DeviceUnavailable`.
+3. `xcrun simctl bootstatus <udid> -b` — boots the clone if needed and blocks until it has finished booting. The runner gets `timeout=boot_timeout_s` (default 600 s); failure or timeout raises `DeviceSetupError`.
 4. With a build: `xcrun simctl install <udid> <build.app_path>`.
 
 Before step 3 the pool holds `ios-sim-slot-<n>` and `simulator-<udid>`. If another process holds that UDID it tries the next slot. With every slot busy it polls every `poll_s` until `timeout_s`, then raises `DeviceUnavailable`. Any failure in steps 2–4 releases both locks.
 
-**release** with `erase=True` and `erase_mode="erase"` (the default):
+**release** with `erase=True` and `erase_mode="uninstall"` (the default): `xcrun simctl uninstall <udid> <build.bundle_id>`. The clone stays booted, so the next lease skips the boot. Uninstalling removes the app's data container; the keychain and system settings survive.
+
+With `erase_mode="erase"`, for a fully clean device on every lease:
 
 1. `xcrun simctl shutdown <udid>` — `simctl erase` refuses a booted device. "Unable to shutdown device in current state: Shutdown" is treated as success.
 2. `xcrun simctl erase <udid>` — wipes all content and settings, including the app. The clone stays for the next lease, which boots it again. If erase fails, the clone is retired (`xcrun simctl delete <udid>` when this pool created it).
 
-With `erase_mode="uninstall"`: `xcrun simctl uninstall <udid> <build.bundle_id>`, and the clone stays booted. With `erase=False` nothing runs and the app stays installed.
+With `erase=False` nothing runs and the app stays installed.
 
 **close**: releases open leases, then for each clone this pool created, `xcrun simctl shutdown <udid>` and `xcrun simctl delete <udid>`.
 
@@ -107,13 +109,28 @@ defaults delete <build.bundle_id>
 
 The orchestrator calls `run_shard(shard, worker_id)` without a campaign directory. The backend uses, in order: the `campaign_dir` argument, the constructor's `campaign_dir`, the running campaign under `report_root` that already has `workers/<worker-id>` (the orchestrator creates it before `run_shard`), then `report_root/vm`.
 
+## Checked on a Mac
+
+Run by hand on an 8 GB, 8-core Apple Silicon Mac with Xcode 26.5 and the iOS 26.5 runtime, while two `xcodebuild` jobs were running:
+
+| Command | Result |
+| --- | --- |
+| `simctl create <name> <type> <runtime>`, `simctl clone <golden> <name>` | exit 0; stdout is only the new UDID |
+| `simctl list devices -j` | entries carry `name`, `udid`, `state`, `isAvailable` |
+| `simctl shutdown` on a shut-down device | exit 149; stderr ends `Unable to shutdown device in current state: Shutdown` |
+| `simctl bootstatus <udid> -b` | boots a shut-down device and exits 0 once booted; exits 0 at once when already booted |
+| `simctl erase` on a booted device | exit 149, `Unable to erase contents and settings in current state: Booted` |
+| `simctl uninstall` of an app that is not installed | exit 0 |
+| `simctl install` of a missing path | exit 2 |
+| `simctl delete` on a booted device | exit 0 |
+| `sysctl -n hw.memsize`, `sysctl -n hw.ncpu` | plain integers (`8589934592`, `8`) |
+
+Boot times: 221 s for a new clone's first boot, **336 s** for the boot after `simctl erase`, and 87 s for a warm reboot. An erased clone boots like a new one, so `erase_mode="erase"` makes every lease pay a cold boot. The 300 s default timeout was too short, so it is now 600 s, and `erase_mode` now defaults to `"uninstall"`.
+
 ## Not yet verified on a Mac
 
-The following behaviour comes from Apple and Tart documentation. It still needs checking on real hardware:
+Tart was not installed on the test Mac, so these still come from the Tart documentation:
 
-- `simctl clone` / `simctl create` print only the new UDID on stdout.
-- `simctl bootstatus -b` boots a shut-down clone and returns 0 once it has booted.
-- The wording of the `simctl shutdown` "current state: Shutdown" error, and that `erase` fails on a booted device.
 - `tart list --format json` field names (`Name`), `tart run --no-graphics`, and the `--dir=name:path` mount path under `/Volumes/My Shared Files/`.
 - `tart ip` exits non-zero until the guest has an address, and `tart exec` needs the Tart guest agent in the image.
-- `sysctl -n hw.memsize` and `hw.ncpu` output, and whether 2.5 GB and 2 cores per simulator suit real campaigns.
+- Whether 2.5 GB and 2 cores per simulator suit real campaigns.
