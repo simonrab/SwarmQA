@@ -56,7 +56,8 @@ class AgentLoopSettings:
     With `screenshot_every_step` off, only a screen's first visit is
     captured. `heuristic_first` lets a confident heuristic pick skip the
     model. `report_unchecked_crashes` adds a crash finding when no check
-    reported one for a crashed step.
+    reported one for a crashed step. `settle_timeout_s` is how long to keep
+    re-observing a screen caught mid-transition.
     """
 
     mode: LoopMode = "goal"
@@ -73,6 +74,7 @@ class AgentLoopSettings:
     max_crash_relaunches: int = 3
     report_unchecked_crashes: bool = True
     platform: str | None = None
+    settle_timeout_s: float = 2.0
 
     @classmethod
     def from_config(cls, config: CampaignConfig, **overrides: Any) -> "AgentLoopSettings":
@@ -103,6 +105,13 @@ class _Plan:
 class _Outcome:
     replay: list[dict] = field(default_factory=list)
     note: str = ""
+
+
+def _in_transition(obs: ScreenObservation) -> bool:
+    """The tree still holds a page sliding in or out (see `checks._tree.stale_nodes`)."""
+    from swarmqa.checks._tree import nodes, screen_frame, stale_nodes
+
+    return bool(stale_nodes(nodes(obs.tree), screen_frame(obs.tree, obs.size)))
 
 
 def _iso_now() -> str:
@@ -449,11 +458,18 @@ class _AgentLoop:
     def _observe_step(self) -> ScreenObservation:
         """Observe; add a screenshot for a screen seen for the first time.
 
-        The screenshot is taken on its own so the tree (and so the fingerprint)
-        stays the one just observed. AppCrashedError and UITimeoutError
-        propagate to the caller, which blames the step that caused them.
+        An observation that caught a navigation mid-slide (both pages in the
+        tree) is taken again, for up to `settle_timeout_s`, so the screen is
+        fingerprinted once it has arrived. The screenshot is taken on its own
+        so the tree (and so the fingerprint) stays the one just observed.
+        AppCrashedError and UITimeoutError propagate to the caller, which
+        blames the step that caused them.
         """
         obs = self._observe()
+        deadline = time.monotonic() + self.settings.settle_timeout_s
+        while _in_transition(obs) and time.monotonic() < deadline:
+            time.sleep(0.2)
+            obs = self._observe()
         if obs.screenshot is None and fingerprint(obs.tree) not in self.graph.nodes:
             shot = self.driver.screenshot(f"step-{self.observations:04d}")
             obs = replace(obs, screenshot=Path(shot))
@@ -705,8 +721,11 @@ class _AgentLoop:
         """Save the path that reached the goal, or count a failed run of a cached flow."""
         if self.flow_cache is None:
             return
+        # A path where no step changed the screen proves nothing (a tap that did
+        # nothing, then a premature "done"), so it is not worth replaying.
+        moved = any(step.screen != step.after for step in self.path)
         try:
-            if self.stop_reason == "done" and self.path:
+            if self.stop_reason == "done" and moved:
                 self.flow_cache.save(self.shard, self.platform, self.path, self.current_id, previous=self.cache_flow)
                 if self.cache_flow is not None:
                     total = len(self.cache_flow.steps)

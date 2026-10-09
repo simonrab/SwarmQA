@@ -31,7 +31,7 @@ With `[flows] from_diff = true`, `aqa watch` and `aqa run --github-sha` propose 
 
 Used by `explorer.engine = "agent"` for exploratory shards with a goal. Cached flows live in the app repo's `.aqa/flows/<platform>/<intent>-<goal hash>.json` (`app.source_dir`), or in `flows.cache_dir`. With neither set there is no cache, so nothing is written by surprise. `.aqa/` should stay out of version control.
 
-A cached flow stores each step's action plus the fingerprint of the screen it starts on and the one it leads to, and the end screen.
+A cached flow stores each step's action plus the fingerprint of the screen it starts on and the one it leads to, and the end screen. A path in which no step changed the screen is not saved: it usually means a tap did nothing and the goal was declared done too early.
 
 On the next run of the same intent (same name and goal) on the same platform:
 

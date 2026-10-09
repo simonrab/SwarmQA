@@ -119,6 +119,14 @@ def test_reaching_the_goal_saves_the_path_under_the_app_repo(tmp_path):
     assert flow.runs == 1 and flow.heals == 0 and flow.end_screen == flow.steps[-1].after
 
 
+def test_a_path_that_never_left_the_screen_is_not_cached(tmp_path):
+    config, cache = setup(tmp_path)
+    # "Settings" goes nowhere in this app; the model then (wrongly) says done.
+    provider = FakeModelProvider(steps=[tap("Settings"), done()])
+    _, _, shard = run(tmp_path, config, cache, provider, run_no=1)
+    assert cache.load(shard, "macos") is None
+
+
 def test_a_cached_flow_replays_without_the_model(tmp_path):
     config, cache = setup(tmp_path)
     first_run(tmp_path, config, cache)
