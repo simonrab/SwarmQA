@@ -25,14 +25,16 @@ def create_driver(
     *,
     kind: str | None = None,
     video_mode: str = "always",
+    udid: str | None = None,
 ) -> AppDriver:
+    """`udid` pins an iOS driver to a simulator leased from a DevicePool (no lock taken)."""
     if kind == "legacy":
         selected = "ios" if target.platform == "ios" else "macos"
     elif kind == "runner":
         if target.platform == "ios":
             from swarmqa.driver.ios_runner import IOSRunnerDriver
 
-            return IOSRunnerDriver(target, work_dir, video_mode=video_mode)
+            return IOSRunnerDriver(target, work_dir, video_mode=video_mode, udid=udid)
         from swarmqa.driver.macos_runner import MacOSRunnerDriver
 
         return MacOSRunnerDriver(target, work_dir, video_mode=video_mode)
@@ -51,5 +53,5 @@ def create_driver(
     if selected == "ios":
         from swarmqa.driver.ios import IOSSimulatorDriver
 
-        return IOSSimulatorDriver(target, work_dir, video_mode=video_mode)
+        return IOSSimulatorDriver(target, work_dir, video_mode=video_mode, udid=udid)
     raise ValueError(f"unknown driver kind: {selected}")

@@ -49,6 +49,20 @@ enabled = false
 # report = "none"              # check | comment | both
 # handoff = "none"             # claude | codex: ask that agent to fix in the PR comment
 
+# Intents from the diff and the replay cache (see docs/flows.md).
+# [flows]
+# from_diff = false   # on GitHub runs, add intents a model proposes from the change (needs [llm])
+# cache = true        # replay goal paths saved in <app.source_dir>/.aqa/flows first
+# cache_dir = ""      # where the cache lives when app.source_dir is unset
+
+# Lease one device per worker from a pool; split a crawl across devices
+# (see docs/orchestrator.md). Local backend, thread isolation.
+# [swarm]
+# enabled = false
+# pool = "auto"       # auto | ios | macos | fake
+# devices = 0         # cap; 0 = the pool's capacity
+# crawl = 0           # crawl shards sharing one frontier (needs explorer.engine = "agent")
+
 [checks]
 # Used by explorer.engine = "agent". Each check is on unless set to false;
 # a table overrides its settings. See docs/checks.md.

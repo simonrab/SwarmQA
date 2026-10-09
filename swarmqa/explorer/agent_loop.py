@@ -24,6 +24,7 @@ from swarmqa.driver.protocol import ScreenObservation, UnsupportedAction
 from swarmqa.driver.query import find_element, matches_query, walk
 from swarmqa.driver.v1_adapter import as_v2
 from swarmqa.errors import AppCrashedError, AppMissingError, ElementNotFoundError, UITimeoutError
+from swarmqa.flows.cache import CachedFlow, CachedStep, FlowCache
 from swarmqa.explorer.screen_graph import (
     TAP_ROLES,
     Control,
@@ -248,6 +249,8 @@ class _AgentLoop:
         worker_id: str,
         backend: str,
         clock: Callable[[], float],
+        flow_cache: FlowCache | None = None,
+        shared_crawl: Any = None,
     ):
         self.shard = shard
         self.driver = as_v2(driver)
@@ -264,6 +267,19 @@ class _AgentLoop:
         self.mode: LoopMode = "crawl" if settings.mode == "crawl" or not self.goal else "goal"
         self.tokens, self.expected = parse_goal(self.goal)
         self.platform = (settings.platform or config.app.platform or "macos").lower()
+        # Replay cache (goal mode only): `cache_flow` is what was loaded,
+        # `cached` the flow still being followed (None once abandoned).
+        self.flow_cache = flow_cache if self.mode == "goal" else None
+        self.cache_flow: CachedFlow | None = self.flow_cache.load(shard, self.platform) if self.flow_cache else None
+        self.cached = self.cache_flow
+        self.cache_index = 0
+        self.cache_pending: int | None = None
+        self.cache_replayed = 0
+        self.cache_misses = 0
+        # Steps that worked since the last (re)launch: the path a cache entry stores.
+        self.path: list[CachedStep] = []
+        # Crawl shards split across devices share claims and graph (orchestrator/swarm.py).
+        self.shared = shared_crawl
         self.graph = ScreenGraph()
         self.started = clock()
         self.steps_used = 0
@@ -613,6 +629,9 @@ class _AgentLoop:
             return _Plan(stop="stall")
         obs = self.current
         assert obs is not None
+        cached = self._cache_plan()
+        if cached is not None:
+            return cached
         picks = self._goal_candidates(obs.tree)
         if self.provider is None or self.settings.heuristic_first:
             confident = [e for e in picks if any(matches_name(e, name) for name in self.expected)]
@@ -640,6 +659,67 @@ class _AgentLoop:
             return _Plan(StepDecision(kind="give_up", rationale="nothing left to try"), "crawl")
         plan.source = f"fallback {plan.source}"
         return plan
+
+    def _cache_plan(self) -> _Plan | None:
+        """The next cached step that starts on this screen, or None to explore.
+
+        Steps are followed in order; a later step whose start screen matches
+        resumes the replay after a re-explored stretch. `done` once every
+        step has been used and the recorded end screen is showing.
+        """
+        flow = self.cached
+        if flow is None or self.current is None:
+            return None
+        total = len(flow.steps)
+        for index in range(self.cache_index, total):
+            step = flow.steps[index]
+            if step.screen != self.current_id:
+                continue
+            decision = decision_from_json(step.action)
+            if decision.target is not None and exact_element(self.current.tree, decision.target) is None:
+                self.cache_misses += 1
+                self.cache_index = index + 1
+                self._note("cache", "failed", f"step {index + 1}/{total}: {describe(decision)} not on screen; re-exploring")
+                return None
+            decision.rationale = f"cache: step {index + 1}/{total}"
+            self.cache_pending = index
+            return _Plan(decision, "cache")
+        if self.cache_index >= total and self.path and self.current_id == flow.end_screen:
+            return _Plan(StepDecision(kind="done", rationale="cache: reached the recorded end screen"), "cache")
+        return None
+
+    def _settle_cache_step(self, index: int | None, after_id: str | None, error: str) -> None:
+        """Book the outcome of cached step `index`; `after_id` is None when the step crashed or hung."""
+        if index is None or self.cached is None:
+            return
+        self.cache_index = index + 1
+        expected = self.cached.steps[index].after
+        if after_id is None or error or after_id != expected:
+            self.cache_misses += 1
+            outcome = error or ("no screen" if after_id is None else f"led to {after_id}, not {expected}")
+            self._note("cache", "failed", f"step {index + 1}/{len(self.cached.steps)}: {outcome}; re-exploring")
+        else:
+            self.cache_replayed += 1
+
+    def _finish_cache(self) -> None:
+        """Save the path that reached the goal, or count a failed run of a cached flow."""
+        if self.flow_cache is None:
+            return
+        try:
+            if self.stop_reason == "done" and self.path:
+                self.flow_cache.save(self.shard, self.platform, self.path, self.current_id, previous=self.cache_flow)
+                if self.cache_flow is not None:
+                    total = len(self.cache_flow.steps)
+                    self._note(
+                        "cache",
+                        "passed",
+                        f"replayed {self.cache_replayed}/{total} cached step(s); {self.cache_misses} re-explored",
+                    )
+            elif self.cache_flow is not None:
+                dropped = self.flow_cache.record_failure(self.shard, self.platform, self.cache_flow)
+                self._note("cache", "failed", "cached flow dropped" if dropped else "cached flow did not reach the goal")
+        except OSError as exc:
+            self._note("cache", "failed", f"could not write the flow cache: {exc}")
 
     def _goal_candidates(self, tree: list[UIElement]) -> list[UIElement]:
         """Untried enabled tappable elements sharing a goal word, in tree order."""
@@ -694,10 +774,16 @@ class _AgentLoop:
 
     def _crawl_plan(self) -> _Plan:
         present = {control_key(element) for element in walk(self.current.tree)} if self.current else set()
+        if self.shared is not None:
+            # Publish what this worker learnt; take others' screens, routes and claims.
+            self.shared.exchange(self.graph, self.worker_id)
         for control in self.graph.untried(self.current_id):
             if control.key not in present:
                 # Gone from this screen (for example "Delete 3 items" became
                 # "Delete 2 items" under the same fingerprint): never retry it.
+                self.graph.mark_tried(self.current_id, control.key)
+                continue
+            if self.shared is not None and not self.shared.claim(self.current_id, control.key, self.worker_id):
                 self.graph.mark_tried(self.current_id, control.key)
                 continue
             return _Plan(_control_decision(control, self.settings.sample_text), "crawl", control=control.key)
@@ -739,6 +825,7 @@ class _AgentLoop:
         assert before is not None
         since = time.time()
         self.steps_used += 1
+        cache_step, self.cache_pending = self.cache_pending, None
         self._mark_tried(before, before_id, decision, control)
         text = describe(decision)
         crashed = False
@@ -774,13 +861,20 @@ class _AgentLoop:
                 )
                 if not error:
                     self.pending_edge = (before_id, decision_to_json(decision))
+                self._settle_cache_step(cache_step, None, error or "observe timed out")
                 return self._observe_timed_out(str(exc), before=before, action=decision, since=since)
         if crashed:
             self._note(text, "failed", f"crash: {error}")
+            if cache_step is not None and self.cached is not None:
+                # Replaying up to the crash again would only crash again.
+                self._settle_cache_step(cache_step, None, f"crash: {error}")
+                self.cached = None
             self.history.append(HistoryStep(action=decision, screen=before_id, outcome="app crashed"))
             return self._handle_crash(decision, before, since, error)
         after_id = fingerprint(after.tree)
+        self._settle_cache_step(cache_step, after_id, error)
         if not error:
+            self.path.append(CachedStep(decision_to_json(decision), before_id, after_id))
             self.graph.add_edge(before_id, decision_to_json(decision), after_id)
         elif navigation:
             # A known route that no longer works must not be retried forever.
@@ -986,6 +1080,8 @@ class _AgentLoop:
         self.narrative.append("relaunch")
         self.replay.append({"action": "relaunch"})
         self.pending_edge = None
+        self.path = []
+        self.cache_index = 0
         before = self.current
         since = time.time()
         try:
@@ -1036,6 +1132,7 @@ class _AgentLoop:
         if self.stop_reason:
             self._note("stop", "passed", self.stop_reason)
         self._finish_checks()
+        self._finish_cache()
         status = self.status()
         video = self._stop_video()
         if video is not None and not keep_video(self.config.video.mode, self.shard.kind, status):
@@ -1085,12 +1182,16 @@ def run_agent_loop(
     worker_id: str,
     backend: str = "local",
     clock: Callable[[], float] = time.monotonic,
+    flow_cache: FlowCache | None = None,
+    shared_crawl: Any = None,
 ) -> WorkerResult:
     """Explore `shard` with an observe-decide-act loop and return the worker result.
 
     The screen graph is saved to `<work_dir>/screen_graph.json`. Findings and
     their replay flows go to `<campaign>/findings/`. The caller owns the
-    driver and closes it.
+    driver and closes it. `flow_cache` replays and saves goal paths
+    (flows/cache.py); `shared_crawl` splits a crawl with other workers
+    (orchestrator/swarm.py).
     """
     started_at = _iso_now()
     started_mono = time.monotonic()
@@ -1107,6 +1208,8 @@ def run_agent_loop(
         worker_id=worker_id,
         backend=backend,
         clock=clock,
+        flow_cache=flow_cache,
+        shared_crawl=shared_crawl,
     )
     try:
         loop.run()
