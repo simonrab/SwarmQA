@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from swarmqa.checks.protocol import CheckIssue, StepContext
@@ -931,3 +931,32 @@ def test_a_crash_during_back_stays_in_the_replay(tmp_path):
     crash = next(f for f in result.findings if f.kind == "crash")
     document = json.loads((tmp_path / "campaign" / crash.replay_json).read_text())
     assert document["steps"][-1] == {"action": "tap_point", "point": [60.0, 222.0]}
+
+
+def test_a_screen_caught_mid_transition_is_observed_again(tmp_path):
+    size = (390.0, 844.0)
+    settled = [
+        UIElement(role="window", frame=(0, 0, *size), children=[
+            UIElement(role="other", frame=(0, 0, *size), children=[UIElement(role="button", label="Next", frame=(10, 100, 100, 44))]),
+        ])
+    ]
+    sliding = [
+        UIElement(role="window", frame=(0, 0, *size), children=[
+            UIElement(role="other", frame=(-117, 0, *size), children=[UIElement(role="button", label="Old", frame=(10, 100, 100, 44))]),
+            UIElement(role="other", frame=(0, 0, *size), children=[UIElement(role="button", label="Next", frame=(10, 100, 100, 44))]),
+        ])
+    ]
+
+    class Sliding(ObservingFake):
+        """The first observation still holds the page that is sliding out."""
+
+        def observe(self, name=None, *, screenshot=True):
+            obs = super().observe(name, screenshot=screenshot)
+            return replace(obs, tree=sliding if self.observe_calls == 1 else obs.tree, size=size)
+
+    driver = make_driver(tmp_path, cls=Sliding, reset_on_launch=False)
+    driver.set_tree(settled)
+    run(tmp_path, driver, settings_=AgentLoopSettings(mode="crawl", max_steps=1))
+    graph = load_graph(tmp_path)
+    assert graph.start == fingerprint(settled)
+    assert driver.observe_calls >= 2

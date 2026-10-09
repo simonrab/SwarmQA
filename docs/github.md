@@ -71,3 +71,7 @@ max_findings = 20
 ```
 
 Unknown keys are errors, so a typo cannot quietly turn reporting on or off. Check `gh` with `aqa doctor --github`.
+
+## Intents from the change
+
+With `[flows] from_diff = true` (and `[llm]` enabled), each commit's campaigns also run intents a model proposes from the change, most at risk first. See [flows.md](flows.md).

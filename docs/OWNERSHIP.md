@@ -47,6 +47,10 @@ From Phase 2 on, work packages from `docs/build-plan.md` replace chunks. Each WP
 | C2 verify_fix | `swarmqa/verify/**` (bodies of `__init__.py`, not its signatures); `tests/test_verify*.py`; `docs/verify.md` |
 | C3 Integrations and cleanup | `integrations/**`; `swarmqa/doctor.py`; `swarmqa/cli.py`; removing `swarmqa/prloop/`, `tests/test_prloop.py` and the `[pr]` config; `swarmqa/reporter/issues.py` behind `aqa file-issues`; `README.md`; `docs/agents.md` |
 
+| D1 Flows from the diff | `swarmqa/flows/from_diff.py`, `swarmqa/flows/settings.py`, `swarmqa/flows/cli.py`; `tests/test_flows_from_diff.py`; `docs/flows.md` |
+| D2 Replay cache | `swarmqa/flows/cache.py`; the cache hooks in `swarmqa/explorer/agent_loop.py`; `tests/test_flows_cache.py` |
+| D3 Swarm scheduler | `swarmqa/orchestrator/swarm.py`, `swarmqa/orchestrator/campaign.py`; `tests/test_swarm.py`; `docs/orchestrator.md` |
+
 The lead adds the `aqa mcp` and `aqa verify` commands to `cli.py` after C1 and C2 land.
 
 Never add references to the private validation app to tracked files.
