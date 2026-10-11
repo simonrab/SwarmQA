@@ -288,6 +288,7 @@ def run_campaign(
     not_started = [shard for shard in to_run if shard.id not in results]
     ordered = _ordered_results(queue, results)
     merged = _apply_dedup(ordered)
+    merged = _trust_findings(merged, ordered, root, config, driver_factory)
     # Only a complete, clean run may mark missing findings as fixed.
     full_run = (
         stop_reason is None
@@ -322,6 +323,7 @@ def run_campaign(
         backend=config.backend,
     )
     write_summary(result, root)
+    _write_html(root)
     status.state = "stopped" if stop_reason else "finished"
     status.active_workers = []
     status.queue_depth = len(not_started)
@@ -562,6 +564,26 @@ def _apply_dedup(results: list[WorkerResult]) -> list:
                 owners.pop(finding.fingerprint, None)
         item.findings = kept
     return merged
+
+
+def _trust_findings(findings, results, root: Path, config: CampaignConfig, driver_factory) -> list:
+    """Confirmation re-runs and grouping (swarmqa/confirm). Never fails the campaign."""
+    try:
+        from swarmqa.confirm import trust_findings
+
+        return trust_findings(findings, results, root, config, driver_factory=driver_factory)
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: finding confirmation failed: {exc}", file=sys.stderr)
+        return findings
+
+
+def _write_html(root: Path) -> None:
+    try:
+        from swarmqa.report.html import write_html_report
+
+        write_html_report(root)
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: HTML report failed: {exc}", file=sys.stderr)
 
 
 def _finalize_findings(findings, root: Path, campaign_id: str, config: CampaignConfig, *, full_run: bool) -> None:
