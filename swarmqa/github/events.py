@@ -19,6 +19,8 @@ class Event:
     ref: str = ""
     title: str = ""
     url: str = ""
+    # The PR's base branch; empty for pushes and when unknown.
+    base: str = ""
 
     def label(self) -> str:
         where = f"PR #{self.pr}" if self.pr is not None else (self.ref or "push")

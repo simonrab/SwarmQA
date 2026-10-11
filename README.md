@@ -119,6 +119,14 @@ Screenshot checks compare pixels with saved baselines. See [docs/visual.md](docs
 
 `aqa watch` tests new and updated PRs and merges into the default branch: it builds each commit in a clean checkout, runs one campaign per platform, and prints the report. `aqa watch --pr 12` tests one PR now. On a self-hosted Mac runner, the GitHub Action in [integrations/github-action](integrations/github-action/README.md) runs `aqa run --github-sha` on every push. With `[github] report = "check"`, `"comment"` or `"both"`, results are posted as a check and one PR comment, edited in place; nothing is posted by default. See [docs/github.md](docs/github.md).
 
+## Faster, change-aware runs
+
+- `aqa flows propose --base main` (or `aqa run --from-diff main`) asks the model which flows a change puts at risk and writes them as intents, most at risk first. `[flows] from_diff = true` does this on every GitHub run.
+- With `explorer.engine = "agent"` and `app.source_dir` set, a goal that was reached once is replayed from `.aqa/flows/` next time without model calls; a step that broke is re-explored alone and the saved path updated.
+- `[swarm] enabled = true` leases a simulator (or the Mac) per worker from a device pool; `crawl = N` splits one crawl of the app across N devices.
+
+See [docs/flows.md](docs/flows.md) and [docs/orchestrator.md](docs/orchestrator.md).
+
 ## Coding agents (MCP)
 
 Claude Code and Codex drive SwarmQA through its MCP server, `aqa mcp` (needs the `mcp` extra). The agent starts a campaign, reads the findings, fixes the code, calls `verify_fix` to rebuild and replay the finding on two devices, and opens the pull request itself once the fix passes. SwarmQA never edits code or opens PRs.
@@ -149,4 +157,5 @@ Tests use the fake driver. They do not need a Mac, Xcode, or `idb`.
 | Coding agents and MCP | [docs/agents.md](docs/agents.md) |
 | GitHub trigger | [docs/github.md](docs/github.md) |
 | Per-SHA builder | [docs/build.md](docs/build.md) |
+| Flows from the diff, replay cache | [docs/flows.md](docs/flows.md) |
 | `aqa doctor` | [docs/doctor.md](docs/doctor.md) |

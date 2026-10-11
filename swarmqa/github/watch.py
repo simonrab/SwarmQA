@@ -64,7 +64,7 @@ class WatchState:
 
 
 def pr_event(pull: PullRequest) -> Event:
-    return Event("pr", pull.head_sha, pull.number, pull.head_ref, pull.title, pull.url)
+    return Event("pr", pull.head_sha, pull.number, pull.head_ref, pull.title, pull.url, pull.base_ref)
 
 
 def poll(client: GitHubClient, settings: GitHubSettings, state: WatchState, branch: str,
@@ -134,12 +134,18 @@ def evaluate_sha(
     repo: str | None = None,
     builder: Any = None,
     run_campaign: Callable | None = None,
+    diff_intents: Callable[..., list[Path]] | None = None,
     log: Log = print,
 ) -> EventResult:
-    """Build `event.sha` for each platform and run a campaign on each build."""
+    """Build `event.sha` for each platform and run a campaign on each build.
+
+    With `[flows] from_diff = true`, intents proposed from the change are
+    added to every platform's campaign (computed once per event).
+    """
     from swarmqa.build.builder import ShaBuilder
     from swarmqa.build.findings import build_failure_finding
     from swarmqa.build.settings import BuildSettings
+    from swarmqa.flows.settings import FlowsSettings
     from swarmqa.intent.ingest import build_queue
     from swarmqa.models import RunOptions
     from swarmqa.report.findings_json import FINDINGS_JSON, load_findings_json
@@ -150,6 +156,8 @@ def evaluate_sha(
     if source and source.startswith("https://github.com/"):
         use_gh_credentials()
     builder = builder or ShaBuilder(BuildSettings.from_config(config))
+    from_diff = FlowsSettings.from_config(config).from_diff
+    diff_dir: str | None = None
     result = EventResult(event)
     for platform in settings.platforms:
         outcome = PlatformOutcome(platform)
@@ -169,6 +177,11 @@ def evaluate_sha(
         campaign_config.app.platform = platform
         campaign_config.app.path = built.artifact.app_path
         campaign_config.app.bundle_id = built.artifact.bundle_id
+        if from_diff:
+            if diff_dir is None:
+                diff_dir = _diff_intents(event, config, source, diff_intents, log)
+            if diff_dir:
+                campaign_config.intents = [*campaign_config.intents, diff_dir]
         try:
             queue = build_queue(campaign_config)
             if not queue:
@@ -189,6 +202,40 @@ def evaluate_sha(
         if findings_path.is_file():
             outcome.findings = load_findings_json(findings_path)
     return result
+
+
+def _diff_intents(
+    event: Event,
+    config: CampaignConfig,
+    source: str | None,
+    propose: Callable[..., list[Path]] | None,
+    log: Log,
+) -> str:
+    """The directory of intents proposed from `event`'s change, or "" when there are none.
+
+    The diff is read from the builder's mirror, whose HEAD is the default
+    branch: a PR compares its base (or HEAD) with the head SHA, a push its
+    first parent. A failure is logged and the run goes on with the
+    configured intents only.
+    """
+    out = Path(config.report_root) / "diff-intents" / event.sha[:12]
+    base = event.base or ("HEAD" if event.kind == "pr" else f"{event.sha}^")
+    try:
+        if propose is None:
+            from swarmqa.build.checkout import RepoCache
+            from swarmqa.build.settings import BuildSettings
+            from swarmqa.flows.from_diff import intents_from_diff
+
+            if not source:
+                raise ValueError("no repo to read the diff from")
+            mirror = RepoCache(source, BuildSettings.from_config(config)).mirror
+            paths = intents_from_diff(config, mirror, base, event.sha, out, log=log)
+        else:
+            paths = propose(event, config, source, out)
+    except Exception as exc:  # noqa: BLE001 - the configured intents still run
+        log(f"{event.label()}: flows from the diff skipped: {type(exc).__name__}: {exc}")
+        return ""
+    return str(out) if paths else ""
 
 
 class Watcher:

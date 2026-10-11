@@ -20,6 +20,8 @@ from swarmqa.backends.local import (
     persist_finding,
 )
 from swarmqa.budgets import CampaignClock
+from swarmqa.devices.protocol import DevicePool
+from swarmqa.errors import ConfigError
 from swarmqa.models import (
     CampaignConfig,
     CampaignResult,
@@ -36,6 +38,14 @@ from swarmqa.orchestrator.status import (
     load_status,
     model_from_plain,
     write_status,
+)
+from swarmqa.orchestrator.swarm import (
+    LeasingDriverFactory,
+    SwarmContext,
+    SwarmSettings,
+    build_pool,
+    expand_crawl,
+    merge_worker_graphs,
 )
 from swarmqa.report.dedup import dedup_findings
 from swarmqa.report.layout import campaign_dir, ensure_campaign_layout, worker_dir
@@ -56,9 +66,17 @@ def run_campaign(
     options: RunOptions | None = None,
     driver_factory: Callable | None = None,
     executor: Executor | None = None,
+    device_pool: DevicePool | None = None,
 ) -> CampaignResult:
-    """Run up to config.workers sessions. Merge artifacts. Survive a worker crash."""
+    """Run up to config.workers sessions. Merge artifacts. Survive a worker crash.
+
+    With `[swarm] enabled`, every shard leases a device from `device_pool`
+    (default: the pool `[swarm]` describes) and slots are capped by its
+    capacity; `[swarm] crawl` adds crawl shards that split one frontier.
+    """
     options = options or RunOptions()
+    swarm = SwarmSettings.from_config(config)
+    queue = expand_crawl(list(queue), swarm)
     root, campaign_id, previous = _open_campaign(config, options)
     resume = previous is not None and bool(options.resume_campaign_id)
     to_run, carried_shards = _partition_queue(list(queue), previous, resume)
@@ -71,15 +89,33 @@ def run_campaign(
         max_wall_time_s=config.budgets.max_wall_time_s,
         max_worker_minutes=config.budgets.max_worker_minutes,
     )
-    _warn_gui(config, queue)
-
     slots = max(1, int(config.workers))
+    pool: DevicePool | None = None
+    if swarm.enabled and config.backend == "local":
+        pool = device_pool or build_pool(swarm, config)
+        platform = swarm.platform(config)
+        capacity = pool.capacity(platform)  # type: ignore[arg-type]
+        if capacity <= 0:
+            raise ConfigError([f"swarm: the device pool has no {platform} devices on this host"])
+        slots = min(slots, capacity, swarm.devices or capacity)
+        driver_factory = LeasingDriverFactory(
+            pool, platform, config, base=driver_factory, timeout_s=swarm.lease_timeout_s
+        )
+        print(
+            f"[campaign {campaign_id}] swarm: {slots} {platform} device(s) (pool capacity {capacity})",
+            file=sys.stderr,
+            flush=True,
+        )
+    else:
+        _warn_gui(config, queue)
+
     if config.backend == "local":
         backend: LocalBackend | object = LocalBackend(
             config,
             executor=executor,
             driver_factory=driver_factory,
             campaign_dir=root,
+            swarm=SwarmContext() if (swarm.enabled or swarm.crawl) else None,
         )
     else:
         backend = create_backend(config, campaign_dir=root)
@@ -239,6 +275,16 @@ def run_campaign(
                     active.pop(worker_id, None)
                 publish()
 
+    if pool is not None and not swarm.keep_devices:
+        pool.close()
+    graph = merge_worker_graphs(root)
+    if graph is not None:
+        print(
+            f"[campaign {campaign_id}] screens={graph['screens']} "
+            f"controls tried={graph['tried']}/{graph['controls']}",
+            file=sys.stderr,
+            flush=True,
+        )
     not_started = [shard for shard in to_run if shard.id not in results]
     ordered = _ordered_results(queue, results)
     merged = _apply_dedup(ordered)

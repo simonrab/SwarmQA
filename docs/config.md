@@ -179,6 +179,8 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `[visual.judgment]` | `visual.judgment` (`VisualJudgmentConfig`) |
 | `[explorer.decision]`, `[explorer.decision.system_one]`, `[explorer.decision.computer_use]` | `explorer.decision` (`DecisionConfig` and nested provider configs) |
 | `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
+| `[flows]` | `flows.settings`, read by `swarmqa.flows.settings.FlowsSettings` (see `docs/flows.md`) |
+| `[swarm]` | `swarm.settings`, read by `swarmqa.orchestrator.swarm.SwarmSettings` (see `docs/orchestrator.md`) |
 
 `max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional.
 

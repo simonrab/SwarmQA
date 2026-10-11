@@ -88,4 +88,41 @@ warning: local backend has N workers, above the GUI threshold of T. Scripted, ex
 
 Suite-only campaigns do not warn. Local workers share one display; `vm` or `cloud` gives each worker its own session.
 
+With `[swarm] enabled = true` the warning is not printed: every worker has its own leased device (see below).
+
 When `app.platform` is `ios`, that display warning is replaced. If `workers` is greater than 1 and `app.simulators` has fewer entries than `workers`, stderr says each worker needs its own Simulator. A pool with one device name or UDID per worker does not warn. See [driver.md](driver.md).
+
+## Swarm: device pools and a shared crawl
+
+`swarmqa/orchestrator/swarm.py` (WP-D3). Off unless `[swarm] enabled = true` or `crawl` is set. Local backend with `local.isolation = "thread"` only: the pool and the shared crawl live in the campaign process.
+
+**Device leases.** Each shard leases a device from a DevicePool (`docs/devices.md`) when its driver is created and returns it when the driver closes, even if the shard fails. Worker slots are `min(workers, pool capacity, swarm.devices)`, printed as `[campaign <id>] swarm: N ios device(s) (pool capacity C)`. A pool with no device for the platform is a config error. The pool is:
+
+| `swarm.pool` | Devices |
+| --- | --- |
+| `auto` (default) | `ios` or `macos` from `app.platform` |
+| `ios` | `IOSSimulatorPool`: clones of `golden`, or of `device_type` (default `iPhone 17`) on `runtime`; capacity from RAM and cores |
+| `macos` | `LocalMacPool`: the local Mac, one at a time |
+| `fake` | `FakeDevicePool` for dry runs and tests |
+
+A leased simulator reaches the driver as its UDID (`create_driver(..., udid=)`; the pool holds the `simulator-<udid>` lock). `erase_mode = "uninstall"` (default) removes the app between leases and keeps the clone booted; `"erase"` wipes it at the cost of a cold boot. With `keep_devices = true` (default) clones stay booted after the campaign, so the next one starts in seconds; `false` deletes the clones this campaign created.
+
+**Split crawl.** `crawl = N` adds N shards named `crawl i/N` with no goal, so the agent loop crawls (`explorer.engine = "agent"` is required). The N workers share one frontier: before each crawl decision a worker publishes its screen graph and takes the others' screens, routes and claims; before trying a control it claims it, and a control claimed by someone else counts as tried. No two devices try the same control, and a worker can route to screens another found. Imported screens and routes start with zero visits and counts.
+
+**Merged graph.** After every campaign the workers' `screen_graph.json` files are merged into `reports/<campaign-id>/screen_graph.json` and stderr gets `[campaign <id>] screens=<n> controls tried=<t>/<c>`.
+
+```toml
+[swarm]
+enabled = false
+pool = "auto"            # auto | ios | macos | fake
+devices = 0              # cap; 0 = the pool's capacity
+golden = ""              # ios: shut-down simulator to clone
+device_type = ""         # ios: default "iPhone 17"
+runtime = ""
+erase_mode = "uninstall" # uninstall | erase
+keep_devices = true
+lease_timeout_s = 600
+crawl = 0                # crawl shards sharing one frontier
+```
+
+Goal shards also replay saved paths first (`[flows] cache`, see `docs/flows.md`), which is what makes repeat campaigns fast.

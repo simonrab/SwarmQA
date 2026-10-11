@@ -271,6 +271,24 @@ class GitHubConfig:
 
 
 @dataclass
+class FlowsConfig:
+    """The `[flows]` table, kept raw; `swarmqa.flows.settings.FlowsSettings.from_mapping`
+    parses it. See docs/flows.md.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SwarmConfig:
+    """The `[swarm]` table, kept raw; `swarmqa.orchestrator.swarm.SwarmSettings.from_mapping`
+    parses it. See docs/orchestrator.md.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ChecksConfig:
     """The `[checks]` table, kept raw; `swarmqa.checks.config.checks_settings`
     builds `ChecksSettings` from it. Sub-tables `functional`, `layout`,
@@ -311,6 +329,8 @@ class CampaignConfig:
     checks: ChecksConfig = field(default_factory=ChecksConfig)
     build: BuildConfig = field(default_factory=BuildConfig)
     github: GitHubConfig = field(default_factory=GitHubConfig)
+    flows: FlowsConfig = field(default_factory=FlowsConfig)
+    swarm: SwarmConfig = field(default_factory=SwarmConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2

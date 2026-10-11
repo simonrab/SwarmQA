@@ -43,12 +43,15 @@ class LocalBackend:
         driver_factory: Callable | None = None,
         campaign_dir: Path | None = None,
         on_step: StepCallback | None = None,
+        swarm=None,
     ):
         self.config = config
         self.executor = executor
         self.driver_factory = driver_factory
         self.campaign_dir = Path(campaign_dir) if campaign_dir is not None else None
         self.on_step = on_step
+        # orchestrator.swarm.SwarmContext: shared crawls for split crawl shards.
+        self.swarm = swarm
         self._lock = threading.Lock()
         self._cancelled: set[str] = set()
         self._procs: dict[str, subprocess.Popen] = {}
@@ -73,6 +76,7 @@ class LocalBackend:
             driver_factory=self.driver_factory,
             campaign_root=root,
             on_step=self.on_step,
+            shared_crawl=self.swarm.crawl_for(shard) if self.swarm is not None else None,
         )
 
     def cancel(self, worker_id: str) -> None:
@@ -172,8 +176,13 @@ def execute_shard(
     driver_factory: Callable | None = None,
     campaign_root: Path | None = None,
     on_step: StepCallback | None = None,
+    shared_crawl=None,
 ) -> WorkerResult:
-    """Run one shard in-process. ChunkNotReady from explorers becomes status error."""
+    """Run one shard in-process. ChunkNotReady from explorers becomes status error.
+
+    `shared_crawl` (an `orchestrator.swarm.SharedCrawl`) splits a crawl shard
+    with the other workers of its group.
+    """
     root = campaign_root or _infer_campaign_root(work_dir)
     ensure_campaign_layout(root)
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -182,7 +191,7 @@ def execute_shard(
         if shard.kind == "scripted":
             result = _run_scripted(shard, worker_id, work_dir, config, driver_factory, on_step)
         elif shard.kind == "exploratory":
-            result = _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step)
+            result = _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step, shared_crawl)
         elif shard.kind == "suite":
             result = _run_suite(shard, worker_id, work_dir, config, root, on_step)
         elif shard.kind == "visual":
@@ -255,10 +264,10 @@ def _run_scripted(shard, worker_id, work_dir, config, driver_factory, on_step) -
         _close_driver(driver)
 
 
-def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step) -> WorkerResult:
+def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step, shared_crawl=None) -> WorkerResult:
     _emit(on_step, worker_id, shard, "explore")
     if config.explorer.engine == "agent":
-        return _run_agent(shard, worker_id, work_dir, config, driver_factory)
+        return _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl)
     driver = _make_driver(config, work_dir, driver_factory)
     try:
         from swarmqa.explorer.exploratory import run_exploratory
@@ -268,16 +277,17 @@ def _run_exploratory(shard, worker_id, work_dir, config, driver_factory, on_step
         _close_driver(driver)
 
 
-def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResult:
+def _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl=None) -> WorkerResult:
     """Run the agent loop with the configured checks and, when `[llm]` is on, a model.
 
     A provider that cannot be built (missing SDK extra, bad settings) ends the
     shard as an error before the app is launched, so no half-configured run
-    spends time or money.
+    spends time or money. Goal shards use the replay cache (`[flows] cache`).
     """
     from swarmqa.checks import default_checks
     from swarmqa.checks.config import checks_settings
     from swarmqa.explorer.agent_loop import AgentLoopSettings, run_agent_loop
+    from swarmqa.flows.cache import FlowCache
 
     provider = None
     if config.llm.enabled:
@@ -305,6 +315,8 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory) -> WorkerResu
             work_dir=work_dir,
             worker_id=worker_id,
             backend=config.backend,
+            flow_cache=FlowCache.from_config(config) if shard.goal else None,
+            shared_crawl=shared_crawl,
         )
     finally:
         _close_driver(driver)
