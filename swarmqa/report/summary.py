@@ -14,6 +14,61 @@ from swarmqa.serialize import dump_json, to_plain
 
 # Pixel diffs and appearance judgments share the main findings list.
 _VISUAL_KINDS = frozenset({"visual", "visual_judgment"})
+SEVERITIES = ("critical", "high", "medium", "low")
+_SEVERITY_RANK = {name: index for index, name in enumerate(SEVERITIES)}
+_CONFIRM_RANK = {"confirmed": 0, "flaky": 1, None: 2, "skipped": 3, "not_reproduced": 4}
+_CONFIRM_LABELS = {"confirmed": "Confirmed", "flaky": "Flaky", "not_reproduced": "Not reproduced",
+                   "skipped": "Not re-run"}
+TO_CHECK_NOTE = "advisory or not reproduced"
+
+
+def finding_sort_key(finding: Finding) -> tuple:
+    """Severity first, then confirmed before unconfirmed, then higher confidence."""
+    return (
+        _SEVERITY_RANK.get(finding.severity, 9),
+        _CONFIRM_RANK.get(finding.confirmation, 2),
+        -float(finding.confidence),
+        finding.id,
+    )
+
+
+def is_problem(finding: Finding) -> bool:
+    """A finding to act on: not advisory and not shown to be unreproducible."""
+    return not finding.advisory and finding.confirmation != "not_reproduced"
+
+
+def confirmation_text(finding: Finding) -> str | None:
+    """A label like "Confirmed 2/2", "Flaky 1/2" or "Not reproduced 0/2"; None when not checked."""
+    if not finding.confirmation:
+        return None
+    label = _CONFIRM_LABELS.get(finding.confirmation, finding.confirmation.replace("_", " ").capitalize())
+    if finding.confirm_attempts and finding.confirmation != "skipped":
+        label += f" {finding.confirm_hits}/{finding.confirm_attempts}"
+    return label
+
+
+def occurrence_count(finding: Finding) -> int:
+    """How many places showed this problem: the finding itself plus its occurrences."""
+    return 1 + len(finding.occurrences)
+
+
+def verdict(findings: list[Finding]) -> str:
+    """The result in plain words, e.g. "3 problems found, 1 critical" or "No problems found"."""
+    problems = [finding for finding in findings if is_problem(finding)]
+    rest = len(findings) - len(problems)
+    if problems:
+        counts = [f"{n} {name}" for name in SEVERITIES if (n := sum(f.severity == name for f in problems))]
+        text = ", ".join([f"{_plural(len(problems), 'problem')} found", *counts])
+    else:
+        text = "No problems found"
+    if rest:
+        noun = "more finding" if problems else "finding"
+        text += f"; {_plural(rest, noun)} to check ({TO_CHECK_NOTE})"
+    return text
+
+
+def _plural(count: int, noun: str) -> str:
+    return f"{count} {noun}" + ("" if count == 1 else "s")
 
 
 def write_summary(result: CampaignResult, root: Path | None = None) -> Path:
@@ -29,8 +84,11 @@ def write_summary(result: CampaignResult, root: Path | None = None) -> Path:
 def render_summary_md(result: CampaignResult) -> str:
     coverage = result.coverage
     spend = result.spend
+    every = [finding for item in result.results for finding in item.findings]
     lines = [
         f"# Campaign {result.campaign_id}",
+        "",
+        f"**{verdict(every)}.**",
         "",
         f"Backend: `{result.backend}`",
         "",
@@ -61,14 +119,11 @@ def render_summary_md(result: CampaignResult) -> str:
             f"| {item.shard_name or item.shard_id} | {item.shard_kind or ''} | {item.status} | {evidence} |"
         )
     report_dir = Path(result.report_dir) if result.report_dir else None
-    findings = [
-        finding
-        for item in result.results
-        for finding in item.findings
-        if finding.kind != "friction_path"
-    ]
-    firm = [finding for finding in findings if not finding.advisory]
-    advisory = [finding for finding in findings if finding.advisory]
+    findings = sorted(
+        (finding for finding in every if finding.kind != "friction_path"), key=finding_sort_key
+    )
+    firm = [finding for finding in findings if is_problem(finding)]
+    advisory = [finding for finding in findings if not is_problem(finding)]
     lines.extend(["", "## Findings", ""])
     if not firm:
         lines.append("No findings.")
@@ -76,7 +131,9 @@ def render_summary_md(result: CampaignResult) -> str:
         lines.append(_bullet(finding))
         lines.extend(_detail_lines(finding, report_dir))
     lines.extend(["", "## Advisory findings", ""])
-    lines.append("Reported only by a model or a soft heuristic; check before acting.")
+    lines.append(
+        "Reported only by a model or a soft heuristic, or not seen again on a re-run; check before acting."
+    )
     lines.append("")
     if not advisory:
         lines.append("No advisory findings.")
@@ -146,7 +203,13 @@ def _detail_lines(finding: Finding, report_dir: Path | None) -> list[str]:
         head += ", regressed"
     elif finding.environment.get("seen_before") == "true":
         head += f", seen before (first {finding.environment.get('first_seen', '?')})"
+    confirmation = confirmation_text(finding)
+    if confirmation:
+        head += f", {confirmation.lower()}"
     lines = [f"  - {head}"]
+    if finding.occurrences:
+        shown = ", ".join(finding.occurrences[:10]) + (", ..." if len(finding.occurrences) > 10 else "")
+        lines.append(f"  - also seen in {_plural(len(finding.occurrences), 'more place')}: {shown}")
     if finding.suspected_sources:
         lines.append("  - suspected sources: " + ", ".join(f"`{source}`" for source in finding.suspected_sources))
     if finding.evidence.video_clip:
