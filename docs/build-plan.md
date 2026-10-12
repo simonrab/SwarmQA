@@ -102,6 +102,12 @@ Update `driver/fake.py` and the fake decision provider to the new contracts.
 
 **Target:** 20 flows on 6 iOS simulators in under 10 minutes on cached runs. Not measured: needs a host that can run 6 simulators (the pool gives an 8 GB Mac a capacity of 1).
 
+## Phase 6b, Wave F: first run and trust — F1, F2 and F4 built
+
+- **WP-F1: `aqa try`.** Owns `swarmqa/quickstart/**`. Tests a built `.app` or an Xcode scheme with no config or intents: picks a simulator, crawls for about 5 minutes (plus start-up time per shard), and opens the HTML report. No model unless `--model`. `--save` writes the config. See `docs/try.md`.
+- **WP-F2: Confirmation and grouping.** Owns `swarmqa/confirm/**`. Crashes, hangs, dead taps and failed steps are replayed on fresh launches of the app (one shared driver) before the report is written; a finding that does not happen again becomes advisory and does not fail a GitHub check. Repeats of one problem are grouped. `[findings]` table; see `docs/trust.md`.
+- **WP-F4: HTML report.** Owns `swarmqa/report/html.py`. A self-contained `report.html` with a verdict-first summary, and the same verdict at the top of the PR comment. `aqa report --html`.
+
 ## Phase 7, Wave E: scale out (2 subagents)
 
 - **WP-E1: Runner service.** Owns `swarmqa/server/**`. An HTTP API on each Mac host with token auth, a host registry and artifact upload. The one place where Rust is worth re-evaluating, if Python proves painful for a long-running daemon.

@@ -6,9 +6,12 @@
   works; a personal `gh` login gets 403), so on 403 the reporter falls back
   to a commit status with the same verdict.
 - **comment**: one comment per PR, found by a hidden marker and edited in
-  place on every run, with the findings, screenshots when an
-  `evidence_command` can upload them, and the repro command. With
-  `github.handoff` it ends with an `@claude` / `@codex` request to fix them.
+  place on every run. It follows the order of `report.html`: a verdict in
+  plain words, a findings table, then one collapsed section per finding with
+  steps, a screenshot when an `evidence_command` can upload it, the repro
+  command and suspected sources. Advisory and not-reproduced findings sit in
+  one collapsed block of their own. With `github.handoff` it ends with an
+  `@claude` / `@codex` request to fix them.
 
 The check fails on any non-advisory finding (and on advisory ones too with
 `fail_on_advisory`). A superseded run (the PR moved on while it ran) still
@@ -27,6 +30,14 @@ from swarmqa.github.client import GitHubClient, GitHubError
 from swarmqa.github.events import Event, EventResult, PlatformOutcome
 from swarmqa.github.settings import GitHubSettings
 from swarmqa.models import Finding
+from swarmqa.report.summary import (
+    TO_CHECK_NOTE,
+    confirmation_text,
+    finding_sort_key,
+    is_problem,
+    occurrence_count,
+    verdict,
+)
 
 MARKER = "<!-- swarmqa:report -->"
 SUMMARY_LIMIT = 60000
@@ -38,7 +49,11 @@ _HANDOFF = {
 
 
 def failing(findings: list[Finding], settings: GitHubSettings) -> list[Finding]:
-    return [finding for finding in findings if settings.fail_on_advisory or not finding.advisory]
+    return [
+        finding
+        for finding in findings
+        if finding.confirmation != "not_reproduced" and (settings.fail_on_advisory or not finding.advisory)
+    ]
 
 
 def conclusion(result: EventResult, settings: GitHubSettings) -> str:
@@ -90,6 +105,8 @@ def render(
     lines = [MARKER] if for_comment else []
     lines.append(f"## SwarmQA: {headline(result, settings)}")
     lines.append("")
+    if result.findings or not any(outcome.error for outcome in result.outcomes):
+        lines += [f"**{verdict(result.findings)}.**", ""]
     tested = ", ".join(outcome.platform for outcome in result.outcomes) or "nothing"
     lines.append(f"Commit `{event.sha[:12]}`, tested on {tested}.")
     if result.superseded:
@@ -99,48 +116,33 @@ def render(
         if outcome.error:
             lines.append("")
             lines.append(f"**{outcome.platform}:** {outcome.error.splitlines()[0]}")
-    rows: list[tuple[Finding, PlatformOutcome]] = [
-        (finding, outcome) for outcome in result.outcomes for finding in outcome.findings
-    ]
-    rows.sort(key=lambda row: (row[0].advisory, _SEVERITY_ORDER.get(row[0].severity, 9), row[0].id))
+    rows = _rows(result)
     shown = rows[: settings.max_findings]
-    if shown:
-        lines += ["", "| Severity | Platform | Finding | Category |", "| --- | --- | --- | --- |"]
-        for finding, outcome in shown:
-            advisory = " (advisory)" if finding.advisory else ""
-            title = _cell(finding.title)
-            lines.append(f"| {finding.severity}{advisory} | {outcome.platform} | {title} | {finding.category} |")
-        if len(rows) > len(shown):
-            lines.append(f"\n{len(rows) - len(shown)} more finding(s) are in the campaign report.")
-        lines.append("")
-        for finding, outcome in shown:
-            lines.append(f"<details><summary><code>{finding.id}</code> {_cell(finding.title)}</summary>")
-            lines.append("")
-            if finding.steps:
-                lines.append("Steps:")
-                lines += [f"{index}. {step}" for index, step in enumerate(finding.steps[:12], start=1)]
-                lines.append("")
-            if finding.details:
-                details = finding.details.strip()[:1500]
-                if details.count("```") % 2:
-                    details += "\n```"
-                lines += [details, ""]
-            if finding.suspected_sources:
-                lines.append("Suspected sources: " + ", ".join(f"`{s}`" for s in finding.suspected_sources[:5]))
-                lines.append("")
-            image = evidence.get(finding.id)
-            if image:
-                lines.append(f"![{finding.id}]({image})")
-                lines.append("")
+    platforms = len(result.outcomes) > 1
+    problems = [row for row in shown if is_problem(row[0])]
+    others = [row for row in shown if not is_problem(row[0])]
+    if problems:
+        lines += ["", *_table(problems, platforms), ""]
+        for finding, outcome in problems:
+            lines += _section(finding, outcome, evidence.get(finding.id))
+    if others:
+        lines += ["", f"<details><summary>{len(others)} finding(s) to check ({TO_CHECK_NOTE})</summary>", ""]
+        lines += [*_table(others, platforms), ""]
+        for finding, outcome in others:
             command = repro_command(finding, outcome)
             if command:
-                lines += ["```sh", command, "```", ""]
-            lines.append("</details>")
+                lines.append(f"- `{finding.id}`: `{command}`")
+        lines += ["", "</details>"]
+    if len(rows) > len(shown):
+        lines.append(f"\n{len(rows) - len(shown)} more finding(s) are in the campaign report.")
     if run_url:
-        lines += ["", f"Evidence (screenshots, video, replays): {run_url}"]
+        lines += ["", f"Evidence (report.html, screenshots, video, replays): {run_url}"]
     campaigns = [outcome.campaign_id for outcome in result.outcomes if outcome.campaign_id]
     if campaigns:
         lines += ["", "Campaigns: " + ", ".join(f"`{cid}`" for cid in campaigns)]
+        pages = [_page(outcome) for outcome in result.outcomes]
+        if any(pages):
+            lines.append("Full report: " + ", ".join(f"`{page}`" for page in pages if page))
     mention = _HANDOFF.get(settings.handoff)
     if for_comment and mention and event.pr is not None and failing(result.findings, settings):
         lines += [
@@ -151,6 +153,65 @@ def render(
             "SwarmQA tests your PR when you open it.",
         ]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _rows(result: EventResult) -> list[tuple[Finding, PlatformOutcome]]:
+    """Every finding with its platform, problems first, each group in report order."""
+    rows = [(finding, outcome) for outcome in result.outcomes for finding in outcome.findings]
+    return sorted(rows, key=lambda row: (not is_problem(row[0]), finding_sort_key(row[0])))
+
+
+def _table(rows: list[tuple[Finding, PlatformOutcome]], platforms: bool) -> list[str]:
+    head = "| Severity | " + ("Platform | " if platforms else "") + "Finding | Confirmation | Count |"
+    lines = [head, "| --- " * (head.count("|") - 1) + "|"]
+    for finding, outcome in rows:
+        severity = finding.severity + (" (advisory)" if finding.advisory else "")
+        where = f"{outcome.platform} | " if platforms else ""
+        confirmation = confirmation_text(finding) or "not checked"
+        lines.append(f"| {severity} | {where}{_cell(finding.title)} | {confirmation} | {occurrence_count(finding)} |")
+    return lines
+
+
+def _section(finding: Finding, outcome: PlatformOutcome, image: str | None) -> list[str]:
+    summary = f"<b>{finding.severity}</b> {_cell(finding.title)} <code>{finding.id}</code>"
+    lines = [f"<details><summary>{summary}</summary>", ""]
+    env = finding.environment or {}
+    target = env.get("target_label") or env.get("target_identifier")
+    if target:
+        lines += [f"On: `{_cell(target)}`", ""]
+    if finding.steps:
+        lines += [f"{index}. {step}" for index, step in enumerate(finding.steps[:10], start=1)]
+        lines.append("")
+    if image:
+        lines += [f"![{finding.id}]({image})", ""]
+    command = repro_command(finding, outcome)
+    if command:
+        lines += ["```sh", command, "```", ""]
+    if finding.suspected_sources:
+        lines += ["Suspected sources: " + ", ".join(f"`{s}`" for s in finding.suspected_sources[:5]), ""]
+    if finding.occurrences:
+        more = ", ".join(_cell(place) for place in finding.occurrences[:5])
+        extra = ", ..." if len(finding.occurrences) > 5 else ""
+        lines += [f"Also seen in {len(finding.occurrences)} more place(s): {more}{extra}", ""]
+    if finding.details:
+        details = finding.details.strip()[:800]
+        if details.count("```") % 2:
+            details += "\n```"
+        lines += [details, ""]
+    lines.append("</details>")
+    return lines
+
+
+def _page(outcome: PlatformOutcome) -> str | None:
+    if not outcome.report_dir:
+        return None
+    page = Path(outcome.report_dir) / "report.html"
+    if not page.is_file():
+        return None
+    try:
+        return str(page.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(page)
 
 
 def _cell(text: str) -> str:
@@ -225,12 +286,12 @@ class Reporter:
         return posted
 
     def upload_evidence(self, result: EventResult) -> dict[str, str]:
-        """Upload each listed finding's first screenshot with `evidence_command`."""
+        """Upload the first screenshot of each problem the comment shows, with `evidence_command`."""
         command = self.settings.evidence_command
         if not command:
             return {}
         urls: dict[str, str] = {}
-        rows = [(f, o) for o in result.outcomes for f in o.findings][: self.settings.max_findings]
+        rows = [row for row in _rows(result)[: self.settings.max_findings] if is_problem(row[0])]
         for finding, outcome in rows:
             images = [*finding.screenshots, *finding.evidence.frames]
             if not images or not outcome.report_dir:

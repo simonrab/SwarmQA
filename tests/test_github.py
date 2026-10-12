@@ -309,6 +309,31 @@ def test_render_orders_by_severity_and_marks_errors(tmp_path):
     assert "https://ci/run/1" in body and "`c9`" in body and MARKER not in body
 
 
+def test_comment_leads_with_verdict_and_keeps_doubtful_findings_apart(tmp_path):
+    (tmp_path / "report.html").write_text("<html></html>")
+    outcome = PlatformOutcome("ios", campaign_id="c9", report_dir=str(tmp_path), findings=[
+        finding("soft", advisory=True),
+        finding("gone", severity="critical", confirmation="not_reproduced", confirm_attempts=2,
+                replay_json="findings/gone.replay.json"),
+        finding("real", confirmation="confirmed", confirm_attempts=2, confirm_hits=2,
+                occurrences=["Save on Settings", "Save on Profile"], suspected_sources=["App/Save.swift:3"],
+                replay_json="findings/real.replay.json"),
+    ])
+    result = EventResult(Event("pr", SHA1, 1), [outcome])
+    body = render(result, settings(), evidence={"real": "https://cdn/real.png"}, for_comment=True)
+    assert "**1 problem found, 1 high; 2 more findings to check (advisory or not reproduced).**" in body
+    assert "| Severity | Finding | Confirmation | Count |" in body
+    assert "| high | Title real | Confirmed 2/2 | 3 |" in body
+    assert "Also seen in 2 more place(s): Save on Settings, Save on Profile" in body
+    assert "![real](https://cdn/real.png)" in body and "`App/Save.swift:3`" in body
+    assert body.index("Title real") < body.index("2 finding(s) to check") < body.index("Title gone")
+    assert "| critical | Title gone | Not reproduced 0/2 | 1 |" in body
+    assert "| high (advisory) | Title soft | not checked | 1 |" in body
+    assert "report.html" in body
+    short = render(result, settings(max_findings=1))
+    assert "Title real" in short and "Title gone" not in short and "2 more finding(s)" in short
+
+
 def test_evidence_command_uploads_first_screenshot(tmp_path):
     (tmp_path / "shot.png").write_bytes(b"png")
     calls = []

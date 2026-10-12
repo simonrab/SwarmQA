@@ -280,6 +280,15 @@ class FlowsConfig:
 
 
 @dataclass
+class FindingsConfig:
+    """The `[findings]` table (confirmation re-runs and grouping), kept raw;
+    `swarmqa.confirm.settings.FindingsSettings.from_mapping` parses it.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class SwarmConfig:
     """The `[swarm]` table, kept raw; `swarmqa.orchestrator.swarm.SwarmSettings.from_mapping`
     parses it. See docs/orchestrator.md.
@@ -331,6 +340,7 @@ class CampaignConfig:
     github: GitHubConfig = field(default_factory=GitHubConfig)
     flows: FlowsConfig = field(default_factory=FlowsConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
+    findings: FindingsConfig = field(default_factory=FindingsConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2
@@ -512,6 +522,16 @@ class Finding:
     repro: str | None = None
     suspected_sources: list[str] = field(default_factory=list)
     evidence: Evidence = field(default_factory=Evidence)
+    # Confirmation re-run (swarmqa/confirm): None = not checked; else
+    # "confirmed", "flaky" (reproduced on some attempts), "not_reproduced"
+    # or "skipped" (no replay possible). `confirm_hits` of `confirm_attempts`
+    # replays showed it again.
+    confirmation: str | None = None
+    confirm_attempts: int = 0
+    confirm_hits: int = 0
+    # Grouping: other places the same problem was seen (labels, identifiers
+    # or screens), folded into this finding. Count = 1 + len(occurrences).
+    occurrences: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.worker_id and self.worker_id not in self.worker_ids:
