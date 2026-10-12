@@ -147,7 +147,7 @@ def test_try_ios_app_builds_config_and_runs(tmp_path: Path):
     assert (config.driver.kind, config.explorer.engine, config.workers, config.video.mode) == (
         "runner", "agent", 1, "on_failure")
     assert config.explorer.max_time_s == 40
-    assert config.budgets.max_wall_time_s == 180
+    assert config.budgets.max_wall_time_s == 120 + 3 * 180  # exploring plus start-up for 3 shards
     assert config.llm.enabled is False
     assert [(shard.kind, shard.goal) for shard in queue] == [
         ("exploratory", "Add a plant"), ("exploratory", "Delete it"), ("exploratory", "")]

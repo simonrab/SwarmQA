@@ -30,7 +30,8 @@ from swarmqa.quickstart.resolve import AppInfo, TryError
 EXIT_OK, EXIT_CANNOT_RUN = 0, 2
 SEVERITIES = ("critical", "high", "medium", "low")
 MODEL_KEYS = (("ANTHROPIC_API_KEY", "anthropic"), ("OPENAI_API_KEY", "openai"))
-WALL_HEADROOM_S = 60.0
+# Per shard: install the app and start the runner (measured ~2.5 min on a loaded 8 GB Mac).
+SETUP_ALLOWANCE_S = 180.0
 STEPS_PER_MINUTE = 40
 REPO_URL = "https://github.com/simonrab/swarmqa"
 USAGE = """no app or Xcode project here. Pass one, or run aqa try in a project folder.
@@ -55,9 +56,11 @@ def _default_builder(settings):
 
 
 def _default_html(campaign_dir: Path) -> Path | None:
-    from swarmqa.report.html import write_html_report
+    """The page the orchestrator already wrote, else write it now."""
+    from swarmqa.report.html import REPORT_HTML, write_html_report
 
-    return write_html_report(campaign_dir)
+    page = Path(campaign_dir) / REPORT_HTML
+    return page if page.is_file() else write_html_report(campaign_dir)
 
 
 def _default_runner(args: list[str], **kwargs: Any):
@@ -261,7 +264,7 @@ def make_config(base: CampaignConfig | None, app: AppInfo, *, minutes: float, go
     seconds = minutes * 60
     config.explorer.max_time_s = seconds / (len(goals) + 1)
     config.explorer.max_steps = max(config.explorer.max_steps, int(minutes * STEPS_PER_MINUTE))
-    config.budgets.max_wall_time_s = seconds + WALL_HEADROOM_S
+    config.budgets.max_wall_time_s = seconds + SETUP_ALLOWANCE_S * (len(goals) + 1)
     config.intents = []
     if report_root:
         config.report_root = report_root
@@ -318,7 +321,7 @@ def _print_plan(out: TextIO, app: AppInfo, device: str, args: argparse.Namespace
     else:
         lines.append("  2. Crawl the app and check every screen.")
     lines += [
-        f"  3. Stop after about {args.minutes:g} minute(s) and write the report under {config.report_root}/.",
+        f"  3. Explore for about {args.minutes:g} minute(s), plus start-up time, and write the report under {config.report_root}/",
         model_note,
         "",
     ]

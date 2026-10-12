@@ -327,6 +327,9 @@ class _AgentLoop:
     def run(self) -> None:
         if not self._launch():
             return
+        # The time budget is for exploring: starting a runner or booting a
+        # simulator (minutes on a cold host) does not use it up.
+        self.started = self.clock()
         self._maybe_start_video()
         try:
             first = self._observe_step()

@@ -1,8 +1,9 @@
 """Re-run findings before they are reported.
 
 Each eligible finding is replayed `confirm_runs` times with
-`report.repro.replay_finding`, each time on a new driver (a fresh launch) in
-`<campaign>/confirm/<finding-id>-<n>/`. The replay rule is the one `aqa
+`report.repro.replay_finding`, each time on a fresh launch of the app, in
+`<campaign>/confirm/<finding-id>-<n>/`. All re-runs share one driver, so the
+runner starts once. The replay rule is the one `aqa
 replay` and `aqa verify` use. An attempt the replay could not run (the app
 did not launch, the driver could not be made) does not count.
 """
@@ -53,23 +54,74 @@ def confirm_findings(
     `confidence` (and sets `advisory` when the finding never showed again).
     Findings past `max_confirm` or the budget keep `confirmation = None`.
     """
-    factory = _unleased(driver_factory) or repro._default_driver_factory(config)
+    session = _Session(_unleased(driver_factory) or repro._default_driver_factory(config), config)
     queue = sorted((item for item in findings if eligible(item, settings)), key=rank)[: settings.max_confirm]
     deadline = _now() + float(settings.confirm_budget_s)
-    for finding in queue:
-        if _now() >= deadline:
-            break
-        replay = _replay_for(campaign_dir, finding)
-        if replay is None:
-            _settle(finding, [], "no replay flow")
-            continue
-        attempts: list[Attempt] = []
-        for number in range(1, settings.confirm_runs + 1):
-            if attempts and _now() >= deadline:
+    try:
+        for finding in queue:
+            if _now() >= deadline:
                 break
-            work_dir = Path(campaign_dir) / "confirm" / f"{finding.id}-{number}"
-            attempts.append(_attempt(replay, finding, config, factory, work_dir))
-        _settle(finding, attempts, "the replay could not run")
+            replay = _replay_for(campaign_dir, finding)
+            if replay is None:
+                _settle(finding, [], "no replay flow")
+                continue
+            attempts: list[Attempt] = []
+            for number in range(1, settings.confirm_runs + 1):
+                if attempts and _now() >= deadline:
+                    break
+                work_dir = Path(campaign_dir) / "confirm" / f"{finding.id}-{number}"
+                attempts.append(_attempt(replay, finding, config, session, work_dir))
+            _settle(finding, attempts, "the replay could not run")
+    finally:
+        session.close()
+
+
+class _Session:
+    """One driver for every re-run, so a runner or simulator starts once.
+
+    Each replay gets a fresh app process: the first launch launches, later
+    ones relaunch. Replays cannot close it; `close` does, at the end. A
+    driver that failed is closed and the next re-run makes a new one.
+    """
+
+    def __init__(self, factory: Callable, config: CampaignConfig):
+        self.factory = factory
+        self.config = config
+        self.driver: Any = None
+        self.launches = 0
+
+    def get(self, work_dir: Path) -> "_Reused":
+        if self.driver is None:
+            self.driver = self.factory(self.config.app, work_dir)
+            self.launches = 0
+        return _Reused(self)
+
+    def close(self) -> None:
+        driver, self.driver = self.driver, None
+        _close(driver)
+
+
+class _Reused:
+    def __init__(self, session: _Session):
+        self._session = session
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session.driver, name)
+
+    def launch(self) -> None:
+        session = self._session
+        if session.launches:
+            session.driver.relaunch()
+        else:
+            session.driver.launch()
+        session.launches += 1
+
+    def relaunch(self) -> None:
+        self._session.driver.relaunch()
+        self._session.launches += 1
+
+    def close(self) -> None:
+        return
 
 
 def _unleased(driver_factory: Callable | None) -> Callable | None:
@@ -94,17 +146,15 @@ def _replay_for(campaign_dir: Path, finding: Finding) -> Path | None:
     return None
 
 
-def _attempt(replay: Path, finding: Finding, config: CampaignConfig, factory: Callable, work_dir: Path) -> Attempt:
-    driver = None
+def _attempt(replay: Path, finding: Finding, config: CampaignConfig, session: _Session, work_dir: Path) -> Attempt:
     try:
         work_dir.mkdir(parents=True, exist_ok=True)
-        driver = factory(config.app, work_dir)
+        driver = session.get(work_dir)
         result = replay_finding(replay, config, driver=driver, work_dir=work_dir, finding=finding)
         return Attempt(bool(result.ran), bool(result.ran and result.reproduced), result.reason)
     except Exception as exc:  # noqa: BLE001 - one broken re-run must not stop the rest
+        session.close()
         return Attempt(False, False, f"{type(exc).__name__}: {exc}")
-    finally:
-        _close(driver)
 
 
 def _close(driver: Any) -> None:

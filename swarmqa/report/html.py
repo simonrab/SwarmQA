@@ -85,7 +85,7 @@ def load_campaign(root: Path) -> Campaign:
 def render_html(campaign: Campaign) -> str:
     """The whole page as one HTML string."""
     findings = sorted(campaign.findings, key=finding_sort_key)
-    app = _app_info(findings)
+    app = _app_info(findings, _object(campaign.root / "app.json"))
     sections = [
         _header(campaign, app),
         _counts(findings),
@@ -137,10 +137,10 @@ def _load_findings(root: Path, shards: list[dict]) -> list[Finding]:
     return list(found.values())
 
 
-def _app_info(findings: list[Finding]) -> dict[str, str]:
+def _app_info(findings: list[Finding], app: dict) -> dict[str, str]:
+    """App name, platform and version: from findings, else `app.json` the orchestrator writes."""
     info = {"name": "", "platform": "", "version": ""}
-    for finding in findings:
-        env = finding.environment or {}
+    for env in [*(finding.environment or {} for finding in findings), {k: str(v) for k, v in app.items() if v}]:
         path_name = Path(env["path"]).stem if env.get("path") else ""
         info["name"] = info["name"] or env.get("bundle_id", "") or path_name
         info["platform"] = info["platform"] or _PLATFORMS.get(env.get("platform", ""), env.get("platform", ""))

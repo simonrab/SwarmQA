@@ -1,6 +1,6 @@
 # aqa try
 
-`aqa try` tests an app with no setup. You do not write a config file, intents, or choose a driver. In about 5 minutes you get a report of the problems it found.
+`aqa try` tests an app with no setup. You do not write a config file, intents, or choose a driver. After about 5 minutes of exploring (plus start-up time) you get a report of the problems it found.
 
 ## What you need
 
@@ -55,7 +55,7 @@ The run exits with 0 when the test ran, with or without findings. It exits with 
 
 ## Time budget
 
-`--minutes` sets the whole run. The goals and the crawl share it equally. For example, `--minutes 6` with two goals gives each goal and the crawl 2 minutes. SwarmQA adds one minute of margin to start the app.
+`--minutes` sets the time to explore. The goals and the crawl share it equally. For example, `--minutes 6` with two goals gives each goal and the crawl 2 minutes. Start-up time comes on top: SwarmQA must install the app and start the runner for each goal and for the crawl. On a slow Mac this takes 1 to 3 minutes each time. The first run on a new simulator takes longer.
 
 ## Models
 

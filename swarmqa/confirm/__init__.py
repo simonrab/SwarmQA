@@ -72,11 +72,6 @@ def _trust(findings, results, campaign_dir: Path, config, driver_factory) -> lis
 def _cannot_confirm(config: CampaignConfig, driver_factory: Callable | None) -> str | None:
     if driver_factory is None and config.backend != "local":
         return f"re-runs need the local backend (backend is {config.backend})"
-    from swarmqa.orchestrator.swarm import LeasingDriverFactory, SwarmSettings
-
-    leasing = isinstance(driver_factory, LeasingDriverFactory) and driver_factory.base is None
-    if leasing and not SwarmSettings.from_config(config).keep_devices:
-        return "the swarm device pool is already closed (swarm.keep_devices = false)"
     return None
 
 

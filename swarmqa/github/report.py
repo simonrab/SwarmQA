@@ -49,7 +49,11 @@ _HANDOFF = {
 
 
 def failing(findings: list[Finding], settings: GitHubSettings) -> list[Finding]:
-    return [finding for finding in findings if settings.fail_on_advisory or not finding.advisory]
+    return [
+        finding
+        for finding in findings
+        if finding.confirmation != "not_reproduced" and (settings.fail_on_advisory or not finding.advisory)
+    ]
 
 
 def conclusion(result: EventResult, settings: GitHubSettings) -> str:

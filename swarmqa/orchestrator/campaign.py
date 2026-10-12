@@ -78,6 +78,10 @@ def run_campaign(
     swarm = SwarmSettings.from_config(config)
     queue = expand_crawl(list(queue), swarm)
     root, campaign_id, previous = _open_campaign(config, options)
+    dump_json(
+        {"path": config.app.path, "bundle_id": config.app.bundle_id, "platform": config.app.platform},
+        root / "app.json",
+    )
     resume = previous is not None and bool(options.resume_campaign_id)
     to_run, carried_shards = _partition_queue(list(queue), previous, resume)
     carried = _load_carried_results(root, carried_shards, previous)
@@ -275,8 +279,6 @@ def run_campaign(
                     active.pop(worker_id, None)
                 publish()
 
-    if pool is not None and not swarm.keep_devices:
-        pool.close()
     graph = merge_worker_graphs(root)
     if graph is not None:
         print(
@@ -289,6 +291,8 @@ def run_campaign(
     ordered = _ordered_results(queue, results)
     merged = _apply_dedup(ordered)
     merged = _trust_findings(merged, ordered, root, config, driver_factory)
+    if pool is not None and not swarm.keep_devices:
+        pool.close()
     # Only a complete, clean run may mark missing findings as fixed.
     full_run = (
         stop_reason is None

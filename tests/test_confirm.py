@@ -36,23 +36,33 @@ def _replayable(campaign: Path, finding: Finding) -> Finding:
 
 
 class Factory:
-    """Fake app whose Save crashes on the drivers listed in `crashes` (1-based call numbers)."""
+    """Fake app whose Save crashes on the launches listed in `crashes` (1-based, across drivers).
+
+    Each launch moves `clock` on by 200 s, so budget tests can count re-runs.
+    """
 
     def __init__(self, crashes=(), *, broken: bool = False, clock: dict | None = None):
         self.crashes = set(crashes)
         self.broken = broken
         self.clock = clock
         self.drivers: list[FakeDriver] = []
+        self.launches = 0
 
     def __call__(self, target, work_dir):
-        if self.clock is not None:
-            self.clock["t"] += 200
         if self.broken:
             raise RuntimeError("no device")
-        driver = FakeDriver(target, work_dir)
+        factory = self
+
+        class App(FakeDriver):
+            def launch(self) -> None:
+                super().launch()
+                factory.launches += 1
+                if factory.clock is not None:
+                    factory.clock["t"] += 200
+                self.crash_labels = {"Save"} if factory.launches in factory.crashes else set()
+
+        driver = App(target, work_dir)
         driver.set_tree(sample_tree())
-        if len(self.drivers) + 1 in self.crashes:
-            driver.crash_labels = {"Save"}
         self.drivers.append(driver)
         return driver
 
@@ -110,6 +120,16 @@ def test_only_eligible_findings_are_rerun(setup):
     assert off.confirmation is None and factory.drivers == []
 
 
+def test_re_runs_share_one_driver_and_relaunch_the_app(setup):
+    config, campaign = setup
+    findings = [_replayable(campaign, _finding(f"f-{n}")) for n in range(3)]
+    factory = Factory({1, 2, 3})
+    _trust(findings, config, campaign, factory)
+    assert [item.confirmation for item in findings] == ["confirmed"] * 3
+    assert len(factory.drivers) == 1 and factory.launches == 3
+    assert factory.drivers[0].closed
+
+
 def test_most_severe_first_and_max_confirm(setup):
     config, campaign = setup
     low = _replayable(campaign, _finding("f-low", severity="low"))
@@ -126,7 +146,7 @@ def test_budget_stops_cleanly(setup, monkeypatch):
     factory = Factory({1, 2, 3}, clock=clock)
     _trust(findings, config, campaign, factory, confirm_budget_s=300)
     assert [item.confirmation for item in findings] == ["confirmed", "confirmed", None]
-    assert findings[2].confirm_attempts == 0 and len(factory.drivers) == 2
+    assert findings[2].confirm_attempts == 0 and factory.launches == 2
 
 
 def test_drop_not_reproduced_removes_it_everywhere(setup):

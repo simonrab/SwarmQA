@@ -119,6 +119,7 @@ def swarm_config(tmp_path: Path, **swarm):
     config.explorer.max_steps = 60
     config.workers = 4
     config.swarm.settings = {"enabled": True, "pool": "fake", **swarm}
+    config.findings.settings = {"confirm": False}  # these tests count crawl actions only
     return config
 
 
