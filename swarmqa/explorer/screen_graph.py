@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from swarmqa.checks._tree import MODAL_ROLES, first_text
+from swarmqa.checks._tree import MODAL_ROLES, first_text, system_windows
 from swarmqa.driver.query import walk
 from swarmqa.models import ElementQuery, UIElement
 
@@ -151,11 +151,30 @@ def modal_scope(tree: list[UIElement]) -> list[UIElement]:
     Controls behind an open alert are in the tree but taps on them land on
     the alert, so exploring them only produces dead taps.
     """
+    popups, keyboards = system_windows(tree)
+    if popups:
+        return [popups[-1]]  # a system popup (keyboard tip) covers the app: dismiss it first
     top: UIElement | None = None
     for element in walk(tree):
         if normalize_role(element.role) in MODAL_ROLES:
             top = element
-    return [top] if top is not None else tree
+    if top is not None:
+        return [top]
+    if keyboards:
+        # The keyboard's own buttons (shift, emoji, dictation) are not the app's.
+        hidden = {id(window) for window in keyboards}
+        return [element for element in tree if id(element) not in hidden] if len(tree) > 1 else [
+            _without(tree[0], hidden)
+        ]
+    return tree
+
+
+def _without(element: UIElement, hidden: set[int]) -> UIElement:
+    """A shallow copy of `element` whose subtree leaves out the elements in `hidden` (by id)."""
+    from dataclasses import replace as _replace
+
+    children = [_without(child, hidden) for child in element.children if id(child) not in hidden]
+    return _replace(element, children=children)
 
 
 def actionable_controls(tree: list[UIElement]) -> list[Control]:

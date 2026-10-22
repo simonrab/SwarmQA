@@ -228,3 +228,26 @@ def test_unlabeled_rows_are_distinct_controls_reached_by_point():
         ("About", (195.0, 210.0)),
     ]
     assert len({c.key for c in controls}) == 3
+
+
+def _with_keyboard_tip(app_children, *, tip=True):
+    windows = [UIElement(role="window", label="App", children=app_children)]
+    if tip:
+        windows.append(UIElement(role="window", children=[
+            UIElement(role="text", label="Speed up your typing by sliding your finger across the letters"),
+            UIElement(role="button", label="Continue"),
+        ]))
+    windows.append(UIElement(role="window", children=[UIElement(role="keyboard", children=[
+        UIElement(role="button", label="shift"), UIElement(role="button", label="Emoji"),
+    ])]))
+    return [UIElement(role="application", label="Demo", children=windows)]
+
+
+def test_a_keyboard_tip_is_dismissed_before_anything_else():
+    tree = _with_keyboard_tip([UIElement(role="button", label="Save")])
+    assert [c.label for c in actionable_controls(tree)] == ["Continue"]
+
+
+def test_keyboard_buttons_are_not_app_controls():
+    tree = _with_keyboard_tip([UIElement(role="button", label="Save")], tip=False)
+    assert [c.label for c in actionable_controls(tree)] == ["Save"]
