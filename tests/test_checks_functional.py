@@ -37,7 +37,14 @@ def _tap(label="Save", role=None) -> StepDecision:
     return StepDecision(kind="tap", target=ElementQuery(role=role, label=label))
 
 
+@pytest.fixture(autouse=True)
+def _no_recheck_wait(monkeypatch):
+    monkeypatch.setattr("swarmqa.checks.functional.time.sleep", lambda seconds: None)
+
+
 def _ctx(driver, before, after, action=None, **kwargs) -> StepContext:
+    # The dead-tap recheck observes the driver again: it still shows `after`.
+    driver.set_tree(after)
     return StepContext(
         after=_obs(after, ts=kwargs.pop("after_ts", 100.5)),
         before=None if before is None else _obs(before, ts=99.0),
@@ -251,6 +258,14 @@ def test_dead_tap_inside_an_open_alert_is_still_reported(driver):
     tree = _screen(_button()) + [alert]
     issues = FunctionalCheck().run(_ctx(driver, tree, tree, _tap("Continue")))
     assert _kinds(issues) == [("unresponsive", "broken")]
+
+
+def test_a_tap_the_app_answers_late_is_not_dead(driver):
+    tree = _screen(_button(), UIElement(role="button", label="Other", frame=(20, 200, 120, 44)))
+    ctx = _ctx(driver, tree, tree, _tap())
+    # A moment after the step's observation, the app disables the other button.
+    driver.set_tree(_screen(_button(), UIElement(role="button", label="Other", enabled=False, frame=(20, 200, 120, 44))))
+    assert FunctionalCheck().run(ctx) == []
 
 
 def test_first_screen_has_no_dead_tap(driver):

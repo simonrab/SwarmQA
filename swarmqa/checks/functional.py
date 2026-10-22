@@ -94,7 +94,9 @@ class FunctionalSettings:
     healthy runs. `spinner_timeout_s` is how long an activity indicator may
     stay on screen before it counts as endless; with `spinner_wait` the check
     re-observes the screen (tree only) until the spinner goes or the time is
-    up, instead of relying on the explorer to linger.
+    up, instead of relying on the explorer to linger. A tap that looks dead
+    is checked once more `dead_tap_recheck_s` later (tree only), because some
+    apps react after the step's observation (0 turns the recheck off).
     """
 
     crashes: bool = True
@@ -113,6 +115,7 @@ class FunctionalSettings:
     spinner_timeout_s: float = 10.0
     spinner_wait: bool = True
     spinner_poll_s: float = 1.0
+    dead_tap_recheck_s: float = 1.5
 
 
 class FunctionalCheck:
@@ -294,6 +297,8 @@ class FunctionalCheck:
             scale=before.scale or 1.0,
         ):
             return []
+        if self._changed_late(ctx):
+            return []
         what = "toggle" if role in TOGGLE_ROLES else "control"
         return [
             CheckIssue(
@@ -312,6 +317,21 @@ class FunctionalCheck:
                 check=self.name,
             )
         ]
+
+    def _changed_late(self, ctx: StepContext) -> bool:
+        """True when the screen changed within `dead_tap_recheck_s` after the step's observation."""
+        wait = self.settings.dead_tap_recheck_s
+        if wait <= 0 or ctx.driver is None:
+            return False
+        self.sleep(wait)
+        try:
+            later = ctx.driver.observe(screenshot=False)
+        except Exception as exc:  # noqa: BLE001 - driver trouble is not an app finding
+            self.last_error = f"observe for the dead-tap recheck failed: {exc}"
+            return False
+        return visible_signature(later.tree, later.size or ctx.after.size) != visible_signature(
+            ctx.after.tree, ctx.after.size
+        )
 
     # Endless spinner ----------------------------------------------------
 
