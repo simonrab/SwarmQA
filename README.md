@@ -343,6 +343,8 @@ python3.11 -m venv .venv
 
 The tests use the fake driver. They do not need a Mac, Xcode or `idb`.
 
+Do not clone into `~/Documents` or `~/Desktop` when those sync to iCloud. macOS marks the files there as hidden, Python skips a hidden `.pth` file, and `aqa` then fails with "No module named swarmqa". `aqa doctor` reports this problem.
+
 ## More detail
 
 | Topic | Document |

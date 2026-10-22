@@ -14,6 +14,7 @@ Each check reports `ok`, `warn`, `fail` or `skip`, a one-line message, and a `fi
 | Check | What it runs | Status |
 | --- | --- | --- |
 | `python` | the running interpreter | `fail` below 3.11 |
+| `install` | swarmqa's `.pth` files in the interpreter's site-packages | `fail` when one is hidden (macOS sets the hidden flag in iCloud-synced folders, and Python skips hidden `.pth` files); `warn` when swarmqa still imports through `PYTHONPATH` |
 | `xcode` | `xcode-select -p`, `xcodebuild -version` | `fail` when no developer directory is selected or only the Command Line Tools are present. Mac only |
 | `simulators` | `xcrun simctl list runtimes -j`, `xcrun simctl list devices available -j` | `fail` when `app.platform = "ios"` and there is no iOS runtime, no available device, or a configured `app.simulator`/`app.simulators` entry is missing; `warn` for the same on macOS-only projects. Mac only |
 | `idb` | looks for `idb` on `PATH` | `warn` when missing (the legacy iOS driver needs it for taps). Mac only |
@@ -44,4 +45,4 @@ Classic `gh` OAuth tokens show scopes such as `repo`, which covers pull requests
 
 ## For tests
 
-`swarmqa.doctor.run_doctor(config_path, github=False, env=DoctorEnv(...))` runs the checks. `DoctorEnv` holds every host dependency: `runner` (the `swarmqa.devices.commands` runner seam), `which`, `platform`, `machine`, `environ`, `find_spec` and `python_version`. Tests pass fakes for all of them, so the Mac paths run on Linux.
+`swarmqa.doctor.run_doctor(config_path, github=False, env=DoctorEnv(...))` runs the checks. `DoctorEnv` holds every host dependency: `runner` (the `swarmqa.devices.commands` runner seam), `which`, `platform`, `machine`, `environ`, `find_spec`, `python_version`, `site_dirs` and `file_flags`. Tests pass fakes for all of them, so the Mac paths run on Linux.

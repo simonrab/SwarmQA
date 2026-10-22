@@ -19,6 +19,8 @@ import os
 import platform as _platform
 import re
 import shutil
+import site
+import stat as _stat
 import sys
 import tomllib
 from dataclasses import asdict, dataclass
@@ -56,6 +58,9 @@ class DoctorEnv:
     environ: Mapping[str, str] | None = None
     find_spec: Callable[[str], Any] = importlib.util.find_spec
     python_version: tuple[int, ...] = tuple(sys.version_info[:3])
+    # Install files (`.pth`, editable finders) of this interpreter, and their stat flags.
+    site_dirs: Callable[[], list[str]] = lambda: list(site.getsitepackages())
+    file_flags: Callable[[Path], int] = lambda path: getattr(os.stat(path), "st_flags", 0)
 
     def __post_init__(self) -> None:
         if not self.machine:
@@ -79,6 +84,7 @@ def run_doctor(
     config_check, config = check_config(config_path)
     checks = [
         check_python(env),
+        check_install(env),
         check_xcode(env),
         check_simulators(env, config),
         check_idb(env),
@@ -132,6 +138,40 @@ def check_python(env: DoctorEnv) -> DoctorCheck:
         f"Python {version} is older than 3.11",
         "install with `uv tool install` so uv fetches a suitable Python",
     )
+
+
+def check_install(env: DoctorEnv) -> DoctorCheck:
+    """The install's `.pth` files must not be hidden: Python skips hidden `.pth` files.
+
+    macOS marks files hidden under an iCloud-synced folder (`~/Documents`,
+    `~/Desktop`), so a venv there loses its editable install and `aqa` fails
+    with "No module named swarmqa".
+    """
+    hidden: list[Path] = []
+    for folder in env.site_dirs():
+        directory = Path(folder)
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.pth")):
+            if "swarmqa" not in path.name.lower():
+                continue
+            try:
+                flags = env.file_flags(path)
+            except OSError:
+                continue
+            if flags & getattr(_stat, "UF_HIDDEN", 0x8000):
+                hidden.append(path)
+    if not hidden:
+        return DoctorCheck("install", "ok", "swarmqa's install files are visible to Python")
+    fix = (
+        f"chflags nohidden {' '.join(str(p) for p in hidden)}; for good, keep the venv outside "
+        "iCloud-synced folders (python3 -m venv ~/.venvs/swarmqa) or use `uv tool install --editable .`"
+    )
+    message = f"{hidden[0].name} is hidden, so Python skips it"
+    if env.find_spec("swarmqa") is not None and "PYTHONPATH" in (env.environ or {}):
+        # It imported anyway (PYTHONPATH), but `aqa` started without it will fail.
+        return DoctorCheck("install", "warn", message + " (swarmqa imported through PYTHONPATH)", fix)
+    return DoctorCheck("install", "fail", message + ": `aqa` fails with \"No module named swarmqa\"", fix)
 
 
 def check_xcode(env: DoctorEnv) -> DoctorCheck:

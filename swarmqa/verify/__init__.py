@@ -24,6 +24,7 @@ from typing import Any, Callable
 
 from swarmqa.mcp.tools import VerifyResult
 from swarmqa.models import CampaignConfig
+from swarmqa.util import child_env
 
 
 def run_verify(
@@ -101,6 +102,7 @@ def start_verify(
             stderr=subprocess.STDOUT,
             start_new_session=True,
             close_fds=True,
+            env=child_env(),
         )
     except OSError as exc:
         result.state = "error"
