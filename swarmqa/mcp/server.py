@@ -22,6 +22,7 @@ from typing import Any, Callable
 from swarmqa import __version__
 from swarmqa.errors import AQAError
 from swarmqa.mcp import campaigns
+from swarmqa.mcp.sessions import SESSION_TOOLS
 from swarmqa.mcp.tools import TOOLS
 from swarmqa.serialize import to_plain
 
@@ -31,7 +32,9 @@ INSTRUCTIONS = (
     "SwarmQA runs QA campaigns against an iOS or macOS app. start_campaign returns a "
     "campaign id at once; poll campaign_status until state is finished or stopped, then "
     "list_findings and get_finding. After fixing a finding, call verify_fix and poll "
-    "verify_status: passed means the finding no longer reproduces."
+    "verify_status: passed means the finding no longer reproduces. To explore the app "
+    "yourself, call open_sessions with a goal (one session per simulator), then loop "
+    "observe -> act on each session, report_issue for problems you see, and end_session."
 )
 
 
@@ -97,7 +100,7 @@ def build_server(
     campaigns.configure(config_path=config_path, root=root)
     server_class, tool_error = sdk or load_sdk()
     server = server_class(SERVER_NAME, instructions=INSTRUCTIONS)
-    for tool in TOOLS:
+    for tool in [*TOOLS, *SESSION_TOOLS]:
         server.add_tool(json_tool(tool, tool_error), name=tool.__name__, description=inspect.getdoc(tool))
     return server
 

@@ -16,3 +16,14 @@ Use it when asked to QA, smoke-test or explore the app, to find UI bugs, or to f
 8. Only after `passed`: commit, push, and `gh pr create` with the finding id, root cause, fix and the verify result. Never merge and never push to the default branch.
 
 Do not edit `aqa.config.toml` or its spend caps unless asked, do not commit `reports/` or `.aqa/`, and never print API keys or tokens. `cancel_campaign(campaign_id)` stops a campaign.
+
+### Exploring the app yourself
+
+When asked to test or explore the app (or a PR) by hand, drive the simulators yourself instead of `start_campaign`:
+
+1. `open_sessions(goal="<what to explore and what to avoid>", devices=1, pr=<optional PR number>)`. If a session is still `starting`, call `observe(session_id, wait_s=120)`.
+2. Loop `observe(session_id)` → read `tree` and open `screenshot` → `act(session_id, kind="tap", element_id="e3")` (also `type` with `text`, `swipe`, `key`, `back`). Element ids change with every screen.
+3. `new_findings` after each action are SwarmQA's automatic checks. Call `report_issue(session_id, title, severity, category, details)` for other problems you see; title it as the defect.
+4. `end_session(session_id)`, then `list_findings(campaign_id, include_advisory=True)` and summarise.
+
+Never enter real personal data, passwords or payment details, and never create accounts unless the user says so.

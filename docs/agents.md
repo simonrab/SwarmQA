@@ -27,6 +27,8 @@ The server inherits the agent's environment, so the model key your `[llm]` table
 
 | Tool | Returns | Notes |
 | --- | --- | --- |
+| `open_sessions(goal, devices, pr, sha, ...)` | `campaign_id`, sessions | Sessions the agent drives itself; see "Driving the app yourself" |
+| `observe` / `act` / `report_issue` / `end_session` | the screen, or the result | Per session; see `docs/mcp.md` |
 | `start_campaign(config_path, app, intents, platform, workers, sha)` | `campaign_id`, `report_dir` | Returns at once; the campaign runs in a detached process |
 | `campaign_status(campaign_id)` | `CampaignStatus` | `state` is `running`, `finished` or `stopped`; `None` means the latest campaign |
 | `list_findings(campaign_id, pr, include_advisory, min_severity)` | finding summaries | `advisory` findings came only from a model |
@@ -34,6 +36,17 @@ The server inherits the agent's environment, so the model key your `[llm]` table
 | `verify_fix(finding_id, campaign_id, devices=2, build=True)` | `verify_id`, state `running` | Rebuilds and replays the repro; returns at once |
 | `verify_status(verify_id)` | `VerifyResult` | `passed` means the finding did not reproduce on any device |
 | `cancel_campaign(campaign_id, drain=True)` | `CampaignStatus` | `drain` lets running shards finish |
+
+## Driving the app yourself
+
+The campaign tools above run SwarmQA's own explorer. To explore with the agent's judgement instead, the agent drives the simulators itself:
+
+1. `open_sessions(goal="Explore sign-up and settings; do not create an account", devices=2)`. Add `pr=<number>` to test a pull request's build.
+2. For each session, in parallel when there are several (one subagent per session in Claude Code): `observe`, look at the `tree` and open the `screenshot`, then `act`. Repeat.
+3. Read `new_findings` after each action: those are SwarmQA's automatic checks. Call `report_issue` for anything else that is broken, misleading, clipped or confusing.
+4. `end_session` for each session, then `list_findings` on the campaign id and continue with the fix loop below.
+
+No model key is needed for this: the agent in the chat is the model.
 
 ## The loop
 

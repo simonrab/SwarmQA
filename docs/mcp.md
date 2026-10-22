@@ -40,8 +40,22 @@ Each tool returns JSON text (the result dataclass through `swarmqa.serialize.to_
 | `verify_fix(finding_id, campaign_id, devices, build)` | Delegates to `swarmqa.verify.start_verify` with the server's config. Returns `state: running` with a `verify_id`. |
 | `verify_status(verify_id)` | Delegates to `swarmqa.verify.verify_status`. `passed` means the finding did not reproduce. |
 | `cancel_campaign(campaign_id, drain)` | Stops a campaign the server started (see below). |
+| `open_sessions(goal, config_path, app, devices, pr, sha, platform, constraints, max_steps, max_minutes, wait_s)` | Starts a campaign inside the server with one exploratory session per device that the agent drives (see "Chat-driven sessions"). With `pr` or `sha` it builds that commit first. Returns the campaign id and the sessions that are up. |
+| `list_sessions(campaign_id)` | Driven sessions and their state: `starting`, `ready`, `busy` or `finished`. |
+| `observe(session_id, wait_s)` | The current screen: `tree` (one line per element with ids `e1`, `e2`, ...), `screenshot` (a PNG path), `history`, and `new_findings` from the checks. |
+| `act(session_id, kind, element_id, text, x, y, end_x, end_y, keys, rationale)` | One action (`tap`, `type`, `tap_point`, `swipe`, `key`, `back`); returns the next screen. |
+| `report_issue(session_id, title, severity, category, details)` | Records what the agent saw as an advisory finding with the current screenshot. |
+| `end_session(session_id, reason)` | Ends the session; the report is written when every session has ended. |
 
 `pr`: a campaign matches when its `mcp.json` records that PR number. Nothing records a PR yet (the GitHub watcher will), so a `pr` filter returns `[]` today.
+
+## Chat-driven sessions
+
+`open_sessions` lets the agent in the chat (Claude Code, Codex) be the explorer. The campaign runs in a thread of the MCP server with `[llm] provider = "chat"` and the agent engine in `driven` mode: each worker's loop launches the app on its own device and then waits for the agent's next action (`swarmqa/explorer/remote.py`). Every action still goes through the checks, so dead taps, error alerts, crashes and layout problems are reported as usual, and `report_issue` adds what only a person (or the agent) would notice. Findings, screenshots, video and replays land in `reports/<campaign>/` like any campaign, so `list_findings`, `get_finding` and `verify_fix` work on them.
+
+- `devices` above 1 needs that many simulators: list them in `app.simulators`, or set `[swarm] pool`.
+- A session ends on `end_session`, when it reaches `max_steps` or `max_minutes`, or after 15 minutes with no action (`[llm] timeout_s` changes that).
+- The sessions live in the server process: restarting the server ends them.
 
 ## How a campaign runs
 
