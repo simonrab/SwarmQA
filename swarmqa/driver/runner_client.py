@@ -211,7 +211,10 @@ class RunnerClient:
 
     def type_text(self, text: str, query: ElementQuery | None = None, *, timeout: float | None = None) -> None:
         body = schema.encode_type(schema.TypeRequest(text=text, query=query))
-        self._json("POST", "/type", body, timeout or self.timeouts.step)
+        # The runner may retype slowly into a field that drops characters
+        # (about a second per chunk of 4), so long text gets more time.
+        default = self.timeouts.step + 0.5 * len(text)
+        self._json("POST", "/type", body, timeout or default)
 
     def swipe(
         self,
