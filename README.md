@@ -57,9 +57,12 @@ aqa doctor
 To work on SwarmQA itself:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m pytest
+python3 -m venv ~/.venvs/swarmqa
+~/.venvs/swarmqa/bin/pip install -e ".[dev]"
+~/.venvs/swarmqa/bin/python -m pytest
 ```
+
+Keep the venv outside `~/Documents` and `~/Desktop` when those sync to iCloud: macOS marks files there hidden, Python skips a hidden `.pth` file, and `aqa` then fails with "No module named swarmqa". `aqa doctor` reports it.
 
 ## Quick start
 

@@ -27,3 +27,11 @@ def _no_implicit_simulator_pool(request, monkeypatch):
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "real_pool_default: use the real default-pool rule")
+
+
+@pytest.fixture(autouse=True)
+def _children_import_this_checkout(monkeypatch):
+    """Child `python -m swarmqa...` processes import this checkout, even if the install's `.pth` is hidden."""
+    from swarmqa.util import child_env
+
+    monkeypatch.setenv("PYTHONPATH", child_env()["PYTHONPATH"])

@@ -25,6 +25,7 @@ from swarmqa.models import (
 from swarmqa.orchestrator.status import format_worker_line
 from swarmqa.report.layout import ensure_campaign_layout, worker_dir
 from swarmqa.serialize import dump_json, load_json
+from swarmqa.util import child_env
 
 if TYPE_CHECKING:
     from swarmqa.devices.protocol import Device
@@ -121,9 +122,7 @@ class LocalBackend:
         config_path = work / "config.json"
         dump_json(shard, shard_path)
         dump_json(self.config, config_path)
-        env = os.environ.copy()
-        repo_root = str(Path(__file__).resolve().parents[2])
-        env["PYTHONPATH"] = repo_root + os.pathsep + env.get("PYTHONPATH", "")
+        env = child_env()
         env.update(device_env(context.device if context is not None else None))
         command = [
             sys.executable,
