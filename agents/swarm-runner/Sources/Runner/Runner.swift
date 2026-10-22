@@ -308,9 +308,13 @@ final class Runner {
         }
         if typed(text, into: (try? fieldValue(field, in: app)) ?? nil, from: before) { return ok() }
         try clearField(field, in: app)
-        for character in text {
-            if !waitForKeyboard(app) { try tapElement(field, in: app); _ = waitForKeyboard(app) }
-            try perform { app.typeText(String(character)) }
+        // Small chunks: slow enough for the field to keep up, fast enough for
+        // a long address (each typeText call also waits for the app to idle).
+        let characters = Array(text)
+        for start in stride(from: 0, to: characters.count, by: 4) {
+            if !keyboardShown(app) { try tapElement(field, in: app); _ = waitForKeyboard(app) }
+            let chunk = String(characters[start..<min(start + 4, characters.count)])
+            try perform { app.typeText(chunk) }
             Thread.sleep(forTimeInterval: 0.05)
         }
         let value = (try? fieldValue(field, in: app)) ?? nil
@@ -325,6 +329,15 @@ final class Runner {
     private func waitForKeyboard(_ app: XCUIApplication, timeout: TimeInterval = 2.0) -> Bool {
         #if os(iOS)
         return app.keyboards.firstMatch.waitForExistence(timeout: timeout)
+        #else
+        return true
+        #endif
+    }
+
+    /// Whether the keyboard is up right now, without waiting (always true on macOS).
+    private func keyboardShown(_ app: XCUIApplication) -> Bool {
+        #if os(iOS)
+        return app.keyboards.count > 0
         #else
         return true
         #endif
