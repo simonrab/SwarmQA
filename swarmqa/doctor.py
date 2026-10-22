@@ -301,6 +301,15 @@ def check_llm_keys(env: DoctorEnv, config: Any) -> DoctorCheck:
         return DoctorCheck("llm keys", "fail", f"[llm] is invalid: {exc}", "fix the [llm] table")
     if settings.provider == "fake":
         return DoctorCheck("llm keys", "ok", "fake provider needs no key")
+    if settings.provider == "chat":
+        return DoctorCheck("llm keys", "ok", "chat provider: the coding agent in the chat drives, no key needed")
+    if settings.provider in ("claude_cli", "codex_cli"):
+        cli = "claude" if settings.provider == "claude_cli" else "codex"
+        if shutil.which(cli):
+            return DoctorCheck("llm keys", "ok", f"{settings.provider}: uses the `{cli}` CLI's sign-in")
+        return DoctorCheck(
+            "llm keys", "fail", f"{settings.provider}: `{cli}` is not on PATH", f"install {cli} and sign in"
+        )
     name = settings.key_env()
     if (env.environ or {}).get(name, "").strip():
         return DoctorCheck("llm keys", "ok", f"{settings.provider}: {name} is set")

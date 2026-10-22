@@ -14,7 +14,7 @@ from typing import Any, Literal, Mapping
 from swarmqa.llm.pricing import ModelPrice
 from swarmqa.llm.protocol import ModelError, ModelProvider
 
-ProviderName = Literal["anthropic", "openai", "fake", "chat"]
+ProviderName = Literal["anthropic", "openai", "fake", "chat", "claude_cli", "codex_cli"]
 CallKind = Literal["step", "judge", "flows", "computer_use"]
 CALL_KINDS: tuple[str, ...] = ("step", "judge", "flows", "computer_use")
 
@@ -37,9 +37,20 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
     "fake": {kind: "fake" for kind in CALL_KINDS},
     # A coding agent in a chat drives each step through MCP (swarmqa.explorer.remote).
     "chat": {kind: "chat" for kind in CALL_KINDS},
+    # Coding-agent CLIs on the user's own plan (swarmqa.llm.cli_provider).
+    # Claude Code model aliases; "default" leaves the CLI's own choice.
+    "claude_cli": {"step": "sonnet", "judge": "opus", "flows": "opus", "computer_use": "opus"},
+    "codex_cli": {kind: "default" for kind in CALL_KINDS},
 }
 
-DEFAULT_API_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "fake": "", "chat": ""}
+DEFAULT_API_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "fake": "",
+    "chat": "",
+    "claude_cli": "",
+    "codex_cli": "",
+}
 
 DEFAULT_EFFORT: dict[str, str] = {"step": "low", "judge": "medium", "flows": "high", "computer_use": "medium"}
 
@@ -166,6 +177,11 @@ def create_provider(
         from swarmqa.explorer.remote import RemoteController
 
         return RemoteController(idle_timeout_s=settings.timeout_s)  # type: ignore[return-value]
+    if settings.provider in ("claude_cli", "codex_cli"):
+        from swarmqa.llm.cli_provider import ClaudeCLIProvider, CLITransport, CodexCLIProvider
+
+        cls = ClaudeCLIProvider if settings.provider == "claude_cli" else CodexCLIProvider
+        return cls(settings, transport or CLITransport(cls.cli), meter=meter)
     if settings.provider == "anthropic":
         from swarmqa.llm.anthropic_provider import AnthropicProvider, AnthropicSDKTransport
 
