@@ -185,7 +185,7 @@ def query_for(element: UIElement) -> ElementQuery:
 
 
 def describe(element: UIElement) -> str:
-    name = element.label or element.identifier or ""
+    name = element.label or element.identifier or first_text(element)
     role = norm_role(element.role) or "element"
     return f'{role} "{name}"' if name else role
 
@@ -268,3 +268,11 @@ def subtree_text(element: UIElement) -> str:
             if text and text not in texts:
                 texts.append(text)
     return " ".join(texts)
+
+
+def first_text(element: UIElement) -> str:
+    """The first descendant text label: what a person reads on an unlabeled row or alert."""
+    for item in walk(element.children):
+        if norm_role(item.role) in TEXT_ROLES and item.label:
+            return item.label
+    return ""

@@ -307,7 +307,10 @@ def _execute(driver, action: Action, index: int) -> Path | None:
     elif kind == "click":
         driver.click(action.target or ElementQuery())
     elif kind == "type":
-        driver.type_text(action.target or ElementQuery(), action.text or "")
+        if action.target is None and getattr(driver, "types_into_focus", False):
+            driver.type_text(None, action.text or "")  # into the field a tap_point focused
+        else:
+            driver.type_text(action.target or ElementQuery(), action.text or "")
     elif kind == "key":
         driver.keychord(list(action.keys))
     elif kind == "scroll":

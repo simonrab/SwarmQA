@@ -20,6 +20,7 @@ from swarmqa.checks._tree import (
     TEXT_ROLES,
     TOGGLE_ROLES,
     describe,
+    first_text,
     nodes,
     norm_role,
     query_for,
@@ -419,7 +420,7 @@ class FunctionalCheck:
             text = subtree_text(modal)
             if text in seen_before or not _ERROR_TEXT.search(text):
                 continue
-            headline = modal.label or _first_text(modal) or text
+            headline = modal.label or first_text(modal) or text
             details = f"A {norm_role(modal.role)} appeared with error text: {text}"
             environment = any(pattern.search(text) for pattern in self._environment)
             if environment:
@@ -598,13 +599,6 @@ def _behind_modal(tree: list[UIElement], element: UIElement) -> bool:
 
 def _new_modal(before: list[UIElement], after: list[UIElement]) -> bool:
     return len(_modals(after)) > len(_modals(before))
-
-
-def _first_text(element: UIElement) -> str:
-    for item in walk(element.children):
-        if norm_role(item.role) in TEXT_ROLES and item.label:
-            return item.label
-    return ""
 
 
 def _pixels_changed(

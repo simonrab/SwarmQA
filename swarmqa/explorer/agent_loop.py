@@ -198,9 +198,14 @@ def decision_from_json(data: dict[str, Any]) -> StepDecision:
 
 
 def _control_decision(control: Control, sample_text: str) -> StepDecision:
+    rationale = f'crawl: {control.role} "{control.display()}"' if control.point is not None else "crawl"
     if control.kind == "type":
-        return StepDecision(kind="type", target=control.query(), text=sample_text, rationale="crawl")
-    return StepDecision(kind="tap", target=control.query(), rationale="crawl")
+        return StepDecision(
+            kind="type", target=control.query(), text=sample_text, point=control.point, rationale=rationale
+        )
+    if control.point is not None:
+        return StepDecision(kind="tap_point", point=control.point, rationale=rationale)
+    return StepDecision(kind="tap", target=control.query(), rationale=rationale)
 
 
 def exact_element(tree: list[UIElement], query: ElementQuery) -> UIElement | None:
@@ -1023,6 +1028,16 @@ class _AgentLoop:
         elif kind == "type":
             if decision.target is None:
                 raise UnsupportedAction("type without a target")
+            if decision.point is not None and getattr(driver, "types_into_focus", False):
+                # The query cannot single out this field: focus it by its
+                # point, then type into whatever has focus.
+                driver.tap_point(*decision.point)
+                driver.type_text(None, decision.text or "")
+                self.planned_replay = [
+                    {"action": "tap_point", "point": [float(decision.point[0]), float(decision.point[1])]},
+                    {"action": "type", "text": decision.text or ""},
+                ]
+                return _Outcome(replay=self.planned_replay)
             driver.type_text(decision.target, decision.text or "")
         elif kind == "tap_point":
             if decision.point is None:
