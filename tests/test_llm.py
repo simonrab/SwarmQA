@@ -414,3 +414,27 @@ def test_parse_step_accepts_an_unambiguous_identifier_or_label_as_element_id():
     assert parse_step({"kind": "tap", "element_id": "detail.shareButton"}, elements).target.label == "Share"
     with pytest.raises(ModelRefused):
         parse_step({"kind": "tap", "element_id": "Save"}, elements)  # two match: ambiguous
+
+
+def test_parse_step_taps_an_ambiguous_element_by_its_centre():
+    from swarmqa.llm.parse import parse_step
+    from swarmqa.models import UIElement
+
+    elements = {
+        "e1": UIElement(role="cell", frame=(0, 100, 390, 44)),
+        "e2": UIElement(role="cell", frame=(0, 144, 390, 44)),
+        "e3": UIElement(role="textfield", frame=(20, 300, 350, 40)),
+        "e4": UIElement(role="textfield", frame=(20, 350, 350, 40)),
+    }
+    tap = parse_step({"kind": "tap", "element_id": "e2"}, elements)
+    assert tap.kind == "tap_point" and tap.point == (195.0, 166.0) and tap.target is None
+    typed = parse_step({"kind": "type", "element_id": "e4", "text": "x"}, elements)
+    assert typed.kind == "type" and typed.point == (195.0, 370.0)
+
+
+def test_tree_text_names_unlabeled_rows_by_their_child_text():
+    from swarmqa.llm.serialize import tree_text
+    from swarmqa.models import UIElement
+
+    row = UIElement(role="cell", children=[UIElement(role="text", label="Advanced")])
+    assert 'cell ~"Advanced"' in tree_text([row])[0]

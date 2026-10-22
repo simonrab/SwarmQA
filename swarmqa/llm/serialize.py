@@ -11,6 +11,7 @@ back to an `ElementQuery`. Lines are indented two spaces per depth:
 from __future__ import annotations
 
 from swarmqa.llm.protocol import ChangedFile, HistoryStep, StepDecision
+from swarmqa.checks._tree import first_text
 from swarmqa.models import ElementQuery, UIElement
 
 MAX_ELEMENTS = 400
@@ -102,6 +103,11 @@ def _line(key: str, element: UIElement) -> str:
     parts = [key, element.role or "element"]
     if element.label:
         parts.append(f'"{_clip(element.label, _LABEL_LIMIT)}"')
+    elif not element.identifier and element.children:
+        name = first_text(element)
+        if name:
+            # An unlabeled row: its child text says which one it is.
+            parts.append(f'~"{_clip(name, _LABEL_LIMIT)}"')
     if element.identifier:
         parts.append(f"id={element.identifier}")
     if element.value:

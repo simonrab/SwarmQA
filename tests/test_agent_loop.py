@@ -1034,3 +1034,36 @@ def test_crawl_session_never_counts_as_goal_reached(tmp_path):
     run(tmp_path, make_driver(tmp_path))
     session = json.loads((work_dir(tmp_path) / "session.json").read_text())
     assert session["mode"] == "crawl" and session["goal_reached"] is False
+
+
+def test_crawl_taps_every_unlabeled_row_not_the_first_one_again(tmp_path):
+    def row(text, y):
+        return UIElement(
+            role="cell", frame=(0, y, 390, 44), children=[UIElement(role="text", label=text, frame=(16, y + 12, 200, 20))]
+        )
+
+    screen = [UIElement(role="window", label="List", frame=(0, 0, 390, 844),
+                        children=[row("One", 100), row("Two", 144), row("Three", 188)])]
+    driver = make_driver(tmp_path, reset_on_launch=False)
+    driver.set_tree(screen)
+    run(tmp_path, driver)
+    taps = [entry for entry in driver.actions_log if entry.startswith("tap:")]
+    assert taps[:3] == ["tap:195,122", "tap:195,166", "tap:195,210"]
+    assert len(set(taps[:3])) == 3
+
+
+def test_typing_into_an_ambiguous_field_focuses_it_by_point(tmp_path):
+    first = UIElement(role="textfield", frame=(20, 300, 350, 40))
+    second = UIElement(role="textfield", frame=(20, 350, 350, 40))
+    screen = [UIElement(role="window", label="Form", frame=(0, 0, 390, 844), children=[first, second])]
+    provider = FakeModelProvider(
+        steps=[
+            StepDecision(kind="type", target=ElementQuery(role="textfield"), text="hello", point=(195.0, 370.0)),
+            StepDecision(kind="done"),
+        ]
+    )
+    driver = make_driver(tmp_path, reset_on_launch=False)
+    driver.set_tree(screen)
+    run(tmp_path, driver, goal="fill the form", provider=provider, settings_=AgentLoopSettings(heuristic_first=False))
+    live = driver.tree[0].children
+    assert live[1].value == "hello" and live[0].value in (None, "")

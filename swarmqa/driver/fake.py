@@ -17,7 +17,7 @@ from pathlib import Path
 from swarmqa.driver.protocol import CrashReport, LogEntry, LogLevel, ScreenObservation
 from swarmqa.driver.query import find_element
 from swarmqa.driver.v1_adapter import element_at
-from swarmqa.errors import AppCrashedError, AppMissingError, UITimeoutError
+from swarmqa.errors import AppCrashedError, AppMissingError, ElementNotFoundError, UITimeoutError
 from swarmqa.models import AppTarget, BuildMetadata, ElementQuery, UIElement
 
 # 1x1 RGB PNG.
@@ -41,6 +41,7 @@ class FakeDriver:
         self.video_mode = video_mode
         self.require_path = require_path
         self.tree: list[UIElement] = []
+        self.focused: UIElement | None = None
         self.actions_log: list[str] = []
         self.crash_labels: set[str] = set()
         self.timeout_labels: set[str] = set()
@@ -86,8 +87,13 @@ class FakeDriver:
         self.actions_log.append(f"click:{element.label}")
         self._transition(element)
 
-    def type_text(self, target: ElementQuery, text: str) -> None:
-        element = self._resolve(target)
+    # `type_text(None, text)` types into the field the last tap_point focused.
+    types_into_focus = True
+
+    def type_text(self, target: ElementQuery | None, text: str) -> None:
+        element = self._resolve(target) if target is not None else self.focused
+        if element is None:
+            raise ElementNotFoundError("nothing has focus to type into")
         self._maybe_fail(element)
         element.value = text
         self.actions_log.append(f"type:{element.label}:{text}")
@@ -156,6 +162,7 @@ class FakeDriver:
     def tap_point(self, x: float, y: float) -> None:
         self._require_launched()
         element = element_at(self.tree, x, y)
+        self.focused = element
         self.actions_log.append(f"tap:{x:g},{y:g}")
         if element is not None:
             self._maybe_fail(element)

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from swarmqa.checks._tree import MODAL_ROLES
+from swarmqa.checks._tree import MODAL_ROLES, first_text
 from swarmqa.driver.query import walk
 from swarmqa.models import ElementQuery, UIElement
 
@@ -113,16 +113,36 @@ class Control:
     label: str = ""
     identifier: str | None = None
     kind: ControlKind = "tap"
+    # An element with no label or identifier (a list row whose text is in
+    # its children) cannot be told apart by a query: it is reached by its
+    # frame centre, and `name` is its child text.
+    point: tuple[float, float] | None = None
+    name: str = ""
 
     def query(self) -> ElementQuery:
         return ElementQuery(role=self.role, label=self.label or None, identifier=self.identifier)
 
     def display(self) -> str:
-        return self.label or self.identifier or self.role
+        return self.label or self.identifier or self.name or self.role
+
+
+def element_name(element: UIElement) -> str:
+    """What names `element` for a person: its label, identifier, or first child text."""
+    return element.label or element.identifier or first_text(element)
 
 
 def control_key(element: UIElement) -> str:
+    if not (element.label or element.identifier):
+        # Unlabeled rows are told apart (and recognised on the next visit) by their child text.
+        return f"{element.role}|~{first_text(element)}|"
     return f"{element.role}|{element.label}|{element.identifier or ''}"
+
+
+def _centre(element: UIElement) -> tuple[float, float] | None:
+    if element.frame is None:
+        return None
+    x, y, width, height = element.frame
+    return (x + width / 2, y + height / 2)
 
 
 def modal_scope(tree: list[UIElement]) -> list[UIElement]:
@@ -149,8 +169,12 @@ def actionable_controls(tree: list[UIElement]) -> list[Control]:
         role = normalize_role(element.role)
         if role not in INTERACTIVE_ROLES or not element.enabled:
             continue
-        if not (element.label or element.identifier):
+        name = element_name(element)
+        if not name:
             continue
+        unlabeled = not (element.label or element.identifier)
+        if unlabeled and element.frame is None:
+            continue  # nothing to tap it by
         key = control_key(element)
         if key in seen:
             continue
@@ -162,6 +186,8 @@ def actionable_controls(tree: list[UIElement]) -> list[Control]:
                 label=element.label or "",
                 identifier=element.identifier,
                 kind="type" if role in TYPE_ROLES else "tap",
+                point=_centre(element) if unlabeled else None,
+                name=name,
             )
         )
     return found

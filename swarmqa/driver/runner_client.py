@@ -830,6 +830,9 @@ class RunnerDriverBase:
     `_log_command`, `_release`, `start_video` and `stop_video`.
     """
 
+    # `type_text(None, text)` types into the focused element (the runner's /type without a query).
+    types_into_focus = True
+
     backend = "runner"
     default_screenshot_format: schema.ScreenshotFormat = "png"
     scroll_distance = 180.0
@@ -958,7 +961,8 @@ class RunnerDriverBase:
         client = self._client()
         self._call(lambda: client.tap(query=target))
 
-    def type_text(self, target: ElementQuery, text: str) -> None:
+    def type_text(self, target: ElementQuery | None, text: str) -> None:
+        """Type into `target`, or with None into the element that has focus."""
         client = self._client()
         self._call(lambda: client.type_text(text, target))
 
