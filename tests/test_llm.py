@@ -399,3 +399,18 @@ def test_call_cap_holds_across_threads():
         thread.join()
     assert meter.calls == 10
     assert len(refused) == 3
+
+
+def test_parse_step_accepts_an_unambiguous_identifier_or_label_as_element_id():
+    from swarmqa.llm.parse import parse_step
+    from swarmqa.llm.protocol import ModelRefused
+    from swarmqa.models import UIElement
+
+    elements = {
+        "e1": UIElement(role="button", label="Share", identifier="detail.shareButton"),
+        "e2": UIElement(role="button", label="Save"),
+        "e3": UIElement(role="button", label="Save"),
+    }
+    assert parse_step({"kind": "tap", "element_id": "detail.shareButton"}, elements).target.label == "Share"
+    with pytest.raises(ModelRefused):
+        parse_step({"kind": "tap", "element_id": "Save"}, elements)  # two match: ambiguous
