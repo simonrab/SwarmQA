@@ -498,7 +498,7 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
         config.video.mode = overrides.video_mode  # type: ignore[assignment]
 
 
-_LLM_PROVIDERS = ("anthropic", "openai", "fake", "chat")
+_LLM_PROVIDERS = ("anthropic", "openai", "fake", "chat", "claude_cli", "codex_cli")
 
 
 def llm_settings(config: CampaignConfig):
