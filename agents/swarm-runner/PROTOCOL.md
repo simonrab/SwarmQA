@@ -28,7 +28,7 @@ The swarm runner is an HTTP server hosted inside an XCUITest process on an iOS S
 }
 ```
 
-`role` is the lower-cased `XCUIElement.ElementType` name without the prefix: `button`, `statictext` becomes `text`, `textfield`, `securetextfield`, `switch`, `cell`, `image`, `window`, `menuitem`, `other`, and so on. `frame` is `[x, y, width, height]` or `null`. `label`, `identifier` and `value` are strings or `null`.
+`role` is the lower-cased `XCUIElement.ElementType` name without the prefix: `button`, `statictext` becomes `text`, `textfield`, `securetextfield`, `switch`, `cell`, `image`, `window`, `menuitem`, `other`, and so on. `frame` is `[x, y, width, height]` or `null`. `label`, `identifier` and `value` are strings or `null`. A field with placeholder text also has `"placeholder"`; the key is left out otherwise.
 
 ## Query
 
@@ -54,7 +54,7 @@ Wherever a request targets an element, it sends a query. At least one field is s
 | `GET /screenshot` | — | PNG bytes |
 
 - `/observe` takes the tree snapshot and the screenshot back to back in one request. This is the call the agent loop makes every step, and its budget is 300 ms on the fixture app.
-- `/type` with a query taps the element first. Without one it types into the focused element.
+- `/type` with a query taps the element first, waits for the keyboard, and checks the field's value afterwards (retyping one character at a time once if it came out short). Without one it types into the focused element.
 - `/key` names: `cmd`, `ctrl`, `alt`, `shift`, `return`, `escape`, `tab`, `delete`, `up`, `down`, `left`, `right`, `home` (iOS home button), and single characters.
 
 ## Errors
@@ -72,5 +72,6 @@ Any failure answers a 4xx or 5xx status with:
 | `not_launched` | 409 | No app has been launched |
 | `app_crashed` | 409 | The app is no longer running |
 | `timeout` | 504 | The app did not become idle in time |
+| `input_failed` | 422 | Typed text did not land in the field (it did not keep keyboard focus) |
 | `protocol_mismatch` | 426 | Unsupported `X-Swarm-Protocol` |
 | `internal` | 500 | Anything else |

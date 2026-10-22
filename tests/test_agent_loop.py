@@ -9,7 +9,7 @@ from pathlib import Path
 from swarmqa.checks.protocol import CheckIssue, StepContext
 from swarmqa.driver.fake import FakeDriver
 from swarmqa.driver.protocol import UnsupportedAction
-from swarmqa.errors import AppCrashedError, UITimeoutError
+from swarmqa.errors import AppCrashedError, BackendUnavailable, InputError, UITimeoutError
 from swarmqa.explorer.agent_loop import AgentLoopSettings, run_agent_loop
 from swarmqa.explorer.scripted import run_scripted
 from swarmqa.explorer.screen_graph import ScreenGraph, fingerprint
@@ -568,6 +568,43 @@ def test_launch_failure_is_an_error_result(tmp_path):
     assert result.status == "error"
     assert result.error
     assert [f.kind for f in result.findings] == ["launch"]
+
+
+def test_simulator_that_cannot_boot_is_an_error_without_a_finding(tmp_path):
+    class NoSimulator(ObservingFake):
+        def launch(self):
+            raise BackendUnavailable("Simulator swarmqa-live did not boot")
+
+    result = run(tmp_path, make_driver(tmp_path, cls=NoSimulator))
+    assert result.status == "error"
+    assert "did not boot" in result.error
+    assert result.findings == []
+
+
+def test_a_driver_error_on_one_step_does_not_end_the_session(tmp_path):
+    class LosesFocus(ObservingFake):
+        def type_text(self, target, text):
+            raise InputError("the field did not keep keyboard focus")
+
+    result = run(tmp_path, make_driver(tmp_path, cls=LosesFocus))
+    assert result.status != "error"
+    failed = [s for s in result.steps if s.status == "failed" and "InputError" in (s.message or "")]
+    assert failed, "the typing step is recorded as failed"
+    assert result.steps[-1].message == "frontier_empty"
+
+
+def test_crawl_dismisses_an_open_alert_before_anything_behind_it(tmp_path):
+    alert = UIElement(
+        role="alert",
+        label="Error",
+        children=[UIElement(role="text", label="Sign in failed"), UIElement(role="button", label="OK")],
+    )
+    driver = make_driver(tmp_path, reset_on_launch=False)
+    driver.set_tree(home() + [alert])
+    driver.transitions["OK"] = home()
+    run(tmp_path, driver)
+    taps = [entry for entry in driver.actions_log if entry.startswith("click:")]
+    assert taps[0] == "click:OK"
 
 
 # Actions, back navigation and drivers ----------------------------------------

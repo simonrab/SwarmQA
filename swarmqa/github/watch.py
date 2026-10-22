@@ -290,6 +290,7 @@ class Watcher:
         delay = interval or self.settings.poll_interval_s
         baseline = not self.state.exists
         count = 0
+        worst = 0
         self.log(f"watching {self.client.repo} ({', '.join(self.settings.events)}; branch {branch}; "
                  f"report {self.settings.report})")
         while True:
@@ -303,10 +304,14 @@ class Watcher:
                          "testing what changes from now on")
                 baseline = False
             for event in events:
-                self.process(event)
+                result = self.process(event)
+                if not result.superseded:
+                    worst = max(worst, result.exit_code)
             count += 1
             if once or (polls is not None and count >= polls):
-                return 0
+                # The worst exit code of what was tested, so a CI job running
+                # `aqa watch --once` fails when a commit failed.
+                return worst
             sleep(delay)
 
 

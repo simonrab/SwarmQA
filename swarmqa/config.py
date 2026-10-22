@@ -485,7 +485,7 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
             overrides.max_wall_time,
             config.budgets,
             "max_wall_time_s",
-            "budgets.max_wall_time_s",
+            "--max-wall-time",
             errors,
         )
     if overrides.max_spend is not None:

@@ -58,6 +58,20 @@ SYSTEM_LOG_NOISE = (
     r"Could not find cached accumulator",
     r"CHHapticPattern",
 )
+# Error alerts the Simulator shows for reasons outside the app: no Apple ID
+# signed in, no App Store account, no push service. Matched against the
+# alert's text; they are reported as advisory, low severity.
+SIMULATOR_ERRORS = (
+    r"authorization attempt failed",
+    r"AuthenticationServices",
+    r"AKAuthenticationError",
+    r"ASAuthorizationError",
+    r"no active account",
+    r"Cannot connect to iTunes Store",
+    r"SKErrorDomain",
+    r"remote notifications are not supported in the simulator",
+    r"no valid .aps-environment",
+)
 _NUMBERS = re.compile(r"0x[0-9a-f]+|\d+", re.IGNORECASE)
 _TITLE_LIMIT = 100
 
@@ -71,7 +85,9 @@ class FunctionalSettings:
     `pixel_change_tolerance` is the fraction of changed screenshot pixels
     above which a tap with an unchanged tree still counts as having done
     something. `console_ignore` are regexes for log lines to drop, on top of
-    `SYSTEM_LOG_NOISE`. With `console_app_only`, lines from system
+    `SYSTEM_LOG_NOISE`. `environment_errors` are regexes for error alerts
+    the test environment causes rather than the app, on top of
+    `SIMULATOR_ERRORS`; those alerts become advisory. With `console_app_only`, lines from system
     subsystems (`console_system_subsystems` prefixes, `com.apple.` by
     default) are dropped unless the subsystem is the app's own bundle id:
     the app process hosts UIKit, SwiftUI and XCTest, which log errors in
@@ -90,6 +106,7 @@ class FunctionalSettings:
     pixel_change_tolerance: float = 0.005
     endless_spinners: bool = True
     console_ignore: list[str] = field(default_factory=list)
+    environment_errors: list[str] = field(default_factory=list)
     console_app_only: bool = True
     console_system_subsystems: list[str] = field(default_factory=lambda: ["com.apple."])
     max_console_lines: int = 5
@@ -106,6 +123,10 @@ class FunctionalCheck:
         self.settings = settings or FunctionalSettings()
         self._ignore = [
             re.compile(pattern) for pattern in (*SYSTEM_LOG_NOISE, *self.settings.console_ignore)
+        ]
+        self._environment = [
+            re.compile(pattern, re.IGNORECASE)
+            for pattern in (*SIMULATOR_ERRORS, *self.settings.environment_errors)
         ]
         self.last_error: str | None = None
         # Spinner key -> first time it was seen on screen, and keys already reported.
@@ -254,6 +275,8 @@ class FunctionalCheck:
             # holds the switch): a tap on the row's centre can miss the
             # control without the app being at fault.
             return []
+        if _behind_modal(before.tree, element):
+            return []  # an alert or sheet was up, so the tap landed on it
         if _near_keyboard(before.tree, element):
             return []  # the tap may have landed on the keyboard or its suggestion bar
         if visible_signature(before.tree, before.size) != visible_signature(ctx.after.tree, ctx.after.size):
@@ -377,13 +400,22 @@ class FunctionalCheck:
             if text in seen_before or not _ERROR_TEXT.search(text):
                 continue
             headline = modal.label or _first_text(modal) or text
+            details = f"A {norm_role(modal.role)} appeared with error text: {text}"
+            environment = any(pattern.search(text) for pattern in self._environment)
+            if environment:
+                details += (
+                    "\n\nThis looks like a test-environment error (for example no Apple ID "
+                    "signed in on the Simulator), not an app bug."
+                )
             issues.append(
                 CheckIssue(
                     kind="error_state",
                     category="broken",
                     title=f"Error shown: {_clip(headline)}",
-                    severity="high",
-                    details=f"A {norm_role(modal.role)} appeared with error text: {text}",
+                    severity="low" if environment else "high",
+                    confidence=0.5 if environment else 1.0,
+                    advisory=environment,
+                    details=details,
                     element=query_for(modal),
                     bbox=usable_frame(modal),
                     check=self.name,
@@ -534,6 +566,14 @@ def _tapped_element(tree: list[UIElement], action) -> UIElement | None:
 
 def _modals(tree: list[UIElement]) -> list[UIElement]:
     return [element for element in walk(tree) if norm_role(element.role) in MODAL_ROLES]
+
+
+def _behind_modal(tree: list[UIElement], element: UIElement) -> bool:
+    """True when a modal is up and `element` is not inside the topmost one."""
+    modals = _modals(tree)
+    if not modals:
+        return False
+    return not any(item is element for item in walk([modals[-1]]))
 
 
 def _new_modal(before: list[UIElement], after: list[UIElement]) -> bool:

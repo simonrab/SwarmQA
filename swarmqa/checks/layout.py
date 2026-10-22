@@ -37,6 +37,7 @@ from swarmqa.checks._tree import (
 )
 from swarmqa.checks.protocol import CheckIssue, StepContext
 from swarmqa.driver.protocol import ScreenObservation
+from swarmqa.models import UIElement
 
 Platform = Literal["ios", "macos"]
 
@@ -397,6 +398,9 @@ class LayoutCheck:
                 continue  # zero-size: not on screen
             if node.role in FIELD_ROLES and (element.value or "").strip():
                 continue  # the value or placeholder names the field
+            if node.role in FIELD_ROLES and (element.placeholder or "").strip():
+                issues.append(_placeholder_only(node.role, element))
+                continue
             if _has_text_child(element):
                 continue  # a child text element carries the name
             if _labelled_control_ancestor(node, flat):
@@ -667,3 +671,26 @@ def _cap(text: str) -> str:
 def _clip(text: str, limit: int) -> str:
     one_line = " ".join(str(text).split())
     return one_line if len(one_line) <= limit else one_line[: limit - 3].rstrip() + "..."
+
+
+def _placeholder_only(role: str, element: UIElement) -> CheckIssue:
+    """A field named only by its placeholder: VoiceOver reads it, but it goes once the field has text."""
+    return CheckIssue(
+        kind="visual",
+        category="confusing",
+        title=f'{role.capitalize()} "{_clip_text(element.placeholder or "")}" is named only by its placeholder',
+        severity="low",
+        confidence=0.6,
+        advisory=True,
+        details=(
+            "The field has no accessibility label; its placeholder names it until text is typed, "
+            "after which VoiceOver users hear only the value. Give it an accessibility label."
+        ),
+        element=query_for(element),
+        bbox=usable_frame(element),
+    )
+
+
+def _clip_text(text: str, limit: int = 40) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"

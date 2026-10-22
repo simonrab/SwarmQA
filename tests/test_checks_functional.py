@@ -226,6 +226,33 @@ def test_screenshot_change_is_not_dead(driver, tmp_path):
     assert FunctionalCheck().run(ctx) == []
 
 
+def _error_alert(*texts: str) -> UIElement:
+    return UIElement(
+        role="alert",
+        label="Error",
+        frame=(50, 300, 290, 150),
+        children=[UIElement(role="text", label=text) for text in texts] + [UIElement(role="button", label="OK")],
+    )
+
+
+def test_tap_behind_an_open_alert_is_not_dead(driver):
+    # The alert was already up, so the tap on the button behind it landed on the alert.
+    tree = _screen(_button()) + [_error_alert("Try again later.")]
+    assert FunctionalCheck().run(_ctx(driver, tree, tree, _tap())) == []
+
+
+def test_dead_tap_inside_an_open_alert_is_still_reported(driver):
+    alert = UIElement(
+        role="alert",
+        label="Confirm",
+        frame=(50, 300, 290, 150),
+        children=[UIElement(role="button", label="Continue", frame=(60, 400, 270, 44))],
+    )
+    tree = _screen(_button()) + [alert]
+    issues = FunctionalCheck().run(_ctx(driver, tree, tree, _tap("Continue")))
+    assert _kinds(issues) == [("unresponsive", "broken")]
+
+
 def test_first_screen_has_no_dead_tap(driver):
     tree = _screen(_button())
     assert FunctionalCheck().run(_ctx(driver, None, tree, None)) == []
@@ -263,6 +290,32 @@ def test_error_alert_already_shown_is_not_repeated(driver):
     tree = _screen(_button()) + [alert]
     changed = _screen(_button(), UIElement(role="text", label="x")) + [alert]
     assert FunctionalCheck().run(_ctx(driver, tree, changed, _tap())) == []
+
+
+def test_simulator_only_error_alert_is_advisory(driver):
+    # Sign in with Apple fails on a Simulator with no Apple ID: not the app's fault.
+    before = _screen(_button())
+    after = _screen(_button()) + [_error_alert("The authorization attempt failed for an unknown reason")]
+    issues = FunctionalCheck().run(_ctx(driver, before, after, _tap()))
+    assert _kinds(issues) == [("error_state", "broken")]
+    issue = issues[0]
+    assert issue.advisory and issue.severity == "low"
+    assert "test-environment" in issue.details
+
+
+def test_configured_environment_error_is_advisory(driver):
+    settings = FunctionalSettings(environment_errors=[r"staging server unreachable"])
+    before = _screen(_button())
+    after = _screen(_button()) + [_error_alert("Staging server unreachable, try again later.")]
+    issues = FunctionalCheck(settings).run(_ctx(driver, before, after, _tap()))
+    assert [issue.advisory for issue in issues] == [True]
+
+
+def test_app_error_alert_stays_high(driver):
+    before = _screen(_button())
+    after = _screen(_button()) + [_error_alert("Could not save your note.")]
+    issues = FunctionalCheck().run(_ctx(driver, before, after, _tap()))
+    assert [(issue.severity, issue.advisory) for issue in issues] == [("high", False)]
 
 
 # Console ----------------------------------------------------------------
