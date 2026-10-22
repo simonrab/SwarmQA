@@ -330,7 +330,8 @@ class Reporter:
                 self.log("github: this token cannot create check runs (GitHub App only); "
                          "using a commit status instead")
                 self._statuses_only = True
-        state = {"success": "success", "failure": "failure", "neutral": "success"}.get(conclusion or "", "pending")
+        # A commit status has no neutral state; "could not test" must not show as passed.
+        state = {"success": "success", "failure": "failure", "neutral": "error"}.get(conclusion or "", "pending")
         body = {"state": state, "context": self.settings.check_name, "description": title[:140]}
         if target_url:
             body["target_url"] = target_url

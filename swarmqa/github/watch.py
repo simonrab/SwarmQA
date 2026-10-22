@@ -201,6 +201,13 @@ def evaluate_sha(
         findings_path = Path(ran.report_dir) / FINDINGS_JSON
         if findings_path.is_file():
             outcome.findings = load_findings_json(findings_path)
+        broken = [shard for shard in ran.results if shard.status == "error"]
+        if broken:
+            # A shard that could not run (no free simulator, a runner that did
+            # not start) tested nothing, so "no findings" would be a false pass.
+            outcome.error = f"{len(broken)} of {len(ran.results)} shard(s) could not run: {broken[0].error}"
+            outcome.exit_code = max(outcome.exit_code, 2)
+            log(f"{event.label()}: {platform} {outcome.error}")
     return result
 
 
