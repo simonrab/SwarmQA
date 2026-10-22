@@ -298,6 +298,13 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl=
             provider = create_provider(llm_settings(config))
         except Exception as exc:
             return make_error_result(shard, worker_id, f"llm: {exc}", config.backend)
+    loop_overrides: dict = {}
+    if getattr(provider, "name", "") == "chat":
+        # Steps come from a coding agent in a chat (swarmqa.explorer.remote):
+        # its session belongs to this campaign, and the loop asks it every step.
+        provider.campaign_id = _campaign_id_of(work_dir)  # type: ignore[union-attr]
+        provider.worker_id = worker_id  # type: ignore[union-attr]
+        loop_overrides["mode"] = "driven"
     checks = default_checks(checks_settings(config), provider)
     if config.explorer.friction.enabled and shard.goal:
         from swarmqa.checks.friction import FrictionCheck
@@ -311,7 +318,7 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl=
             config,
             provider=provider,
             checks=checks,
-            settings=AgentLoopSettings.from_config(config),
+            settings=AgentLoopSettings.from_config(config, **loop_overrides),
             work_dir=work_dir,
             worker_id=worker_id,
             backend=config.backend,
@@ -320,6 +327,16 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl=
         )
     finally:
         _close_driver(driver)
+
+
+def _campaign_id_of(work_dir: Path) -> str:
+    """The campaign id in `<report_root>/<campaign>/workers/<worker>`; empty for any other layout."""
+    parts = Path(work_dir).resolve().parts
+    if "workers" in parts:
+        index = len(parts) - 1 - parts[::-1].index("workers")
+        if index >= 1:
+            return parts[index - 1]
+    return ""
 
 
 def _run_suite(shard, worker_id, work_dir, config, root: Path, on_step) -> WorkerResult:

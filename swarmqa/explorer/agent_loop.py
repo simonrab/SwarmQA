@@ -47,7 +47,7 @@ from swarmqa.models import CampaignConfig, ElementQuery, Finding, Shard, StepRes
 from swarmqa.reporter.findings import fingerprint_for, write_finding, write_replay
 from swarmqa.video_policy import keep_video, should_start_video
 
-LoopMode = Literal["goal", "crawl"]
+LoopMode = Literal["goal", "crawl", "driven"]
 _DEFAULT_SIZE = (390.0, 844.0)
 _BACK_NAMES = frozenset({"back", "done", "close", "cancel"})
 # Inside an alert, these dismiss it too.
@@ -59,7 +59,9 @@ class AgentLoopSettings:
     """Knobs for one agent-loop session.
 
     `mode="goal"` follows `shard.goal` and drops to crawl when the goal is
-    empty. `max_steps` counts driver actions (taps, types, swipes, keys,
+    empty. `mode="driven"` asks the provider for every step, with no
+    heuristic, call cap or stall limit: the provider is an outside
+    controller (a coding agent in a chat, see `swarmqa.explorer.remote`). `max_steps` counts driver actions (taps, types, swipes, keys,
     backs, relaunches), not observations. `stall_limit` ends goal mode after
     that many steps in a row that failed or left the screen unchanged.
     `per_screen_checks` turns off expensive (model) checks entirely.
@@ -283,7 +285,11 @@ class _AgentLoop:
         self.clock = clock
         self.campaign, self.relative = _campaign_context(self.work_dir)
         self.goal = (shard.goal or "").strip()
-        self.mode: LoopMode = "crawl" if settings.mode == "crawl" or not self.goal else "goal"
+        self.mode: LoopMode
+        if settings.mode == "driven":
+            self.mode = "driven"
+        else:
+            self.mode = "crawl" if settings.mode == "crawl" or not self.goal else "goal"
         self.tokens, self.expected = parse_goal(self.goal)
         self.platform = (settings.platform or config.app.platform or "macos").lower()
         # Replay cache (goal mode only): `cache_flow` is what was loaded,
@@ -331,6 +337,10 @@ class _AgentLoop:
         self.video_start_ts: float | None = None
         self.fatal: str | None = None
         self.stop_reason = ""
+        # An outside controller gets the loop so it can report issues on the current screen.
+        bind = getattr(provider, "bind", None)
+        if callable(bind):
+            bind(self)
 
     # Session ----------------------------------------------------------------
 
@@ -652,6 +662,8 @@ class _AgentLoop:
     # Deciding -------------------------------------------------------------
 
     def _decide(self) -> _Plan:
+        if self.mode == "driven":
+            return self._driven_plan()
         if self.mode == "crawl":
             if self.fail_streak >= self.settings.stall_limit:
                 return _Plan(stop="stall")
@@ -757,6 +769,40 @@ class _AgentLoop:
                 self._note("cache", "failed", "cached flow dropped" if dropped else "cached flow did not reach the goal")
         except OSError as exc:
             self._note("cache", "failed", f"could not write the flow cache: {exc}")
+
+    def _driven_plan(self) -> _Plan:
+        """The outside controller's next step; its failure ends the session."""
+        if self.provider is None:
+            return _Plan(stop="no_controller")
+        assert self.current is not None
+        try:
+            decision = self.provider.decide_step(
+                self.current, self.goal, list(self.history), timeout_s=self.settings.model_timeout_s
+            )
+        except ModelError as exc:
+            self._note("controller", "failed", f"{type(exc).__name__}: {exc}")
+            return _Plan(stop="controller_gone")
+        problem = self._invalid(decision)
+        if problem:
+            self._note("controller", "failed", f"unusable step ({problem})")
+            return _Plan(stop="controller_gone")
+        return _Plan(decision, "chat")
+
+    def record_external_issue(self, issue: CheckIssue) -> Finding | None:
+        """Record an issue an outside controller judged on the current screen, with its screenshot."""
+        if self.current is None:
+            return self._record_issue(issue, None)
+        ctx = StepContext(
+            after=self.current,
+            driver=self.driver,
+            before=None,
+            action=None,
+            since_ts=self.current.ts,
+            screen_id=self.current_id,
+            step_index=self.steps_used,
+            goal=self.goal,
+        )
+        return self._record_issue(issue, ctx)
 
     def _goal_candidates(self, tree: list[UIElement]) -> list[UIElement]:
         """Untried enabled tappable elements sharing a goal word, in tree order."""
@@ -1262,4 +1308,9 @@ def run_agent_loop(
     except Exception as exc:  # noqa: BLE001 - an internal error is an error result, not a crash
         loop.fatal = f"{type(exc).__name__}: {exc}"
         loop.stop_reason = loop.stop_reason or "internal_error"
+    finally:
+        # An outside controller (a chat session) learns the session is over.
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close(loop.stop_reason or ("error" if loop.fatal else "ended"))
     return loop.finish(started_at, started_mono)

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from swarmqa.errors import AQAError
-from swarmqa.mcp import campaigns, server, tools
+from swarmqa.mcp import campaigns, server, sessions, tools
 from swarmqa.models import CampaignStatus
 from swarmqa.orchestrator.status import write_status
 from swarmqa.report.layout import ensure_campaign_layout
@@ -44,7 +44,7 @@ def _campaign(root: Path, campaign_id: str = "20260101T000000Z-aaaaaa") -> Path:
 
 def test_build_server_registers_every_tool(tmp_path: Path):
     built = server.build_server(root=tmp_path, sdk=(_FakeServer, _ToolError))
-    assert list(built.tools) == [tool.__name__ for tool in tools.TOOLS]
+    assert list(built.tools) == [tool.__name__ for tool in [*tools.TOOLS, *sessions.SESSION_TOOLS]]
     assert built.name == "swarmqa" and "start_campaign" in built.instructions
     assert campaigns.project_root() == tmp_path.resolve()
     fn, description = built.tools["list_findings"]
@@ -111,7 +111,7 @@ def test_in_process_server_lists_and_calls_tools(tmp_path: Path):
             return names, ok, bad
 
     names, ok, bad = anyio.run(exercise)
-    assert names == [tool.__name__ for tool in tools.TOOLS]
+    assert names == [tool.__name__ for tool in [*tools.TOOLS, *sessions.SESSION_TOOLS]]
     assert not _is_error(ok)
     assert json.loads(ok.content[0].text)["campaign_id"] == "20260101T000000Z-aaaaaa"
     assert _is_error(bad)
