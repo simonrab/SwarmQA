@@ -96,6 +96,8 @@ When `app.platform` is `ios`, that display warning is replaced. If `workers` is 
 
 `swarmqa/orchestrator/swarm.py` (WP-D3). Off unless `[swarm] enabled = true` or `crawl` is set. Local backend with `local.isolation = "thread"` only: the pool and the shared crawl live in the campaign process.
 
+One default turns it on: a local, thread-isolated iOS campaign with more `workers` than names in `app.simulators`, and no `enabled` key, is swarmed, so each worker drives its own cloned simulator instead of sharing one. Set `enabled = false` to keep the old behaviour.
+
 **Device leases.** Each shard leases a device from a DevicePool (`docs/devices.md`) when its driver is created and returns it when the driver closes, even if the shard fails. Worker slots are `min(workers, pool capacity, swarm.devices)`, printed as `[campaign <id>] swarm: N ios device(s) (pool capacity C)`. A pool with no device for the platform is a config error. The pool is:
 
 | `swarm.pool` | Devices |
@@ -106,6 +108,8 @@ When `app.platform` is `ios`, that display warning is replaced. If `workers` is 
 | `fake` | `FakeDevicePool` for dry runs and tests |
 
 A leased simulator reaches the driver as its UDID (`create_driver(..., udid=)`; the pool holds the `simulator-<udid>` lock). `erase_mode = "uninstall"` (default) removes the app between leases and keeps the clone booted; `"erase"` wipes it at the cost of a cold boot. With `keep_devices = true` (default) clones stay booted after the campaign, so the next one starts in seconds; `false` deletes the clones this campaign created.
+
+**Healthy simulators.** Boots go through a host-wide slot, `max_concurrent_boots` at a time (0, the default, means 1 under 16 GB of RAM, where parallel boots time out, else 2). Every booted clone must answer `simctl spawn`; a wedged leftover is shut down, erased and booted once more before the lease fails. A shard whose device failed under it (an error starting `BackendUnavailable`) runs once more on a fresh lease; an app error is not retried. With no `app.path`, `app.build_command` runs once before the first lease and every device installs that build.
 
 **Split crawl.** `crawl = N` adds N shards named `crawl i/N` with no goal, so the agent loop crawls (`explorer.engine = "agent"` is required). The N workers share one frontier: before each crawl decision a worker publishes its screen graph and takes the others' screens, routes and claims; before trying a control it claims it, and a control claimed by someone else counts as tried. No two devices try the same control, and a worker can route to screens another found. Imported screens and routes start with zero visits and counts.
 
@@ -122,6 +126,7 @@ runtime = ""
 erase_mode = "uninstall" # uninstall | erase
 keep_devices = true
 lease_timeout_s = 600
+max_concurrent_boots = 0 # ios: 0 = 1 under 16 GB of RAM, else 2
 crawl = 0                # crawl shards sharing one frontier
 ```
 

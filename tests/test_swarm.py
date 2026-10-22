@@ -16,10 +16,12 @@ from swarmqa.models import Shard, UIElement
 from swarmqa.orchestrator.campaign import run_campaign
 from swarmqa.orchestrator.swarm import (
     CRAWL_TAG,
+    SwarmConfigError,
     LeasingDriverFactory,
     SharedCrawl,
     SwarmContext,
     SwarmSettings,
+    build_once,
     expand_crawl,
 )
 from swarmqa.testing import make_app, sample_config
@@ -211,3 +213,97 @@ def test_swarm_settings_validation():
     config.swarm.settings = {"enabled": True, "erase_mode": "wipe", "devices": -1}
     errors = validate_config(config)
     assert "swarm.erase_mode: must be one of uninstall, erase" in errors and "swarm.devices: must be >= 0" in errors
+
+
+# Defaults, retries and one build ---------------------------------------------
+
+
+@pytest.mark.real_pool_default
+def test_more_ios_workers_than_listed_simulators_are_swarmed():
+    config = sample_config()
+    config.app.platform = "ios"
+    config.workers = 3
+    config.app.simulators = ["iPhone 17"]
+    assert SwarmSettings.from_config(config).enabled
+    config.app.simulators = ["A", "B", "C"]
+    assert not SwarmSettings.from_config(config).enabled
+    config.app.simulators = []
+    config.swarm.settings = {"enabled": False}
+    assert not SwarmSettings.from_config(config).enabled  # an explicit choice wins
+    config.swarm.settings = {}
+    config.local.isolation = "subprocess"
+    assert not SwarmSettings.from_config(config).enabled  # leases need thread isolation
+    config.local.isolation = "thread"
+    config.workers = 1
+    assert not SwarmSettings.from_config(config).enabled
+
+
+def test_max_concurrent_boots_is_validated():
+    assert SwarmSettings.from_mapping({"max_concurrent_boots": 2}).max_concurrent_boots == 2
+    with pytest.raises(SwarmConfigError):
+        SwarmSettings.from_mapping({"max_concurrent_boots": -1})
+
+
+def _result(shard, worker_id, status="passed", error=None):
+    from swarmqa.models import WorkerResult
+
+    return WorkerResult(worker_id=worker_id, shard_id=shard.id, status=status, error=error)
+
+
+def test_a_shard_whose_device_failed_runs_once_more(tmp_path, capsys):
+    config = swarm_config(tmp_path, devices=1)
+    pool = FakeDevicePool({"macos": 1})
+    attempts = []
+
+    def executor(shard, worker_id, work_dir, cfg):
+        attempts.append(worker_id)
+        if len(attempts) == 1:
+            return _result(shard, worker_id, "error", "BackendUnavailable: Simulator did not boot")
+        return _result(shard, worker_id)
+
+    result = run_campaign(config, [Shard(id="s-1", kind="scripted", name="one")], executor=executor, device_pool=pool)
+    assert [r.status for r in result.results] == ["passed"]
+    assert len(attempts) == 2
+    assert "running the shard again on a fresh lease" in capsys.readouterr().err
+
+
+def test_an_app_error_or_a_second_device_failure_is_not_retried(tmp_path):
+    config = swarm_config(tmp_path, devices=1)
+    attempts = []
+
+    def app_error(shard, worker_id, work_dir, cfg):
+        attempts.append(worker_id)
+        return _result(shard, worker_id, "error", "AQAError: runner internal")
+
+    run_campaign(config, [Shard(id="s-1", kind="scripted", name="one")], executor=app_error,
+                 device_pool=FakeDevicePool({"macos": 1}))
+    assert len(attempts) == 1
+
+    attempts.clear()
+
+    def device_error(shard, worker_id, work_dir, cfg):
+        attempts.append(worker_id)
+        return _result(shard, worker_id, "error", "BackendUnavailable: gone")
+
+    result = run_campaign(config, [Shard(id="s-1", kind="scripted", name="one")], executor=device_error,
+                          device_pool=FakeDevicePool({"macos": 1}))
+    assert len(attempts) == 2 and result.results[0].status == "error"
+
+
+def test_the_app_is_built_once_for_every_device(tmp_path):
+    app = make_app(tmp_path / "built")
+    config = sample_config()
+    config.app.path = None
+    config.app.bundle_id = None
+    config.app.build_command = "build-it"
+    calls = []
+
+    def runner(args, **kwargs):
+        from subprocess import CompletedProcess
+
+        calls.append(args)
+        return CompletedProcess(args, 0, f"** BUILD SUCCEEDED **\n{app.path}\n", "")
+
+    build_once(config, runner=runner)
+    assert calls == [["/bin/sh", "-c", "build-it"]]
+    assert config.app.path == app.path

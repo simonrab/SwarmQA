@@ -52,7 +52,8 @@ Slot `n` owns a clone named `aqa-sim-<source>-<n>`, where `<source>` is the gold
 
 1. `xcrun simctl list devices -j` — find an existing clone with that name (a leftover from an earlier run is reused and never deleted by this pool). Run once per slot per pool.
 2. When there is none: `xcrun simctl clone <golden> <clone-name>`, or `xcrun simctl create <clone-name> <device_type> [<runtime>]`. The last line of stdout is the new UDID. `simctl clone` needs the golden device shut down.
-3. `xcrun simctl bootstatus <udid> -b` — boots the clone if needed and blocks until it has finished booting. The runner gets `timeout=boot_timeout_s` (default 600 s); failure or timeout raises `DeviceSetupError`.
+3. `xcrun simctl bootstatus <udid> -b` — boots the clone if needed and blocks until it has finished booting. The runner gets `timeout=boot_timeout_s` (default 600 s); failure or timeout raises `DeviceSetupError`. Only `max_concurrent_boots` simulators boot at once on the host (a host-wide `ios-sim-boot-<n>` lock; default 1 under 16 GB of RAM, else 2), because parallel boots on an 8 GB Mac all timed out.
+   Then `xcrun simctl spawn <udid> launchctl print system` checks the booted clone answers (30 s). A clone that does not (a leftover from a crashed run) is shut down, erased and booted once more; if it still does not answer, `DeviceSetupError`.
 4. With a build: `xcrun simctl install <udid> <build.app_path>`.
 
 Before step 3 the pool holds `ios-sim-slot-<n>` and `simulator-<udid>`. If another process holds that UDID it tries the next slot. With every slot busy it polls every `poll_s` until `timeout_s`, then raises `DeviceUnavailable`. Any failure in steps 2–4 releases both locks.

@@ -43,6 +43,7 @@ from swarmqa.orchestrator.swarm import (
     LeasingDriverFactory,
     SwarmContext,
     SwarmSettings,
+    build_once,
     build_pool,
     expand_crawl,
     merge_worker_graphs,
@@ -78,10 +79,6 @@ def run_campaign(
     swarm = SwarmSettings.from_config(config)
     queue = expand_crawl(list(queue), swarm)
     root, campaign_id, previous = _open_campaign(config, options)
-    dump_json(
-        {"path": config.app.path, "bundle_id": config.app.bundle_id, "platform": config.app.platform},
-        root / "app.json",
-    )
     resume = previous is not None and bool(options.resume_campaign_id)
     to_run, carried_shards = _partition_queue(list(queue), previous, resume)
     carried = _load_carried_results(root, carried_shards, previous)
@@ -101,6 +98,9 @@ def run_campaign(
         capacity = pool.capacity(platform)  # type: ignore[arg-type]
         if capacity <= 0:
             raise ConfigError([f"swarm: the device pool has no {platform} devices on this host"])
+        if not config.app.path and (config.app.build_command or "").strip():
+            # Build once for every device instead of once per worker.
+            build_once(config)
         slots = min(slots, capacity, swarm.devices or capacity)
         driver_factory = LeasingDriverFactory(
             pool, platform, config, base=driver_factory, timeout_s=swarm.lease_timeout_s
@@ -112,6 +112,10 @@ def run_campaign(
         )
     else:
         _warn_gui(config, queue)
+    dump_json(
+        {"path": config.app.path, "bundle_id": config.app.bundle_id, "platform": config.app.platform},
+        root / "app.json",
+    )
 
     if config.backend == "local":
         backend: LocalBackend | object = LocalBackend(
@@ -144,6 +148,7 @@ def run_campaign(
     worker_seq = _next_worker_index(root)
     stop_reason: str | None = None
     cancelled_workers: set[str] = set()
+    retried: set[str] = set()
     started = time.monotonic()
 
     def publish(*, worker_line: str | None = None) -> None:
@@ -271,6 +276,23 @@ def run_campaign(
                 result = _normalize_result(result, shard, worker_id, config.backend, started_at)
                 if worker_id in cancelled_workers:
                     result.status = "cancelled"
+                elif _device_failed(pool, result) and shard.id not in retried:
+                    # The device failed under the shard, not the app: run it once more on a fresh lease.
+                    retried.add(shard.id)
+                    print(
+                        f"warning: {worker_id}: the device failed ({result.error.splitlines()[0]}); "
+                        "running the shard again on a fresh lease",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    _settle_spend(meter, metered, rate, config, result, reserved.pop(worker_id, 0.0))
+                    clock.add_worker_minutes(result.worker_minutes)
+                    dump_json(result, worker_dir(root, worker_id) / "result.json")
+                    with state_lock:
+                        active.pop(worker_id, None)
+                        pending.insert(0, shard)
+                    publish()
+                    continue
                 _settle_spend(meter, metered, rate, config, result, reserved.pop(worker_id, 0.0))
                 clock.add_worker_minutes(result.worker_minutes)
                 dump_json(result, worker_dir(root, worker_id) / "result.json")
@@ -458,12 +480,28 @@ def _models_cost(config: CampaignConfig) -> bool:
     return config.llm.enabled and config.explorer.engine == "agent"
 
 
+def _swarm_pool_on(config: CampaignConfig) -> bool:
+    from swarmqa.orchestrator.swarm import SwarmSettings
+
+    try:
+        return SwarmSettings.from_config(config).enabled
+    except Exception:  # noqa: BLE001 - a bad [swarm] table is reported elsewhere
+        return False
+
+
+def _device_failed(pool: DevicePool | None, result: WorkerResult) -> bool:
+    """A leased device failed under the shard (the backend's `BackendUnavailable:` prefix)."""
+    return pool is not None and result.status == "error" and (result.error or "").startswith("BackendUnavailable")
+
+
 def _warn_gui(config: CampaignConfig, queue: list[Shard]) -> None:
     interactive = any(shard.kind in _INTERACTIVE for shard in queue)
     if config.backend != "local" or not interactive:
         return
     if config.app.platform == "ios":
         pool = len(config.app.simulators)
+        if _swarm_pool_on(config):
+            return  # the swarm pool gives each worker its own cloned simulator
         if config.workers > 1 and pool < config.workers:
             print(
                 (
