@@ -453,12 +453,23 @@ def _models_cost(config: CampaignConfig) -> bool:
     return config.llm.enabled and config.explorer.engine == "agent"
 
 
+def _swarm_pool_on(config: CampaignConfig) -> bool:
+    from swarmqa.orchestrator.swarm import SwarmSettings
+
+    try:
+        return SwarmSettings.from_config(config).uses_pool
+    except Exception:  # noqa: BLE001 - a bad [swarm] table is reported elsewhere
+        return False
+
+
 def _warn_gui(config: CampaignConfig, queue: list[Shard]) -> None:
     interactive = any(shard.kind in _INTERACTIVE for shard in queue)
     if config.backend != "local" or not interactive:
         return
     if config.app.platform == "ios":
         pool = len(config.app.simulators)
+        if _swarm_pool_on(config):
+            return  # the swarm pool gives each worker its own cloned simulator
         if config.workers > 1 and pool < config.workers:
             print(
                 (

@@ -662,3 +662,81 @@ def test_n_devices_finish_about_n_times_faster(tmp_path):
     assert one >= 1.8
     # Ideal is 3x; leave room for a loaded CI host.
     assert one / three > 1.8, (one, three)
+
+
+# Defaults, retries and one build -------------------------------------------------
+
+
+@pytest.mark.real_pool_default
+def test_more_ios_workers_than_listed_simulators_get_a_pool(tmp_path):
+    config = _agent_config(tmp_path, workers=3)
+    config.app.platform = "ios"
+    config.app.simulators = ["iPhone 17"]
+    assert SwarmSettings.from_config(config).pool == "auto"
+    config.app.simulators = ["A", "B", "C"]
+    assert SwarmSettings.from_config(config).pool == "none"
+    config.app.simulators = []
+    config.swarm.settings = {"pool": "none"}
+    assert SwarmSettings.from_config(config).pool == "none"  # an explicit choice wins
+    config.swarm.settings = {}
+    config.workers = 1
+    assert SwarmSettings.from_config(config).pool == "none"
+
+
+def test_max_concurrent_boots_is_validated():
+    assert SwarmSettings.from_mapping({"max_concurrent_boots": 2}).max_concurrent_boots == 2
+    with pytest.raises(SwarmConfigError):
+        SwarmSettings.from_mapping({"max_concurrent_boots": 0})
+
+
+def test_a_shard_whose_device_failed_runs_once_more(tmp_path, capsys):
+    config = _agent_config(tmp_path, workers=1)
+    pool = CountingPool({"macos": 1})
+    attempts = []
+
+    def executor(shard, worker_id, work_dir, _config):
+        attempts.append(shard.id)
+        if len(attempts) == 1:
+            return WorkerResult(worker_id=worker_id, shard_id=shard.id, shard_name=shard.name,
+                                shard_kind=shard.kind, status="error",
+                                error="BackendUnavailable: Simulator did not boot")
+        return _passed(shard, worker_id)
+
+    result = run_campaign(config, [scripted_shard()], executor=executor, device_pool=pool)
+    assert result.results[0].status == "passed"
+    assert len(attempts) == 2 and len(pool.acquired) == 2
+    assert "running the shard again on a fresh lease" in capsys.readouterr().err
+
+
+def test_an_app_error_is_not_retried(tmp_path):
+    config = _agent_config(tmp_path, workers=1)
+    pool = CountingPool({"macos": 1})
+    attempts = []
+
+    def executor(shard, worker_id, work_dir, _config):
+        attempts.append(shard.id)
+        return WorkerResult(worker_id=worker_id, shard_id=shard.id, shard_name=shard.name,
+                            shard_kind=shard.kind, status="error", error="AQAError: runner internal")
+
+    run_campaign(config, [scripted_shard()], executor=executor, device_pool=pool)
+    assert len(attempts) == 1
+
+
+def test_the_app_is_built_once_for_every_device(tmp_path):
+    app = make_app(tmp_path / "built")
+    config = _agent_config(tmp_path, workers=2)
+    config.app.path = None
+    config.app.bundle_id = None
+    config.app.build_command = "build-it"
+    calls = []
+
+    def runner(args, **kwargs):
+        from subprocess import CompletedProcess
+
+        calls.append(args)
+        return CompletedProcess(args, 0, f"** BUILD SUCCEEDED **\n{app.path}\n", "")
+
+    swarm = Swarm.open(config, tmp_path, pool=FakeDevicePool({"macos": 2}), runner=runner)
+    assert calls == [["/bin/sh", "-c", "build-it"]]
+    assert config.app.path == app.path
+    assert swarm.build is not None and swarm.build.app_path == app.path

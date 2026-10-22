@@ -27,11 +27,24 @@ from swarmqa.devices.capacity import (
     simulator_capacity,
 )
 from swarmqa.devices.commands import CommandResult, Runner, default_runner, run
-from swarmqa.devices.locks import HostLock, simulator_lock_name, try_lock
+from swarmqa.devices.locks import HostLock, simulator_lock_name, try_lock, try_slot
 from swarmqa.devices.protocol import Device, DeviceSetupError, DeviceUnavailable
 from swarmqa.models import BuildArtifact, TargetPlatform
 
 SLOT_PREFIX = "ios-sim-slot"
+BOOT_PREFIX = "ios-sim-boot"
+_GB = 1024**3
+
+
+def default_concurrent_boots() -> int:
+    """Simulators to boot at once: 1 under 16 GB of RAM (parallel boots time out there), else 2."""
+    import os
+
+    try:
+        memory = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except (ValueError, OSError, AttributeError):
+        return 1
+    return 1 if memory < 16 * _GB else 2
 EraseMode = Literal["erase", "uninstall"]
 
 
@@ -71,6 +84,8 @@ class IOSSimulatorPool:
         # A clone's first boot after `simctl erase` measured 336 s on a loaded
         # 8 GB Mac (Xcode 26.5, iOS 26.5); a warm boot took 87 s.
         boot_timeout_s: float = 600.0,
+        max_concurrent_boots: int | None = None,
+        health_timeout_s: float = 30.0,
         poll_s: float = 0.5,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
@@ -86,6 +101,8 @@ class IOSSimulatorPool:
         self.name_prefix = name_prefix
         self.erase_mode = erase_mode
         self.boot_timeout_s = boot_timeout_s
+        self.max_concurrent_boots = max(1, max_concurrent_boots or default_concurrent_boots())
+        self.health_timeout_s = health_timeout_s
         self.poll_s = poll_s
         self._sleep = sleep
         self._clock = clock
@@ -253,11 +270,47 @@ class IOSSimulatorPool:
     # Device lifecycle
 
     def _boot(self, udid: str) -> None:
-        result = self._simctl("bootstatus", udid, "-b", timeout=self.boot_timeout_s)
+        """Boot `udid` (at most `max_concurrent_boots` at once on this host) and check it responds.
+
+        A clone left over from an earlier run can be booted but wedged; it is
+        shut down, erased and booted again once before giving up.
+        """
+        self._boot_once(udid)
+        if self._responsive(udid):
+            return
+        self._shutdown(udid)
+        self._simctl("erase", udid, timeout=self.boot_timeout_s)
+        self._boot_once(udid)
+        if not self._responsive(udid):
+            raise DeviceSetupError(f"simulator {udid} booted but does not respond, even after an erase")
+
+    def _boot_once(self, udid: str) -> None:
+        slot = self._boot_slot()
+        try:
+            result = self._simctl("bootstatus", udid, "-b", timeout=self.boot_timeout_s)
+        finally:
+            slot.release()
         if not result.ok:
             raise DeviceSetupError(
                 f"simulator {udid} did not boot within {self.boot_timeout_s:g}s: {result.detail()}"
             )
+
+    def _boot_slot(self) -> HostLock:
+        """Wait for one of the host's boot slots; booting many simulators at once makes all of them time out."""
+        deadline = self._clock() + self.boot_timeout_s
+        while True:
+            taken = try_slot(BOOT_PREFIX, self.max_concurrent_boots, root=self.lock_root)
+            if taken is not None:
+                return taken[1]
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                raise DeviceUnavailable(f"no simulator boot slot free after {self.boot_timeout_s:g}s")
+            self._sleep(min(self.poll_s, remaining))
+
+    def _responsive(self, udid: str) -> bool:
+        """True when the booted simulator answers a trivial command inside it."""
+        result = self._simctl("spawn", udid, "launchctl", "print", "system", timeout=self.health_timeout_s)
+        return result.ok
 
     def _install(self, udid: str, build: BuildArtifact) -> None:
         result = self._simctl("install", udid, build.app_path, timeout=self.boot_timeout_s)

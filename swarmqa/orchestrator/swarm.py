@@ -60,6 +60,8 @@ class SwarmSettings:
     erase_mode: str = "uninstall"
     image: str | None = None
     acquire_timeout_s: float = 600.0
+    # Simulators booting at once; None means 1 under 16 GB of RAM, else 2.
+    max_concurrent_boots: int | None = None
     erase_on_release: bool = True
     # None means "on when a pool is configured".
     share_frontier: bool | None = None
@@ -99,7 +101,7 @@ class SwarmSettings:
                 if value not in ERASE_MODES:
                     errors.append(f"{name}: must be one of {', '.join(ERASE_MODES)}")
                     continue
-            elif key == "devices":
+            elif key in {"devices", "max_concurrent_boots"}:
                 if type(value) is not int or value < 1:
                     errors.append(f"{name}: must be an integer of at least 1")
                     continue
@@ -123,7 +125,13 @@ class SwarmSettings:
     @classmethod
     def from_config(cls, config: Any) -> "SwarmSettings":
         swarm = getattr(config, "swarm", None)
-        return cls.from_mapping(getattr(swarm, "settings", None))
+        table = getattr(swarm, "settings", None) or {}
+        settings = cls.from_mapping(table)
+        if "pool" not in table and _wants_ios_pool(config):
+            # More iOS workers than listed simulators: clone the simulators
+            # rather than make the workers share one.
+            settings.pool = "auto"
+        return settings
 
 
 def resolve_pool_kind(config: CampaignConfig, settings: SwarmSettings) -> str:
@@ -186,6 +194,7 @@ def create_pool(
             runner=runner,
             policy=CapacityPolicy(max_simulators=settings.devices),
             erase_mode=settings.erase_mode,  # type: ignore[arg-type]
+            max_concurrent_boots=settings.max_concurrent_boots,
         )
     if kind == "local_mac":
         from swarmqa.devices.local_mac import LocalMacPool
@@ -199,6 +208,16 @@ def create_pool(
     raise SwarmConfigError([f"swarm.pool: unknown pool {kind!r}"])
 
 
+def _wants_ios_pool(config: Any) -> bool:
+    """A local iOS campaign with more workers than `app.simulators` names."""
+    app = getattr(config, "app", None)
+    if app is None or getattr(app, "platform", None) != "ios" or getattr(config, "backend", "local") != "local":
+        return False
+    workers = int(getattr(config, "workers", 1) or 1)
+    listed = [name for name in (getattr(app, "simulators", None) or []) if str(name).strip()]
+    return workers > 1 and len(listed) < workers
+
+
 def _default_ios_source(config: CampaignConfig) -> tuple[str | None, str | None]:
     """With no golden or device_type, clone `app.simulator` if it is a UDID, else create one of that type."""
     from swarmqa.driver.ios import _DEFAULT_DEVICE, _is_udid
@@ -207,6 +226,33 @@ def _default_ios_source(config: CampaignConfig) -> tuple[str | None, str | None]
     if _is_udid(name):
         return name, None
     return None, name
+
+
+def build_once(config: CampaignConfig, *, runner: Any = None) -> None:
+    """Run `app.build_command` and point `app.path` (and `app.bundle_id`) at the `.app` it reports.
+
+    Raises `DeviceSetupError` when the build fails or reports no app, so the
+    campaign stops before leasing devices for an app that does not exist.
+    """
+    from swarmqa.devices import commands
+    from swarmqa.driver.ios import _discover_app_path
+    from swarmqa.driver.runner_client import read_info_plist
+
+    print("building the app once for every device: app.build_command", file=sys.stderr, flush=True)
+    result = commands.run(
+        runner if runner is not None else commands.default_runner,
+        ["/bin/sh", "-c", str(config.app.build_command)],
+        timeout=1800,
+    )
+    if not result.ok:
+        raise DeviceSetupError(f"app.build_command failed: {result.detail()}")
+    found = _discover_app_path(result.stdout + "\n" + result.stderr)
+    if not found or not Path(found).is_dir():
+        raise DeviceSetupError("app.build_command finished but did not report a .app path; set app.path")
+    config.app.path = str(found)
+    if not config.app.bundle_id:
+        bundle_id = str(read_info_plist(Path(found)).get("CFBundleIdentifier") or "").strip()
+        config.app.bundle_id = bundle_id or None
 
 
 def build_artifact(config: CampaignConfig) -> BuildArtifact | None:
@@ -390,6 +436,9 @@ class Swarm:
             swarm.board = FrontierBoard()
         if in_process and settings.graphs_merged:
             swarm.graph = CampaignGraph.open(swarm.root)
+        if pool is not None and not config.app.path and (config.app.build_command or "").strip():
+            # Build once for every device instead of once per worker.
+            build_once(config, runner=runner)
         swarm.build = build_artifact(config)
         return swarm
 
@@ -442,11 +491,37 @@ class Swarm:
         on_step: Callable[[str, str, str, str], None] | None = None,
         make_error: Callable[[Shard, str, str], WorkerResult],
     ) -> WorkerResult:
-        """Run one shard, leased on a device when the pool covers its kind."""
+        """Run one shard, leased on a device when the pool covers its kind.
+
+        A shard whose device failed under it (an error result starting with
+        `BackendUnavailable`) runs once more on a fresh lease: the device was
+        at fault, not the app.
+        """
         if self.pool is None or shard.kind not in DEVICE_KINDS:
             return run_shard(shard, worker_id, context=self.context(shard, worker_id))
         if self.capacity() <= 0:
             return make_error(shard, worker_id, f"no {self.platform} device available: the pool has none")
+        result = self._run_leased(run_shard, shard, worker_id, on_step=on_step, make_error=make_error)
+        if result.status == "error" and (result.error or "").startswith("BackendUnavailable"):
+            print(
+                f"warning: {worker_id}: the device failed ({result.error.splitlines()[0]}); "
+                "running the shard again on a fresh lease",
+                file=sys.stderr,
+                flush=True,
+            )
+            result = self._run_leased(run_shard, shard, worker_id, on_step=on_step, make_error=make_error, erase=True)
+        return result
+
+    def _run_leased(
+        self,
+        run_shard: Callable[..., WorkerResult],
+        shard: Shard,
+        worker_id: str,
+        *,
+        on_step: Callable[[str, str, str, str], None] | None,
+        make_error: Callable[[Shard, str, str], WorkerResult],
+        erase: bool | None = None,
+    ) -> WorkerResult:
         if on_step is not None:
             on_step(worker_id, shard.name, shard.kind, LEASE_STEP)
         held: list[Device] = []
@@ -457,7 +532,7 @@ class Swarm:
                 self.platform,  # type: ignore[arg-type]
                 self.build,
                 timeout_s=self.settings.acquire_timeout_s,
-                erase=self.settings.erase_on_release,
+                erase=self.settings.erase_on_release if erase is None else erase,
             ) as device:
                 held.append(device)
                 self.devices_leased.append(device.id)

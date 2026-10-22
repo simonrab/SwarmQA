@@ -8,6 +8,10 @@ and later workers start from that graph.
 
 Without a `[swarm]` table, or with `pool = "none"`, the campaign runs
 exactly as before: the same worker slots, progress lines, files and summary.
+One exception: a local iOS campaign with more `workers` than names in
+`app.simulators` gets `pool = "auto"` unless `[swarm]` sets `pool`, so each
+worker drives its own cloned simulator instead of sharing one. The worker
+count is still capped by what the Mac can run (see `docs/devices.md`).
 
 ## The `[swarm]` table
 
@@ -21,6 +25,7 @@ runtime = "iOS-26-5"      # iOS: runtime for `simctl create` (default: the newes
 erase_mode = "uninstall"  # iOS: "uninstall" (fast) or "erase" (a cold boot on every lease)
 image = "macos-base"      # tart: the VM image to clone
 acquire_timeout_s = 600   # how long a shard waits for a free device
+max_concurrent_boots = 1  # iOS: simulators booting at once (default 1 under 16 GB of RAM, else 2)
 erase_on_release = true   # wipe app state when a lease ends
 share_frontier = true     # crawl workers split the frontier (default: on when a pool is set)
 merge_graphs = true       # merge screen graphs and seed later workers (default: on when a pool is set)

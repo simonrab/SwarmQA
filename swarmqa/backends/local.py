@@ -216,6 +216,9 @@ def execute_shard(
             )
     except ChunkNotReady as exc:
         result = make_error_result(shard, worker_id, str(exc), config.backend)
+    except BackendUnavailable as exc:
+        # The prefix tells the swarm the device, not the app, failed (it retries once).
+        result = make_error_result(shard, worker_id, f"BackendUnavailable: {exc}", config.backend)
     except Exception as exc:
         result = make_error_result(shard, worker_id, str(exc), config.backend)
     if not result.started_at:
