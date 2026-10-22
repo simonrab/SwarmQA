@@ -155,10 +155,19 @@ class DecisionConfig:
     mode: DecisionMode = "heuristic"
     escalate_after: int = 3
     max_model_calls: int = 8
-    model_timeout_s: float = 30.0
+    # None: the model provider's own default (see `step_timeout`).
+    model_timeout_s: float | None = None
     cache_observations: bool = True
     system_one: SystemOneConfig = field(default_factory=SystemOneConfig)
     computer_use: ComputerUseConfig = field(default_factory=ComputerUseConfig)
+
+    def step_timeout(self, provider: str | None = None) -> float:
+        """`model_timeout_s` when set, else `provider`'s default step timeout."""
+        if self.model_timeout_s is not None:
+            return self.model_timeout_s
+        from swarmqa.llm.settings import step_timeout_default
+
+        return step_timeout_default(provider)
 
 
 @dataclass

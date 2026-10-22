@@ -36,6 +36,7 @@ from swarmqa.explorer.screen_graph import (
     TAP_ROLES,
     Control,
     ScreenGraph,
+    action_key,
     actionable_controls,
     control_key,
     fingerprint,
@@ -43,6 +44,7 @@ from swarmqa.explorer.screen_graph import (
     normalize_role,
 )
 from swarmqa.llm.protocol import HistoryStep, ModelError, ModelProvider, StepDecision
+from swarmqa.llm.serialize import NO_EFFECT
 from swarmqa.models import CampaignConfig, ElementQuery, Finding, Shard, StepResult, UIElement, WorkerResult
 from swarmqa.reporter.findings import fingerprint_for, write_finding, write_replay
 from swarmqa.video_policy import keep_video, should_start_video
@@ -96,7 +98,9 @@ class AgentLoopSettings:
             "max_steps": explorer.max_steps,
             "max_wall_time_s": explorer.max_time_s,
             "max_model_calls": explorer.decision.max_model_calls,
-            "model_timeout_s": explorer.decision.model_timeout_s,
+            "model_timeout_s": explorer.decision.step_timeout(
+                config.llm.settings.get("provider", "anthropic") if config.llm.enabled else None
+            ),
             "platform": config.app.platform,
         }
         values.update(overrides)
@@ -225,6 +229,20 @@ def exact_element(tree: list[UIElement], query: ElementQuery) -> UIElement | Non
     return candidates[0]
 
 
+def tappable_at(tree: list[UIElement], point: tuple[float, float]) -> UIElement | None:
+    """The smallest enabled tappable element whose frame contains `point`."""
+    x, y = point
+    best: UIElement | None = None
+    best_area = float("inf")
+    for element in walk(modal_scope(tree)):
+        if not element.enabled or element.frame is None or normalize_role(element.role) not in TAP_ROLES:
+            continue
+        left, top, width, height = element.frame
+        if left <= x <= left + width and top <= y <= top + height and width * height < best_area:
+            best, best_area = element, width * height
+    return best
+
+
 def precise_target(
     tree: list[UIElement], query: ElementQuery
 ) -> tuple[ElementQuery, tuple[float, float] | None]:
@@ -337,6 +355,8 @@ class _AgentLoop:
         self.current_id = ""
         self.unreachable: set[str] = set()
         self.back_tried: set[str] = set()
+        # Per screen: actions (see `_identity`) that left that screen unchanged.
+        self.no_effect: dict[str, set[str]] = {}
         self.relaunches_for: dict[str, int] = {}
         self.video_started = False
         self.video_start_ts: float | None = None
@@ -695,6 +715,11 @@ class _AgentLoop:
                 )
         if self.provider is not None and self.model_calls < self.settings.max_model_calls:
             decision = self._ask_model(obs)
+            if decision is not None and self._identity(decision, obs) in self.no_effect.get(self.current_id, ()):
+                self._note(
+                    "model", "failed", f"rejected repeat of {describe(decision)} (no effect on this screen); falling back"
+                )
+                decision = None
             if decision is not None:
                 return _Plan(decision, "model")
         if self.provider is None and goal_satisfied(obs.tree, self.expected) and not picks:
@@ -980,8 +1005,11 @@ class _AgentLoop:
         self.fail_streak = self.fail_streak + 1 if error else 0
         if error:
             summary = f"failed: {error}"
+        elif changed:
+            summary = f"screen changed to {after_id}"
         else:
-            summary = f"screen changed to {after_id}" if changed else "no visible change"
+            summary = NO_EFFECT
+            self.no_effect.setdefault(before_id, set()).add(self._identity(decision, before))
         self.history.append(HistoryStep(action=decision, screen=before_id, outcome=summary))
         self._visit(after, before=before, action=decision, since=since, error=error)
         return True
@@ -997,11 +1025,26 @@ class _AgentLoop:
         if control is not None:
             self.graph.mark_tried(screen_id, control)
             return
-        if decision.target is None:
-            return
-        element = exact_element(before.tree, decision.target)
+        element = self._element_for(decision, before)
         if element is not None:
             self.graph.mark_tried(screen_id, control_key(element))
+
+    @staticmethod
+    def _element_for(decision: StepDecision, obs: ScreenObservation) -> UIElement | None:
+        """The element a tap, type or tap at a point acts on, when the tree has it."""
+        if decision.kind in ("tap", "type") and decision.target is not None:
+            return exact_element(obs.tree, decision.target)
+        if decision.kind == "tap_point" and decision.point is not None:
+            return tappable_at(obs.tree, decision.point)
+        return None
+
+    @classmethod
+    def _identity(cls, decision: StepDecision, obs: ScreenObservation) -> str:
+        """What the action does on `obs`: a tap by element and a tap at a point on it are the same."""
+        element = cls._element_for(decision, obs) if decision.kind in ("tap", "tap_point") else None
+        if element is not None:
+            return f"tap:{control_key(element)}"
+        return action_key(decision_to_json(decision))
 
     @staticmethod
     def _resolve(decision: StepDecision, before: ScreenObservation) -> StepDecision:

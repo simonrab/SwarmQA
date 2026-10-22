@@ -418,7 +418,8 @@ def _validate_decision(errors: list[str], config: CampaignConfig) -> None:
     _enum(errors, "explorer.decision.mode", decision.mode, _DECISION_MODES)
     _int_at_least(errors, "explorer.decision.escalate_after", decision.escalate_after, 1)
     _int_at_least(errors, "explorer.decision.max_model_calls", decision.max_model_calls, 0)
-    _number_above(errors, "explorer.decision.model_timeout_s", decision.model_timeout_s, 0)
+    if decision.model_timeout_s is not None:
+        _number_above(errors, "explorer.decision.model_timeout_s", decision.model_timeout_s, 0)
     _bool_field(
         errors, "explorer.decision.cache_observations", decision.cache_observations
     )

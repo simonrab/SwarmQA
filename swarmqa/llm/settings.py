@@ -56,6 +56,15 @@ DEFAULT_EFFORT: dict[str, str] = {"step": "low", "judge": "medium", "flows": "hi
 
 DEFAULT_MAX_TOKENS: dict[str, int] = {"step": 4096, "judge": 16000, "flows": 16000, "computer_use": 8000}
 
+# Seconds one explore step may wait for the model when `explorer.decision.model_timeout_s`
+# is unset. A CLI call starts a whole agent process, so it gets longer than an API call.
+DEFAULT_STEP_TIMEOUT_S = 30.0
+CLI_STEP_TIMEOUT_S = 90.0
+
+
+def step_timeout_default(provider: str | None) -> float:
+    return CLI_STEP_TIMEOUT_S if provider in ("claude_cli", "codex_cli") else DEFAULT_STEP_TIMEOUT_S
+
 
 class MissingExtraError(ModelError):
     """The provider's SDK is not installed."""

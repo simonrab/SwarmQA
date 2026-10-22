@@ -15,6 +15,8 @@ from swarmqa.checks._tree import first_text
 from swarmqa.models import ElementQuery, UIElement
 
 MAX_ELEMENTS = 400
+# The outcome of a step that left the screen as it was.
+NO_EFFECT = "no effect: the screen stayed the same"
 _LABEL_LIMIT = 80
 
 
@@ -58,6 +60,8 @@ def history_text(history: list[HistoryStep], *, limit: int) -> str:
             parts.append(f"-> {_clip(step.outcome, 160)}")
         if step.screen:
             parts.append(f"(screen: {_clip(step.screen, 60)})")
+        if step.outcome == NO_EFFECT:
+            parts.append("[NO EFFECT - do not repeat on this screen]")
         lines.append(" ".join(parts))
     return "\n".join(lines)
 

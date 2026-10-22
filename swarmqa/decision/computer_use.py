@@ -131,7 +131,7 @@ class ComputerUseEvaluator:
         self.config = config or DecisionConfig()
         self.computer_use = computer_use or self.config.computer_use
         self.timeout_s = (
-            self.config.model_timeout_s if timeout_s is None else timeout_s
+            self.config.step_timeout() if timeout_s is None else timeout_s
         )
         self._calls = 0
         self._model_calls_used = model_calls_used

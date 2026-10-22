@@ -88,7 +88,7 @@ class SystemOneEvaluator:
         self.config = config or DecisionConfig()
         self.system_one = system_one or self.config.system_one
         self.timeout_s = (
-            self.config.model_timeout_s if timeout_s is None else timeout_s
+            self.config.step_timeout() if timeout_s is None else timeout_s
         )
 
     def decide(self, obs: Observation) -> DecisionAction:

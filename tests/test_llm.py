@@ -20,7 +20,7 @@ from swarmqa.llm.openai_provider import OpenAISDKTransport
 from swarmqa.llm.parse import parse_flows, parse_judgment, parse_step
 from swarmqa.llm.pricing import ModelPrice, cost_of, price_for
 from swarmqa.llm.protocol import ModelError, ModelRefused, Rubric, StepDecision, Usage
-from swarmqa.llm.serialize import files_text, history_text, tree_text
+from swarmqa.llm.serialize import NO_EFFECT, files_text, history_text, tree_text
 from swarmqa.llm.settings import LLMSettings, MissingExtraError, create_provider
 from swarmqa.llm.transport import (
     RecordingTransport,
@@ -182,6 +182,8 @@ def test_history_and_files_text():
     text = history_text(steps, limit=2)
     assert text.splitlines()[0] == "[1 earlier steps omitted]"
     assert "2. key cmd+n -> new window" in text
+    dead = HistoryStep(action=StepDecision(kind="tap_point", point=(1, 2)), screen="abc", outcome=NO_EFFECT)
+    assert history_text([dead], limit=5).endswith("[NO EFFECT - do not repeat on this screen]")
     long = files_text("x" * 50, [], max_chars=20)
     assert long.endswith("more characters not shown]")
 

@@ -16,6 +16,7 @@ from swarmqa.explorer.screen_graph import ScreenGraph, fingerprint
 from swarmqa.intent.ingest import action_from_dict
 from swarmqa.llm.fake import FakeModelProvider
 from swarmqa.llm.protocol import ModelError, StepDecision
+from swarmqa.llm.serialize import NO_EFFECT
 from swarmqa.models import ElementQuery, Shard, UIElement
 from swarmqa.reporter.findings import fingerprint_for
 from swarmqa.testing import make_app, sample_config
@@ -347,6 +348,60 @@ def test_model_error_falls_back_and_counts_against_the_cap(tmp_path):
     assert "click:Settings" in driver.actions_log
 
 
+def _with_dead_row(driver: FakeDriver) -> FakeDriver:
+    """Home gets a "Cloud sync" row that does nothing when tapped."""
+    driver.tree[0].children.append(UIElement(role="cell", label="Cloud sync", frame=(0, 300, 400, 44)))
+    return driver
+
+
+def test_a_repeat_that_did_nothing_is_rejected_and_the_loop_falls_back(tmp_path):
+    provider = FakeModelProvider(
+        steps=[
+            StepDecision(kind="tap_point", point=(200, 320)),
+            # The same row at a slightly different point, then by element.
+            StepDecision(kind="tap_point", point=(201, 324)),
+            StepDecision(kind="tap", target=ElementQuery(role="cell", label="Cloud sync")),
+            StepDecision(kind="done"),
+        ]
+    )
+    driver = _with_dead_row(make_driver(tmp_path, reset_on_launch=False))
+    result = run(
+        tmp_path,
+        driver,
+        goal="turn on cloud sync",
+        provider=provider,
+        settings_=AgentLoopSettings(max_steps=6, heuristic_first=False),
+    )
+    assert driver.actions_log.count("tap:200,320") == 1
+    assert not any(a.startswith("tap:201") or a == "click:Cloud sync" for a in driver.actions_log)
+    rejected = [s for s in result.steps if s.action == "model" and "rejected repeat" in s.message]
+    assert len(rejected) == 1
+    # The fallback tried something else instead.
+    assert "click:Settings" in driver.actions_log
+
+
+def test_a_tap_at_a_point_marks_the_row_under_it_tried(tmp_path):
+    provider = FakeModelProvider(steps=[StepDecision(kind="tap_point", point=(200, 320)), StepDecision(kind="done")])
+    driver = _with_dead_row(make_driver(tmp_path, reset_on_launch=False))
+    run(tmp_path, driver, goal="turn on cloud sync", provider=provider, settings_=AgentLoopSettings(heuristic_first=False))
+    node = load_graph(tmp_path).nodes[fingerprint(driver.tree)]
+    assert any("Cloud sync" in key for key in node.tried)
+
+
+def test_a_step_that_changed_nothing_is_marked_in_the_history(tmp_path):
+    seen: list[list] = []
+
+    class Spy(FakeModelProvider):
+        def decide_step(self, obs, goal, history, *, timeout_s=30.0):
+            seen.append(list(history))
+            return super().decide_step(obs, goal, history, timeout_s=timeout_s)
+
+    provider = Spy(steps=[StepDecision(kind="tap_point", point=(200, 320)), StepDecision(kind="done")])
+    driver = _with_dead_row(make_driver(tmp_path, reset_on_launch=False))
+    run(tmp_path, driver, goal="turn on cloud sync", provider=provider, settings_=AgentLoopSettings(heuristic_first=False))
+    assert seen[1][0].outcome == NO_EFFECT
+
+
 def test_max_model_calls_is_honoured(tmp_path):
     provider = FakeModelProvider()  # default: taps untried controls, never done early
     run(
@@ -395,6 +450,23 @@ def test_wall_time_budget_uses_the_injected_clock(tmp_path):
     assert result.steps[-1].message == "max_wall_time"
     actions = [a for a in driver.actions_log if a.startswith(("click:", "type:"))]
     assert len(actions) == 3
+
+
+def test_wall_time_starts_after_the_launch(tmp_path):
+    now = [0.0]
+
+    class SlowLaunch(ObservingFake):
+        def launch(self):
+            now[0] += 1000  # simulator boot and runner start
+            super().launch()
+
+    def clock():
+        now[0] += 1
+        return now[0]
+
+    driver = make_driver(tmp_path, cls=SlowLaunch)
+    result = run(tmp_path, driver, clock=clock, settings_=AgentLoopSettings(max_steps=2, max_wall_time_s=100))
+    assert result.steps[-1].message == "max_steps"
 
 
 # Observation and checks ---------------------------------------------------
@@ -672,6 +744,16 @@ def test_settings_from_config():
     loop_settings = AgentLoopSettings.from_config(config, mode="crawl")
     assert (loop_settings.max_steps, loop_settings.max_wall_time_s, loop_settings.max_model_calls) == (7, 11, 2)
     assert loop_settings.platform == "ios" and loop_settings.mode == "crawl"
+
+
+def test_cli_providers_get_a_longer_step_timeout_unless_one_is_set():
+    config = sample_config()
+    assert AgentLoopSettings.from_config(config).model_timeout_s == 30.0
+    config.llm.enabled = True
+    config.llm.settings = {"provider": "claude_cli"}
+    assert AgentLoopSettings.from_config(config).model_timeout_s == 90.0
+    config.explorer.decision.model_timeout_s = 45.0
+    assert AgentLoopSettings.from_config(config).model_timeout_s == 45.0
 
 
 # Review regressions -----------------------------------------------------------
