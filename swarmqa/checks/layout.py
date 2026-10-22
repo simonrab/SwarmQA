@@ -33,6 +33,7 @@ from swarmqa.checks._tree import (
     query_for,
     screen_frame,
     stale_nodes,
+    system_overlay_nodes,
     usable_frame,
 )
 from swarmqa.checks.protocol import CheckIssue, StepContext
@@ -141,7 +142,10 @@ class LayoutCheck:
         # `flat` keeps every node so ancestor indices resolve; the rules only
         # look at nodes on the page that is actually on screen.
         flat = all_nodes
-        live = [node for node in all_nodes if node.index not in stale]
+        # Keyboards and system popups (the keyboard tip) are drawn by iOS in
+        # their own windows; their layout is not the app's.
+        system = system_overlay_nodes(all_nodes)
+        live = [node for node in all_nodes if node.index not in stale and node.index not in system]
         settings = self.settings
         issues: list[CheckIssue] = []
         if settings.truncation:
