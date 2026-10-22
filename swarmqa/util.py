@@ -17,7 +17,7 @@ def parse_duration(value: str) -> float:
     """
     text = value.strip().lower()
     if not text or text.isdigit():
-        raise ValueError(f"duration must include a unit (s, m, h): {value!r}")
+        raise ValueError(f"duration must include a unit (s, m, h), for example {text}s or 15m: {value!r}")
     match = _DURATION.fullmatch(text)
     if not match or match.group(0) == "":
         raise ValueError(f"unrecognized duration: {value!r}")

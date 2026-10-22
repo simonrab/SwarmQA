@@ -390,6 +390,8 @@ class UIElement:
     enabled: bool = True
     frame: tuple[float, float, float, float] | None = None
     children: list["UIElement"] = field(default_factory=list)
+    # Placeholder text of an empty field, when the platform reports it.
+    placeholder: str | None = None
 
 
 @dataclass

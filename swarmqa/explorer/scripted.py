@@ -13,7 +13,9 @@ from swarmqa.driver.v1_adapter import as_v2
 from swarmqa.errors import (
     AppCrashedError,
     AppMissingError,
+    BackendUnavailable,
     ElementNotFoundError,
+    InputError,
     UITimeoutError,
 )
 from swarmqa.models import (
@@ -40,6 +42,7 @@ _STEP_FAILURES = (
     UITimeoutError,
     ElementNotFoundError,
     AppMissingError,
+    InputError,
 )
 
 
@@ -68,6 +71,8 @@ def run_scripted(
     try:
         try:
             driver.launch()
+        except BackendUnavailable:
+            raise  # the simulator or runner is at fault: an error result, not a finding
         except Exception as exc:
             status = "failed"
             _record_launch_failure(

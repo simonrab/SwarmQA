@@ -112,6 +112,18 @@ def test_actionable_controls_skip_disabled_and_unlabeled():
     assert [(c.label, c.kind) for c in controls] == [("Go", "tap"), ("Email", "type")]
 
 
+def test_actionable_controls_only_inside_an_open_alert():
+    # Taps on controls behind an alert land on the alert, so only its buttons are offered.
+    tree = _home() + [
+        UIElement(
+            role="alert",
+            label="Error",
+            children=[UIElement(role="text", label="Sign in failed"), UIElement(role="button", label="OK")],
+        )
+    ]
+    assert [c.label for c in actionable_controls(tree)] == ["OK"]
+
+
 def _graph() -> ScreenGraph:
     graph = ScreenGraph()
     home = actionable_controls(_home())

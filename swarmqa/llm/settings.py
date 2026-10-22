@@ -1,7 +1,7 @@
 """Model provider settings and the provider factory.
 
-`LLMSettings` is local to `swarmqa.llm` until the campaign config grows an
-`[llm]` table; `LLMSettings.from_mapping` reads that table's shape.
+`LLMSettings.from_mapping` reads the campaign config's `[llm]` table (all
+keys but `enabled`).
 `create_provider` imports a model SDK only when it builds a live
 transport, so the core install never needs `anthropic` or `openai`.
 """

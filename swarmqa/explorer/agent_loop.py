@@ -23,7 +23,14 @@ from swarmqa.decision.heuristic import goal_satisfied, matches_name, parse_goal,
 from swarmqa.driver.protocol import ScreenObservation, UnsupportedAction
 from swarmqa.driver.query import find_element, matches_query, walk
 from swarmqa.driver.v1_adapter import as_v2
-from swarmqa.errors import AppCrashedError, AppMissingError, ElementNotFoundError, UITimeoutError
+from swarmqa.errors import (
+    AppCrashedError,
+    AppMissingError,
+    AQAError,
+    BackendUnavailable,
+    ElementNotFoundError,
+    UITimeoutError,
+)
 from swarmqa.flows.cache import CachedFlow, CachedStep, FlowCache
 from swarmqa.explorer.screen_graph import (
     TAP_ROLES,
@@ -32,6 +39,7 @@ from swarmqa.explorer.screen_graph import (
     actionable_controls,
     control_key,
     fingerprint,
+    modal_scope,
     normalize_role,
 )
 from swarmqa.llm.protocol import HistoryStep, ModelError, ModelProvider, StepDecision
@@ -42,6 +50,8 @@ from swarmqa.video_policy import keep_video, should_start_video
 LoopMode = Literal["goal", "crawl"]
 _DEFAULT_SIZE = (390.0, 844.0)
 _BACK_NAMES = frozenset({"back", "done", "close", "cancel"})
+# Inside an alert, these dismiss it too.
+_DISMISS_NAMES = _BACK_NAMES | {"ok", "dismiss", "not now", "got it"}
 
 
 @dataclass
@@ -385,6 +395,11 @@ class _AgentLoop:
             return False
         except AppMissingError as exc:
             self._launch_failed("App failed to launch", f"App bundle missing, could not launch: {exc}")
+            return False
+        except BackendUnavailable as exc:
+            # The simulator or runner is at fault, not the app: an error result, no finding.
+            self._note("launch", "failed", f"environment: {exc}")
+            self.fatal = f"BackendUnavailable: {exc}"
             return False
         except Exception as exc:  # noqa: BLE001 - any launch failure is an error result
             self._launch_failed("App failed to launch", f"{type(exc).__name__}: {exc}")
@@ -748,7 +763,7 @@ class _AgentLoop:
         node = self.graph.nodes.get(self.current_id)
         tried = node.tried if node else set()
         found: list[UIElement] = []
-        for element in walk(tree):
+        for element in walk(modal_scope(tree)):
             if normalize_role(element.role) not in TAP_ROLES or not element.enabled:
                 continue
             if control_key(element) in tried:
@@ -795,7 +810,7 @@ class _AgentLoop:
         return ""
 
     def _crawl_plan(self) -> _Plan:
-        present = {control_key(element) for element in walk(self.current.tree)} if self.current else set()
+        present = {control_key(element) for element in walk(modal_scope(self.current.tree))} if self.current else set()
         if self.shared is not None:
             # Publish what this worker learnt; take others' screens, routes and claims.
             self.shared.exchange(self.graph, self.worker_id)
@@ -867,6 +882,13 @@ class _AgentLoop:
             outcome = _Outcome(replay=self._replay_for(effective) or self.planned_replay)
         except (UnsupportedAction, ElementNotFoundError) as exc:
             error = f"{type(exc).__name__}: {exc}"
+        except BackendUnavailable:
+            raise
+        except AQAError as exc:
+            # One action the driver could not do (for example typing that lost
+            # focus) is a failed step, not the end of the session.
+            error = f"{type(exc).__name__}: {exc}"
+            outcome = _Outcome(replay=self._replay_for(effective) or self.planned_replay)
         if outcome.note:
             text = f"{text} ({outcome.note})"
         self.narrative.append(text)
@@ -1008,13 +1030,15 @@ class _AgentLoop:
     @staticmethod
     def _back_button(tree: list[UIElement]) -> UIElement | None:
         best: UIElement | None = None
+        scope = modal_scope(tree)
+        wanted = _DISMISS_NAMES if scope is not tree else _BACK_NAMES
 
         def visit(nodes: list[UIElement], in_nav: bool) -> UIElement | None:
             nonlocal best
             for element in nodes:
                 role = normalize_role(element.role)
                 names = {(element.label or "").strip().lower(), (element.identifier or "").strip().lower()}
-                if role in TAP_ROLES and element.enabled and names & _BACK_NAMES:
+                if role in TAP_ROLES and element.enabled and names & wanted:
                     if in_nav:
                         return element
                     best = best or element
@@ -1023,7 +1047,7 @@ class _AgentLoop:
                     return found
             return None
 
-        return visit(tree, False) or best
+        return visit(scope, False) or best
 
     @staticmethod
     def _replay_for(decision: StepDecision) -> list[dict]:

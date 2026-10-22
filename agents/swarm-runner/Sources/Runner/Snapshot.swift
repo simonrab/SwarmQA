@@ -7,6 +7,7 @@ struct Node {
     var label: String?
     var identifier: String?
     var value: String?
+    var placeholder: String?
     var enabled: Bool
     var frame: CGRect?
     var children: [Node]
@@ -23,6 +24,8 @@ struct Node {
         }
         identifier = snapshot.identifier.isEmpty ? nil : snapshot.identifier
         value = stringValue(snapshot.value)
+        let hint = snapshot.placeholderValue ?? ""
+        placeholder = hint.isEmpty ? nil : hint
         enabled = snapshot.isEnabled
         let rect = snapshot.frame
         frame = (rect.isNull || rect.isInfinite) ? nil : rect
@@ -38,6 +41,10 @@ struct Node {
         json.string(identifier)
         json.raw(",\"value\":")
         json.string(value)
+        if let placeholder {
+            json.raw(",\"placeholder\":")
+            json.string(placeholder)
+        }
         json.raw(",\"enabled\":")
         json.bool(enabled)
         json.raw(",\"frame\":")

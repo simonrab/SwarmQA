@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from swarmqa.checks._tree import MODAL_ROLES
 from swarmqa.driver.query import walk
 from swarmqa.models import ElementQuery, UIElement
 
@@ -124,11 +125,27 @@ def control_key(element: UIElement) -> str:
     return f"{element.role}|{element.label}|{element.identifier or ''}"
 
 
+def modal_scope(tree: list[UIElement]) -> list[UIElement]:
+    """The part of `tree` a person can reach: the last modal (alert, sheet, dialog) when one is up, else all of it.
+
+    Controls behind an open alert are in the tree but taps on them land on
+    the alert, so exploring them only produces dead taps.
+    """
+    top: UIElement | None = None
+    for element in walk(tree):
+        if normalize_role(element.role) in MODAL_ROLES:
+            top = element
+    return [top] if top is not None else tree
+
+
 def actionable_controls(tree: list[UIElement]) -> list[Control]:
-    """Enabled interactive elements with a label or identifier, in tree order, once each."""
+    """Enabled interactive elements with a label or identifier, in tree order, once each.
+
+    When a modal is up, only its controls count (see `modal_scope`).
+    """
     found: list[Control] = []
     seen: set[str] = set()
-    for element in walk(tree):
+    for element in walk(modal_scope(tree)):
         role = normalize_role(element.role)
         if role not in INTERACTIVE_ROLES or not element.enabled:
             continue

@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from swarmqa.driver.fake import FakeDriver
-from swarmqa.errors import AppCrashedError
+from swarmqa.errors import AppCrashedError, BackendUnavailable
 from swarmqa.explorer.scripted import run_scripted
 from swarmqa.models import Action, ElementQuery
 from swarmqa.report.layout import ensure_campaign_layout, worker_dir
@@ -246,6 +248,19 @@ def test_continue_runs_later_steps(tmp_path: Path):
     assert [step.status for step in result.steps] == ["failed", "passed"]
     assert len(result.findings) == 1
     assert "click:Save" in driver.actions_log
+
+
+def test_simulator_that_cannot_boot_is_an_error_not_a_finding(tmp_path: Path):
+    class NoSimulator(FakeDriver):
+        def launch(self):
+            raise BackendUnavailable("Simulator swarmqa-live did not boot")
+
+    app = make_app(tmp_path)
+    config = sample_config(app)
+    _, work = _campaign(tmp_path)
+    shard = scripted_shard([Action(action="click", target=ElementQuery(role="button", label="Save"))])
+    with pytest.raises(BackendUnavailable):
+        run_scripted(shard, NoSimulator(app, work), config, worker_id="w1", work_dir=work)
 
 
 def test_launch_failure_is_critical_launch_finding(tmp_path: Path):

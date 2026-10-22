@@ -22,7 +22,7 @@ provider = create_provider(LLMSettings(provider="anthropic", max_cost=2.0), mete
 decision = provider.decide_step(obs, "Change the account email", history)
 ```
 
-`LLMSettings.from_mapping(table)` reads a TOML-style table with the same field names, so a future `[llm]` config section can be passed straight through. The campaign config does not have that section yet.
+`LLMSettings.from_mapping(table)` reads a TOML-style table with the same field names. The campaign config's `[llm]` table is passed straight through: `enabled = true` turns the provider on for the agent explorer (`explorer.engine = "agent"`), and the other keys are these settings.
 
 ## Settings
 

@@ -41,6 +41,7 @@ from swarmqa.driver.protocol import CrashReport, LogEntry, ScreenObservation
 from swarmqa.driver.query import find_element
 from swarmqa.errors import (
     AQAError,
+    InputError,
     AppCrashedError,
     AppMissingError,
     BackendUnavailable,
@@ -98,6 +99,8 @@ def driver_error(error: schema.RunnerError, *, bundle_id: str | None = None) -> 
         exc = ElementNotFoundError(text)
     elif code == "timeout":
         exc = UITimeoutError(text)
+    elif code == "input_failed" or (code == "internal" and "keyboard focus" in message.lower()):
+        exc = InputError(text)
     elif code == "protocol_mismatch":
         exc = BackendUnavailable(
             f"the swarm runner speaks a different protocol version ({text}); "

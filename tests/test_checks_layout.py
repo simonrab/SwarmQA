@@ -209,6 +209,13 @@ def test_missing_label(driver):
     assert issues[0].title == "Unlabeled button at (360, 70)"
 
 
+def test_field_named_only_by_placeholder_is_advisory(driver):
+    field = UIElement(role="textfield", placeholder="Email address", frame=(20, 200, 360, 44))
+    issues = _run(driver, "missing_labels", [field])
+    assert [(i.severity, i.advisory, i.category) for i in issues] == [("low", True, "confusing")]
+    assert "Email address" in issues[0].title
+
+
 def test_missing_label_guards(driver):
     elements = [
         UIElement(role="switch", identifier="wifi", frame=(0, 0, 51, 31)),
