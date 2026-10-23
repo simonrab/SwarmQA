@@ -14,7 +14,7 @@ from typing import Any, Literal, Mapping
 from swarmqa.llm.pricing import ModelPrice
 from swarmqa.llm.protocol import ModelError, ModelProvider
 
-ProviderName = Literal["anthropic", "openai", "fake", "chat", "claude_cli", "codex_cli"]
+ProviderName = Literal["anthropic", "openai", "fake", "chat", "claude_cli", "codex_cli", "system_one"]
 CallKind = Literal["step", "judge", "flows", "computer_use"]
 CALL_KINDS: tuple[str, ...] = ("step", "judge", "flows", "computer_use")
 
@@ -41,6 +41,9 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
     # Claude Code model aliases; "default" leaves the CLI's own choice.
     "claude_cli": {"step": "sonnet", "judge": "opus", "flows": "opus", "computer_use": "opus"},
     "codex_cli": {kind: "default" for kind in CALL_KINDS},
+    # A Jev-compatible System One server (swarmqa.llm.system_one); its model
+    # is `[llm.system_one] model`, and these only name it in reports.
+    "system_one": {kind: "jev-latest" for kind in CALL_KINDS},
 }
 
 DEFAULT_API_KEY_ENV = {
@@ -50,6 +53,7 @@ DEFAULT_API_KEY_ENV = {
     "chat": "",
     "claude_cli": "",
     "codex_cli": "",
+    "system_one": "",
 }
 
 DEFAULT_EFFORT: dict[str, str] = {"step": "low", "judge": "medium", "flows": "high", "computer_use": "medium"}
@@ -60,9 +64,14 @@ DEFAULT_MAX_TOKENS: dict[str, int] = {"step": 4096, "judge": 16000, "flows": 160
 # is unset. A CLI call starts a whole agent process, so it gets longer than an API call.
 DEFAULT_STEP_TIMEOUT_S = 30.0
 CLI_STEP_TIMEOUT_S = 90.0
+# A System One answer takes well under a second. An escalated step gets the
+# escalation provider's own default (see `SystemOneProvider`).
+SYSTEM_ONE_STEP_TIMEOUT_S = 5.0
 
 
 def step_timeout_default(provider: str | None) -> float:
+    if provider == "system_one":
+        return SYSTEM_ONE_STEP_TIMEOUT_S
     return CLI_STEP_TIMEOUT_S if provider in ("claude_cli", "codex_cli") else DEFAULT_STEP_TIMEOUT_S
 
 
@@ -91,7 +100,10 @@ class LLMSettings:
     `computer_use`). `max_image_edge` bounds the screenshot's long edge in
     pixels; `max_prompt_chars` bounds diff text for `propose_flows`.
     `anthropic_fallbacks` opts Opus/Sonnet 5.5-class requests into
-    server-side refusal fallback.
+    server-side refusal fallback. `system_one` is the `[llm.system_one]`
+    table (see `swarmqa.llm.system_one.SystemOneSettings`); with
+    `provider = "system_one"`, its `escalate_to` provider is built from
+    these same settings.
     """
 
     provider: ProviderName = "anthropic"
@@ -114,6 +126,7 @@ class LLMSettings:
     history_limit: int = 12
     step_screenshot: bool = False
     anthropic_fallbacks: bool = True
+    system_one: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.provider not in DEFAULT_MODELS:
@@ -129,6 +142,12 @@ class LLMSettings:
         for key in (*self.effort, *self.max_tokens):
             if key not in CALL_KINDS:
                 raise ValueError(f"unknown call kind: {key!r}")
+        if self.provider == "system_one":
+            from swarmqa.llm.system_one import SystemOneSettings
+
+            escalate_to = SystemOneSettings.from_mapping(self.system_one).escalate_to
+            if escalate_to and escalate_to not in DEFAULT_MODELS:
+                raise ValueError(f"unknown system_one.escalate_to provider: {escalate_to!r}")
 
     def model_for(self, kind: str) -> str:
         explicit = getattr(self, f"{kind}_model")
@@ -178,6 +197,22 @@ def create_provider(
     `MissingExtraError` naming the extra to install.
     """
     settings = settings or LLMSettings()
+    if settings.provider == "system_one":
+        from dataclasses import replace
+
+        from swarmqa.llm.system_one import create_system_one_provider
+
+        escalate_to = settings.system_one.get("escalate_to") or ""
+        escalate = create_provider(replace(settings, provider=escalate_to), meter=meter) if escalate_to else None
+        return create_system_one_provider(
+            settings.system_one,
+            escalate=escalate,
+            transport=transport,
+            meter=meter,
+            max_retries=settings.max_retries,
+            max_calls=settings.max_calls,
+            escalate_timeout_s=step_timeout_default(escalate_to) if escalate_to else None,
+        )
     if settings.provider == "fake":
         from swarmqa.llm.fake import FakeModelProvider
 

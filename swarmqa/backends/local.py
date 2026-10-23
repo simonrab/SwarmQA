@@ -314,7 +314,7 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl=
         checks.append(FrictionCheck.for_shard(shard, config.explorer.friction))
     driver = _make_driver(config, work_dir, driver_factory)
     try:
-        return run_agent_loop(
+        result = run_agent_loop(
             shard,
             driver,
             config,
@@ -327,8 +327,40 @@ def _run_agent(shard, worker_id, work_dir, config, driver_factory, shared_crawl=
             flow_cache=FlowCache.from_config(config) if shard.goal else None,
             shared_crawl=shared_crawl,
         )
+        if getattr(provider, "name", "") == "system_one":
+            _system_one_after(provider, result, work_dir)
+        return result
     finally:
         _close_driver(driver)
+
+
+def _system_one_after(provider, result: WorkerResult, work_dir: Path) -> None:
+    """Triage the worker's findings with System One and save its step counters.
+
+    Triage fails open: a finding System One cannot answer for stays as it was.
+    """
+    from swarmqa.llm.system_one import apply_triage
+
+    record: dict = {"stats": provider.stats.as_dict(), "triage": []}
+    if provider.settings.triage and result.findings:
+        triaged = apply_triage(provider, result.findings, min_confidence=provider.settings.min_confidence)
+        root = _infer_campaign_root(work_dir)
+        for finding, answer in triaged:
+            persist_finding(finding, root)
+            record["triage"].append(
+                {
+                    "finding": finding.id,
+                    "title": finding.title,
+                    "verdict": answer.verdict,
+                    "confidence": round(answer.confidence, 3),
+                    "user_visible": answer.user_visible,
+                    "advisory": finding.advisory,
+                }
+            )
+    try:
+        dump_json(record, work_dir / "system_one.json")
+    except OSError:
+        pass
 
 
 def _campaign_id_of(work_dir: Path) -> str:

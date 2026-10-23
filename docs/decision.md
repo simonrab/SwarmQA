@@ -58,6 +58,10 @@ limited tree summary). Do not point `AQA_SYSTEM_ONE_ENDPOINT` at a third party
 unless that egress is approved for the app under test. Heuristic-only mode never
 sends UI text off-box.
 
+### Jev-compatible servers and the agent explorer
+
+The request body above is swarmqa's own format, and no published server speaks it. To use TypeSafe's Jev or an open Jev-compatible server (Laya, kev, decider, OpenJev), use the agent explorer (`explorer.engine = "agent"`) with `[llm] provider = "system_one"`. That provider speaks `POST /v1/systemone`, chooses among the screen's actionable controls, falls back to the rules or escalates to an LLM provider when it is unsure, and triages findings as real bugs or artifacts. See "System One" in `docs/llm.md`.
+
 ## Computer use (PR3)
 
 `ComputerUseEvaluator` runs the command named by the env var in
