@@ -9,6 +9,7 @@
 | Claude Code CLI (`claude_cli`) | `swarmqa.llm.cli_provider` | core install; `claude` on `PATH`, signed in |
 | Codex CLI (`codex_cli`) | `swarmqa.llm.cli_provider` | core install; `codex` on `PATH`, signed in |
 | Chat (`chat`) | `swarmqa.explorer.remote` | core install; driven through `aqa mcp` (see `docs/mcp.md`) |
+| System One (`system_one`) | `swarmqa.llm.system_one` | core install; a Jev-compatible server (see "System One") |
 | Fake (tests, dry runs) | `swarmqa.llm.fake` | core install |
 
 `claude_cli` and `codex_cli` run `claude -p` or `codex exec` once per call, with the call's JSON schema as the structured output, so a campaign runs on your Claude or ChatGPT plan instead of an API key. Their per-call cost is recorded as 0. A screenshot is written to a temporary folder the CLI may read. Each call starts a process (about 5 seconds per step for Claude Code), so they suit one or two devices; use an API provider for a large swarm. `claude_cli` model names are Claude Code aliases (`sonnet` for steps, `opus` for judging by default); `codex_cli` uses Codex's configured model unless you set one, and a ChatGPT sign-in only accepts the models your plan allows.
@@ -16,6 +17,73 @@
 `chat` is not called by SwarmQA at all: the agent in a Claude Code or Codex chat chooses each step through the MCP session tools.
 
 The core install needs neither SDK. `create_provider` imports an SDK only when it builds a live transport. If the SDK is missing it raises `MissingExtraError`, a `ModelError` whose message names the extra to install.
+
+## System One
+
+`system_one` asks a System One model (typed question in, calibrated probabilities over a fixed set of answers out) instead of a language model. One step takes well under a second, against 6 to 30 seconds for `claude_cli`. It speaks the `POST /v1/systemone` contract shared by TypeSafe's hosted Jev and the open servers that copy it (Laya, kev, decider, OpenJev):
+
+```json
+{"model": "jev-latest",
+ "state": "Goal: ...\n\nScreen:\ne1 window \"Demo\" ...\n\nRecent steps:\n...",
+ "questions": {"next_step": {"type": "choice", "instructions": "Pick the one action ...",
+                             "criteria": {"o1": "Tap button \"Settings\" (id settings)",
+                                          "o2": "Type into textfield \"Search\" (id search)",
+                                          "back": "Go back to the previous screen.",
+                                          "done": "The goal is already met on this screen."}}}}
+```
+
+```json
+{"model": "jev-1.13.0",
+ "answers": {"next_step": {"choice": "o1", "probabilities": {"o1": 0.93, "o2": 0.04, "back": 0.02, "done": 0.01}, "confidence": 0.81}},
+ "usage": {"input_tokens": 812, "output_tokens": 0}}
+```
+
+- The options are the screen's actionable controls (`screen_graph.actionable_controls`, named by `element_name`), plus `back` and `done`. The model can only answer with something the loop can do. A control whose tap had no effect on this screen earlier in the session is left out.
+- `confidence` is Jev's `1 - H(p)/ln K` (1 means certain, 0 means uniform). When a server sends only probabilities, swarmqa computes it the same way. `probabilities` may be a map or OpenJev's `[{value, probability}]` list.
+- Below `min_confidence`, the step goes to `escalate_to` (any other provider, for example `claude_cli` or `anthropic`), with that provider's own step timeout. With no `escalate_to`, the provider raises `ModelRefused` and the agent loop takes its rule-based step, as it does for any `ModelError`. Transport errors, timeouts and an answer that is not one of the options also go this way.
+- `judge_screen`, `propose_flows` and `computer_use` go to `escalate_to`, or fail open without it. A System One model does not look at screenshots here.
+- **Triage.** With `triage = true`, after each agent worker finishes, every finding gets one call: a `choice` among `real_bug`, `environment_artifact` (the simulator or test environment), `harness_artifact` (swarmqa's own mistake) and `expected_behavior`, plus a `noul` asking whether a person would notice it. A confident artifact verdict makes the finding `advisory` (it is kept, not dropped). The verdict goes into the finding's `environment` (`system_one_verdict`, `system_one_confidence`, `system_one_user_visible`), its details, and the Triage block of `findings/<id>.md`. Each worker also writes `workers/<id>/system_one.json` with call counts, escalations, latency p50/p95 and the triage verdicts.
+- Cost: input tokens at TypeSafe's published $0.042 per million when `base_url` is on `typesafe.ai`, otherwise 0 (set `price_per_mtok` to override).
+
+```toml
+[llm]
+enabled = true
+provider = "system_one"
+step_model = "haiku"            # read by the escalation provider
+
+[llm.system_one]
+base_url = "http://127.0.0.1:8000"   # or "https://api.typesafe.ai"
+model = "jev-latest"
+api_key_env = "TYPESAFE_API_KEY"     # unset or empty: no Authorization header
+min_confidence = 0.5
+trust_done = false                   # false: a "done" goes to escalate_to, or the rules carry on
+done_min_confidence = 0.8            # with trust_done: a wrong "done" ends the goal, so it needs more
+escalate_to = "claude_cli"           # optional
+state_format = "compact"             # "tree" sends the numbered accessibility tree
+max_choices = 40                     # Jev takes up to 255; small models do worse past a few dozen
+triage = true
+
+[explorer.decision]
+max_model_calls = 40                 # System One calls are cheap; the default cap is low
+```
+
+The step timeout defaults to 5 seconds for `system_one` (`explorer.decision.model_timeout_s` overrides it). A local model on a laptop CPU needs about 10.
+
+`state_format = "compact"` (the default) sends the goal, the screen's visible text and the last three steps. The options carry the control names. Small encoder models such as Laya lose the goal in a long state: on a test screen, Laya chose correctly 3 times out of 4 with the compact state and once out of 4 with the full tree. `tree` sends the numbered accessibility tree (`serialize.tree_text`) for long-context models such as Jev.
+
+**Privacy.** The goal, the accessibility tree text (labels, identifiers, values) and finding titles and steps go to `base_url`. With TypeSafe's hosted Jev, that UI text leaves the machine. A local server keeps it on the machine.
+
+### Running an open model locally
+
+On an 8 GB Apple-silicon Mac, Laya (0.4B, Apache-2.0) is the open model that fits beside a simulator. Install it in its own environment, outside the repo:
+
+```bash
+python3.11 -m venv ~/.venvs/jev
+~/.venvs/jev/bin/pip install 'laya[serve]'
+LAYA_HOST=127.0.0.1 LAYA_MODELS=english LAYA_DEFAULT_MODEL=english LAYA_MAX_LOADED=1 LAYA_JEV_STRICT=1 ~/.venvs/jev/bin/laya-serve
+```
+
+`LAYA_JEV_STRICT=1` serves the exact Jev response shape. The larger open models need more memory than this Mac has: kev-4b needs about 10 GB under MLX, decider-2b is 3.8 GB of bf16 weights plus torch, and OpenJev, JEV-9B and Clef need 12 to 24 GB of GPU memory. They speak the same contract, so pointing `base_url` at one of them on a bigger machine needs no code change. See `docs/system-one-benchmark.md` for measured numbers.
 
 ## Usage
 
@@ -35,7 +103,7 @@ decision = provider.decide_step(obs, "Change the account email", history)
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `provider` | `anthropic` | `anthropic`, `openai` or `fake` |
+| `provider` | `anthropic` | `anthropic`, `openai`, `claude_cli`, `codex_cli`, `chat`, `system_one` or `fake` |
 | `step_model`, `judge_model`, `flows_model`, `computer_use_model` | provider default | Model per call kind |
 | `api_key_env` | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Env var holding the key. If it is unset, the SDK's own credential lookup still runs (for example an `ant auth login` profile). |
 | `base_url` | SDK default | For proxies or gateways |
@@ -51,6 +119,7 @@ decision = provider.decide_step(obs, "Change the account email", history)
 | `history_limit` | 12 | How many recent steps `decide_step` sees |
 | `step_screenshot` | false | Also send the screenshot to `decide_step` (costs more; the tree alone is usually enough) |
 | `anthropic_fallbacks` | true | Opt Opus 5.5-class requests into server-side refusal fallback |
+| `system_one` | `{}` | The `[llm.system_one]` table (see "System One") |
 
 ## Default models
 

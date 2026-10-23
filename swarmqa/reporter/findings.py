@@ -75,6 +75,9 @@ def render_triage(finding: Finding) -> str:
         f"Repro: {finding.repro or 'none'}",
         f"Clip: {evidence.video_clip or 'none'}",
     ]
+    verdict = finding.environment.get("system_one_verdict")
+    if verdict:
+        lines.append(f"System One: {verdict} ({finding.environment.get('system_one_confidence', '?')})")
     if finding.environment.get("seen_before") == "true":
         lines.append(f"Seen before: yes, first seen {finding.environment.get('first_seen', '')}".rstrip())
     lines.extend(["", "Frames:", ""])
