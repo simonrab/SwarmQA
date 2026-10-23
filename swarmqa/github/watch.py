@@ -201,6 +201,13 @@ def evaluate_sha(
         findings_path = Path(ran.report_dir) / FINDINGS_JSON
         if findings_path.is_file():
             outcome.findings = load_findings_json(findings_path)
+        broken = [shard for shard in ran.results if shard.status == "error"]
+        if broken:
+            # A shard that could not run (no free simulator, a runner that did
+            # not start) tested nothing, so "no findings" would be a false pass.
+            outcome.error = f"{len(broken)} of {len(ran.results)} shard(s) could not run: {broken[0].error}"
+            outcome.exit_code = max(outcome.exit_code, 2)
+            log(f"{event.label()}: {platform} {outcome.error}")
     return result
 
 
@@ -299,6 +306,7 @@ class Watcher:
         delay = interval or self.settings.poll_interval_s
         baseline = not self.state.exists
         count = 0
+        worst = 0
         self.log(f"watching {self.client.repo} ({', '.join(self.settings.events)}; branch {branch}; "
                  f"report {self.settings.report})")
         while True:
@@ -312,10 +320,14 @@ class Watcher:
                          "testing what changes from now on")
                 baseline = False
             for event in events:
-                self.process(event)
+                result = self.process(event)
+                if not result.superseded:
+                    worst = max(worst, result.exit_code)
             count += 1
             if once or (polls is not None and count >= polls):
-                return 0
+                # The worst exit code of what was tested, so a CI job running
+                # `aqa watch --once` fails when a commit failed.
+                return worst
             sleep(delay)
 
 

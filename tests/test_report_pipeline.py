@@ -164,3 +164,23 @@ def test_summary_with_no_findings(tmp_path: Path):
     path = write_summary(_result(tmp_path, []), tmp_path)
     text = path.read_text()
     assert "No findings." in text and "No advisory findings." in text
+    assert "**No problems found.**" in text
+
+
+def test_summary_leads_with_verdict_and_shows_confirmation(tmp_path: Path):
+    real = Finding(
+        id="f-1", title="Save did nothing", severity="high", kind="unresponsive", steps=[], fingerprint="a",
+        worker_id="w1", backend="local", confirmation="confirmed", confirm_attempts=2, confirm_hits=2,
+        occurrences=["Save on Settings", "Save on Profile"],
+    )
+    gone = Finding(
+        id="f-2", title="Crash once", severity="critical", kind="crash", steps=[], fingerprint="b",
+        worker_id="w1", backend="local", confirmation="not_reproduced", confirm_attempts=2,
+    )
+    text = render_summary_md(_result(tmp_path, [gone, real]))
+    assert text.splitlines()[2] == "**1 problem found, 1 high; 1 more finding to check (advisory or not reproduced).**"
+    firm_block = text.split("## Findings")[1].split("## Advisory findings")[0]
+    advisory_block = text.split("## Advisory findings")[1].split("## Friction (advisory)")[0]
+    assert "confidence 1.00, confirmed 2/2" in firm_block
+    assert "also seen in 2 more places: Save on Settings, Save on Profile" in firm_block
+    assert "Crash once" in advisory_block and "not reproduced 0/2" in advisory_block

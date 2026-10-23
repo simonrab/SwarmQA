@@ -209,6 +209,13 @@ def test_missing_label(driver):
     assert issues[0].title == "Unlabeled button at (360, 70)"
 
 
+def test_field_named_only_by_placeholder_is_advisory(driver):
+    field = UIElement(role="textfield", placeholder="Email address", frame=(20, 200, 360, 44))
+    issues = _run(driver, "missing_labels", [field])
+    assert [(i.severity, i.advisory, i.category) for i in issues] == [("low", True, "confusing")]
+    assert "Email address" in issues[0].title
+
+
 def test_missing_label_guards(driver):
     elements = [
         UIElement(role="switch", identifier="wifi", frame=(0, 0, 51, 31)),
@@ -312,3 +319,30 @@ def test_default_settings_quiet_on_clean_screen(driver):
     ]
     obs = ScreenObservation(tree=tree, ts=1.0, size=(390, 844))
     assert LayoutCheck().run(StepContext(after=obs, driver=driver)) == []
+
+
+def _keyboard_tip_windows():
+    tip = UIElement(
+        role="window",
+        frame=(0, 0, 390, 844),
+        children=[
+            UIElement(role="text", label="Speed up your typing by sliding your finger across the letters to compose a word.",
+                      frame=(41, 737, 320, 46)),
+            UIElement(role="button", label="Continue", frame=(89, 819, 224, 21)),
+        ],
+    )
+    keyboard = UIElement(
+        role="window",
+        frame=(0, 0, 390, 844),
+        children=[UIElement(role="keyboard", frame=(0, 600, 390, 244), children=[
+            UIElement(role="button", frame=(5, 700, 30, 30)),  # unlabeled, small: the system's, not the app's
+        ])],
+    )
+    return (tip, keyboard)
+
+
+@pytest.mark.parametrize("rule", ["tap_targets", "missing_labels"])
+def test_keyboard_and_its_tip_are_not_the_apps_layout(driver, rule):
+    issues = _run(driver, rule, [UIElement(role="button", label="Save", frame=(20, 100, 350, 50))],
+                  extra_roots=_keyboard_tip_windows())
+    assert issues == []

@@ -20,7 +20,7 @@ from swarmqa.llm.openai_provider import OpenAISDKTransport
 from swarmqa.llm.parse import parse_flows, parse_judgment, parse_step
 from swarmqa.llm.pricing import ModelPrice, cost_of, price_for
 from swarmqa.llm.protocol import ModelError, ModelRefused, Rubric, StepDecision, Usage
-from swarmqa.llm.serialize import files_text, history_text, tree_text
+from swarmqa.llm.serialize import NO_EFFECT, files_text, history_text, tree_text
 from swarmqa.llm.settings import LLMSettings, MissingExtraError, create_provider
 from swarmqa.llm.transport import (
     RecordingTransport,
@@ -182,6 +182,8 @@ def test_history_and_files_text():
     text = history_text(steps, limit=2)
     assert text.splitlines()[0] == "[1 earlier steps omitted]"
     assert "2. key cmd+n -> new window" in text
+    dead = HistoryStep(action=StepDecision(kind="tap_point", point=(1, 2)), screen="abc", outcome=NO_EFFECT)
+    assert history_text([dead], limit=5).endswith("[NO EFFECT - do not repeat on this screen]")
     long = files_text("x" * 50, [], max_chars=20)
     assert long.endswith("more characters not shown]")
 
@@ -399,3 +401,42 @@ def test_call_cap_holds_across_threads():
         thread.join()
     assert meter.calls == 10
     assert len(refused) == 3
+
+
+def test_parse_step_accepts_an_unambiguous_identifier_or_label_as_element_id():
+    from swarmqa.llm.parse import parse_step
+    from swarmqa.llm.protocol import ModelRefused
+    from swarmqa.models import UIElement
+
+    elements = {
+        "e1": UIElement(role="button", label="Share", identifier="detail.shareButton"),
+        "e2": UIElement(role="button", label="Save"),
+        "e3": UIElement(role="button", label="Save"),
+    }
+    assert parse_step({"kind": "tap", "element_id": "detail.shareButton"}, elements).target.label == "Share"
+    with pytest.raises(ModelRefused):
+        parse_step({"kind": "tap", "element_id": "Save"}, elements)  # two match: ambiguous
+
+
+def test_parse_step_taps_an_ambiguous_element_by_its_centre():
+    from swarmqa.llm.parse import parse_step
+    from swarmqa.models import UIElement
+
+    elements = {
+        "e1": UIElement(role="cell", frame=(0, 100, 390, 44)),
+        "e2": UIElement(role="cell", frame=(0, 144, 390, 44)),
+        "e3": UIElement(role="textfield", frame=(20, 300, 350, 40)),
+        "e4": UIElement(role="textfield", frame=(20, 350, 350, 40)),
+    }
+    tap = parse_step({"kind": "tap", "element_id": "e2"}, elements)
+    assert tap.kind == "tap_point" and tap.point == (195.0, 166.0) and tap.target is None
+    typed = parse_step({"kind": "type", "element_id": "e4", "text": "x"}, elements)
+    assert typed.kind == "type" and typed.point == (195.0, 370.0)
+
+
+def test_tree_text_names_unlabeled_rows_by_their_child_text():
+    from swarmqa.llm.serialize import tree_text
+    from swarmqa.models import UIElement
+
+    row = UIElement(role="cell", children=[UIElement(role="text", label="Advanced")])
+    assert 'cell ~"Advanced"' in tree_text([row])[0]

@@ -27,7 +27,8 @@ kind = "auto" # auto | fake | legacy | runner
 # Model calls for exploring and judging screens. Off by default: nothing spends
 # money until you set enabled = true. Needs the extra: uv tool install 'swarmqa[anthropic]'
 enabled = false
-# provider = "anthropic" # anthropic | openai | fake
+# provider = "anthropic" # anthropic | openai | claude_cli | codex_cli | fake
+#                        # claude_cli / codex_cli use the `claude` / `codex` CLI sign-in: no API key
 # max_cost = 5.0       # stop model calls past this many `currency` units
 # step_model = ""      # blank = the provider's default (see docs/llm.md)
 # judge_model = ""
@@ -159,7 +160,7 @@ on_step_failure = "stop" # stop | continue
 # mode = "heuristic" # heuristic | system_one | computer_use | cascade
 # escalate_after = 3
 # max_model_calls = 8
-# model_timeout_s = 30.0
+# model_timeout_s = 30.0 # default 30, or 90 with llm provider claude_cli / codex_cli
 # cache_observations = true
 #
 # [explorer.decision.system_one]

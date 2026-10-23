@@ -23,6 +23,7 @@ _PASSTHROUGH = {
     "build": "cmd_build",
     "watch": "cmd_watch",
     "flows": "cmd_flows",
+    "try": "cmd_try",
 }
 
 
@@ -96,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_p = sub.add_parser("report", help="Print the latest campaign summary")
     report_p.add_argument("--campaign")
     report_p.add_argument("--report-root", default="reports")
+    report_p.add_argument("--html", action="store_true", help="Write report.html and open it")
     report_p.set_defaults(func=cmd_report)
 
     base_p = sub.add_parser("baseline", help="Baseline commands")
@@ -167,6 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
     watch_p.add_argument("rest", nargs=argparse.REMAINDER)
     watch_p.set_defaults(func=cmd_watch)
 
+    try_p = sub.add_parser("try", help="Crawl an app with no setup and open the report", add_help=False)
+    try_p.add_argument("rest", nargs=argparse.REMAINDER)
+    try_p.set_defaults(func=cmd_try)
+
     flows_p = sub.add_parser("flows", help="Propose intents from a diff; list cached flows", add_help=False)
     flows_p.add_argument("rest", nargs=argparse.REMAINDER)
     flows_p.set_defaults(func=cmd_flows)
@@ -195,6 +201,12 @@ def cmd_watch(args: argparse.Namespace) -> int:
     from swarmqa.github.cli import main as watch_main
 
     return watch_main(args.rest)
+
+
+def cmd_try(args: argparse.Namespace) -> int:
+    from swarmqa.quickstart.cli import main as try_main
+
+    return try_main(args.rest)
 
 
 def cmd_flows(args: argparse.Namespace) -> int:
@@ -294,6 +306,19 @@ def cmd_record(args: argparse.Namespace) -> int:
 def cmd_report(args: argparse.Namespace) -> int:
     root = Path(args.report_root)
     campaign = _resolve_campaign(root, args.campaign)
+    if args.html:
+        from swarmqa.report.html import write_html_report
+
+        page = write_html_report(campaign)
+        if page is None:
+            print(f"could not write report.html in {campaign}", file=sys.stderr)
+            return 2
+        print(page)
+        if sys.platform == "darwin" and sys.stdout.isatty():
+            import subprocess
+
+            subprocess.run(["open", str(page)], check=False)
+        return 0
     summary = campaign / "summary.md"
     if not summary.exists():
         print(f"no summary at {summary}", file=sys.stderr)

@@ -20,6 +20,7 @@ from swarmqa.llm.protocol import (
     StepDecision,
 )
 from swarmqa.llm.schemas import CATEGORIES, COMPUTER_KINDS, SEVERITIES, STEP_KINDS
+from swarmqa.driver.query import matches_query
 from swarmqa.llm.serialize import query_for
 from swarmqa.models import UIElement
 
@@ -56,11 +57,24 @@ def parse_step(
         rationale=_string(data.get("rationale", ""), "rationale"),
         confidence=_confidence(data.get("confidence", 1.0)),
     )
+    centre: tuple[float, float] | None = None
     element_id = data.get("element_id")
     if element_id not in (None, ""):
-        if not isinstance(element_id, str) or element_id not in elements:
+        element = elements.get(element_id) if isinstance(element_id, str) else None
+        if element is None and isinstance(element_id, str):
+            # Models sometimes name the element by its identifier or label
+            # instead of its e-number; accept that when it is unambiguous.
+            named = [e for e in elements.values() if element_id in (e.identifier, e.label)]
+            element = named[0] if len(named) == 1 else None
+        if element is None:
             raise ModelRefused(f"unknown element_id: {element_id!r}")
-        decision.target = query_for(elements[element_id])
+        decision.target = query_for(element)
+        ambiguous = sum(1 for other in elements.values() if matches_query(other, decision.target)) > 1
+        if ambiguous and element.frame is not None:
+            # The query would reach another element first (unlabeled list
+            # rows look alike): the element's own centre, in points.
+            x, y, width, height = element.frame
+            centre = (x + width / 2, y + height / 2)
     point = _point(data, "x", "y", to_points)
     end = _point(data, "end_x", "end_y", to_points)
     if kind == "tap":
@@ -87,6 +101,10 @@ def parse_step(
         decision.keys = list(keys)
     if kind not in ("tap", "type"):
         decision.target = None
+    if centre is not None and kind == "tap":
+        decision.kind, decision.point, decision.target = "tap_point", centre, None
+    elif centre is not None and kind == "type":
+        decision.point = centre  # focus by point, then type into the focused field
     return decision
 
 

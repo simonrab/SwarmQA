@@ -210,7 +210,9 @@ def test_decision_config_defaults():
     assert decision.mode == "heuristic"
     assert decision.escalate_after == 3
     assert decision.max_model_calls == 8
-    assert decision.model_timeout_s == 30.0
+    assert decision.model_timeout_s is None
+    assert decision.step_timeout() == 30.0
+    assert decision.step_timeout("claude_cli") == 90.0
     assert decision.cache_observations is True
     assert decision.system_one.provider == "http"
     assert decision.system_one.min_confidence == 0.55

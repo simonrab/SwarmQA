@@ -33,6 +33,10 @@ class UITimeoutError(AQAError):
     """Timed out waiting for UI."""
 
 
+class InputError(AQAError):
+    """Typed text did not land in the field (it lost keyboard focus)."""
+
+
 class BackendUnavailable(AQAError):
     """Selected runner backend cannot run on this host."""
 

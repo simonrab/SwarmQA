@@ -13,6 +13,7 @@ Actions:
 - give_up: the goal cannot be reached from here.
 
 Rules:
-- Never tap a disabled element. Do not repeat an action that already failed or changed nothing; try something else.
+- Never tap a disabled element. Do not repeat an action that already failed.
+- A step marked NO EFFECT left the screen unchanged; never repeat it on that screen (the loop rejects the repeat). Look for another route: another row, a submenu, scrolling, or back.
 - Use only element ids that appear in the tree. Set unused fields to null, and keys to [] unless the action is key.
 - Keep the rationale to one short sentence. Set confidence between 0 and 1 to reflect how sure you are that this action is right.

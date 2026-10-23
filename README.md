@@ -67,6 +67,15 @@ SwarmQA finds problems. It does not fix them. A coding agent (Claude Code or Cod
 
    The build goes to `~/.aqa/swarm-runner/`. The installed `aqa` command finds it there.
 
+## Try it in one command
+
+```bash
+aqa try MyApp.app            # an app you already built
+aqa try --scheme MyApp       # or, in your Xcode project folder: build, then test
+```
+
+`aqa try` needs no config and no intents. It picks a simulator, crawls the app for about 5 minutes and opens the report in your browser. It is free: it uses no model unless you add `--model`. Add `--goal "Open Settings"` to also follow a goal. Run `aqa try --save` to keep the settings as a config file. See [docs/try.md](docs/try.md).
+
 ## Quick start
 
 1. Go to your app's folder and make a config file:
@@ -181,11 +190,12 @@ The model is off by default, so SwarmQA spends no money until you turn it on. Se
 
 ## Read the report
 
-Each campaign writes one folder, `reports/<campaign-id>/`.
+Each campaign writes one folder, `reports/<campaign-id>/`. Open `report.html` in a browser, or run `aqa report --html`. The page has no external links, so you can zip the folder and share it.
 
 | File | Contents |
 | --- | --- |
-| `summary.md` | Start here. What ran and what was found. |
+| `report.html` | Start here. Every finding with screenshots, video clip, steps and the replay command; the screens covered. |
+| `summary.md` | The same, as text. |
 | `findings.json` | Every finding, with its evidence. |
 | `findings/<id>.md` | One finding: steps, screenshots, video clip. |
 | `findings/<id>.replay.json` | The steps that make the finding happen again. |
@@ -201,6 +211,15 @@ Useful commands:
 | `aqa replay reports/<id>/findings/<finding>.replay.json` | Runs a finding again. Exits with 1 if the problem is still there. |
 | `aqa verify <finding-id>` | Rebuilds the app and replays a finding on 2 devices. Exits with 0 when it is fixed. |
 | `aqa file-issues` | Shows the GitHub or Linear issues it would file. Add `--yes` to file them. |
+
+### How SwarmQA keeps findings trustworthy
+
+- **It checks findings again.** Before it writes the report, SwarmQA replays each crash, hang, dead tap and failed step on a fresh launch of the app. (Layout findings come from the screen itself, so they are not replayed.) The report shows "Confirmed 1/1", "Flaky 1/2" or "Not reproduced 0/1".
+- **A finding that does not happen again does not fail the run.** It becomes advisory, and the report lists it under "To check".
+- **It groups repeats.** The same problem in several places is one finding, for example `Small tap target: button "Share" (+3 more)`.
+- **Model-only findings are marked "advisory".** They never fail a run or a GitHub check unless you ask for it.
+
+Change these rules in the `[findings]` table. See [docs/trust.md](docs/trust.md).
 
 If you set `app.source_dir`, each finding lists the source files that are likely involved. SwarmQA also remembers findings across runs in `<source_dir>/.aqa/state/`.
 
@@ -285,11 +304,12 @@ See [docs/visual.md](docs/visual.md).
 
 | Command | Purpose |
 | --- | --- |
+| `aqa try` | Test an app with no setup and open the report. |
 | `aqa init` | Make `aqa.config.toml` and the folders. |
 | `aqa doctor` | Check the Mac and the config. |
 | `aqa run` | Run a campaign. |
 | `aqa status` | Show campaign progress. |
-| `aqa report` | Print the latest summary. |
+| `aqa report` | Print the latest summary (`--html` opens the page). |
 | `aqa record` | Record a flow. |
 | `aqa replay` | Run one finding again. |
 | `aqa verify` | Rebuild and check that a finding is fixed. |
@@ -323,10 +343,15 @@ python3.11 -m venv .venv
 
 The tests use the fake driver. They do not need a Mac, Xcode or `idb`.
 
+Do not clone into `~/Documents` or `~/Desktop` when those sync to iCloud. macOS marks the files there as hidden, Python skips a hidden `.pth` file, and `aqa` then fails with "No module named swarmqa". `aqa doctor` reports this problem.
+
 ## More detail
 
 | Topic | Document |
 | --- | --- |
+| `aqa try` | [docs/try.md](docs/try.md) |
+| The report | [docs/report.md](docs/report.md) |
+| Confirmation and grouping | [docs/trust.md](docs/trust.md) |
 | All config fields | [docs/config.md](docs/config.md) |
 | Intents | [docs/intents.md](docs/intents.md) |
 | Drivers | [docs/driver.md](docs/driver.md) |

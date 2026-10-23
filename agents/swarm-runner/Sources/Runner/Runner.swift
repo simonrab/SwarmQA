@@ -10,6 +10,7 @@ enum ErrorCode: String {
     case notLaunched = "not_launched"
     case appCrashed = "app_crashed"
     case timeout = "timeout"
+    case inputFailed = "input_failed"
     case protocolMismatch = "protocol_mismatch"
     case `internal` = "internal"
 
@@ -19,6 +20,7 @@ enum ErrorCode: String {
         case .notFound: return 404
         case .notLaunched, .appCrashed: return 409
         case .timeout: return 504
+        case .inputFailed: return 422
         case .protocolMismatch: return 426
         case .internal: return 500
         }
@@ -284,11 +286,82 @@ final class Runner {
         let text = try body.requiredString("text")
         let query = try body.object("query")
         let app = try requireRunning()
-        if let query {
-            try tapElement(ElementQuery(query), in: app)
+        guard let query else {
+            try perform { app.typeText(text) }
+            return ok()
         }
-        try perform { app.typeText(text) }
-        return ok()
+        // React Native and other controlled fields take focus a moment after
+        // the tap and can re-render between keystrokes, which drops
+        // characters or loses focus. Wait for the keyboard, type, read the
+        // value back, and retype one character at a time if it came out short.
+        let field = try ElementQuery(query)
+        try tapElement(field, in: app)
+        if !waitForKeyboard(app) {
+            try tapElement(field, in: app)
+            _ = waitForKeyboard(app)
+        }
+        let before = (try? fieldValue(field, in: app)) ?? ""
+        do {
+            try perform { app.typeText(text) }
+        } catch let failure as RunnerFailure where failure.code == .internal {
+            if !failure.message.lowercased().contains("keyboard focus") { throw failure }
+        }
+        if typed(text, into: (try? fieldValue(field, in: app)) ?? nil, from: before) { return ok() }
+        try clearField(field, in: app)
+        // Small chunks: slow enough for the field to keep up, fast enough for
+        // a long address (each typeText call also waits for the app to idle).
+        let characters = Array(text)
+        for start in stride(from: 0, to: characters.count, by: 4) {
+            if !keyboardShown(app) { try tapElement(field, in: app); _ = waitForKeyboard(app) }
+            let chunk = String(characters[start..<min(start + 4, characters.count)])
+            try perform { app.typeText(chunk) }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        let value = (try? fieldValue(field, in: app)) ?? nil
+        if typed(text, into: value, from: "") { return ok() }
+        throw RunnerFailure(
+            .inputFailed,
+            "typed \"\(text)\" into \(field) but the field reads \"\(value ?? "")\" (it did not keep keyboard focus)"
+        )
+    }
+
+    /// True when the keyboard is up (iOS) within `timeout`; always true on macOS, which has no on-screen keyboard.
+    private func waitForKeyboard(_ app: XCUIApplication, timeout: TimeInterval = 2.0) -> Bool {
+        #if os(iOS)
+        return app.keyboards.firstMatch.waitForExistence(timeout: timeout)
+        #else
+        return true
+        #endif
+    }
+
+    /// Whether the keyboard is up right now, without waiting (always true on macOS).
+    private func keyboardShown(_ app: XCUIApplication) -> Bool {
+        #if os(iOS)
+        return app.keyboards.count > 0
+        #else
+        return true
+        #endif
+    }
+
+    /// The matching field's current value, or nil when it has none or cannot be read (secure fields).
+    private func fieldValue(_ query: ElementQuery, in app: XCUIApplication) throws -> String? {
+        let (_, root) = try snapshot(app)
+        return root.first(matching: query)?.value
+    }
+
+    /// Whether `value` shows `text` was typed. A field that does not expose its value counts as typed.
+    private func typed(_ text: String, into value: String?, from before: String) -> Bool {
+        guard let value else { return true }
+        if value.contains(text) { return true }
+        // Secure fields read back as bullets, one per character.
+        let bullets = value.filter { $0 == "•" }.count
+        return bullets > 0 && bullets >= text.count + before.filter { $0 == "•" }.count
+    }
+
+    private func clearField(_ query: ElementQuery, in app: XCUIApplication) throws {
+        guard let value = try fieldValue(query, in: app), !value.isEmpty else { return }
+        let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: value.count)
+        try perform { app.typeText(deletes) }
     }
 
     private func swipe(_ body: JSONBody) throws -> HTTPResponse {

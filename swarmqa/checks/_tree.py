@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from typing import Iterator
 
@@ -185,7 +186,7 @@ def query_for(element: UIElement) -> ElementQuery:
 
 
 def describe(element: UIElement) -> str:
-    name = element.label or element.identifier or ""
+    name = element.label or element.identifier or first_text(element)
     role = norm_role(element.role) or "element"
     return f'{role} "{name}"' if name else role
 
@@ -268,3 +269,51 @@ def subtree_text(element: UIElement) -> str:
             if text and text not in texts:
                 texts.append(text)
     return " ".join(texts)
+
+
+def first_text(element: UIElement) -> str:
+    """The first descendant text label: what a person reads on an unlabeled row or alert."""
+    for item in walk(element.children):
+        if norm_role(item.role) in TEXT_ROLES and item.label:
+            return item.label
+    return ""
+
+
+# Text of iOS popups drawn in their own system window over the app: keyboard
+# tips and system prompts. Their controls are the system's, not the app's.
+SYSTEM_OVERLAY_TEXT = re.compile(
+    r"speed up your typing by sliding|slide to type|"
+    r"enable dictation|dictation lets you|"
+    r"would like to paste from",
+    re.IGNORECASE,
+)
+
+
+def system_windows(tree: list[UIElement]) -> tuple[list[UIElement], list[UIElement]]:
+    """Windows the system draws over the app: `(popups, keyboards)`.
+
+    A popup window holds text matching `SYSTEM_OVERLAY_TEXT`; a keyboard
+    window holds a `keyboard` element. The first window is the app's own and
+    is never one of them.
+    """
+    windows = [element for element in walk(tree) if norm_role(element.role) == "window"]
+    popups: list[UIElement] = []
+    keyboards: list[UIElement] = []
+    for window in windows[1:]:
+        inside = list(walk(window.children))
+        if any(norm_role(item.role) == "keyboard" for item in inside):
+            keyboards.append(window)
+        elif any(SYSTEM_OVERLAY_TEXT.search(item.label or "") for item in inside):
+            popups.append(window)
+    return popups, keyboards
+
+
+def system_overlay_nodes(flat: list[Node]) -> set[int]:
+    """Indices of `flat` nodes inside a system popup or keyboard window (see `system_windows`)."""
+    popups, keyboards = system_windows([node.element for node in flat if not node.ancestors])
+    overlay = {id(window) for window in (*popups, *keyboards)}
+    hidden: set[int] = set()
+    for node in flat:
+        if id(node.element) in overlay or any(id(flat[index].element) in overlay for index in node.ancestors):
+            hidden.add(node.index)
+    return hidden

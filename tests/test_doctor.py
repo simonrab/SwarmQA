@@ -102,6 +102,7 @@ def _env(
         environ=environ if environ is not None else {},
         find_spec=lambda name: object() if name in modules else None,
         python_version=python_version,
+        site_dirs=lambda: [],
     )
 
 
@@ -302,3 +303,26 @@ def test_json_output_and_exit_code(tmp_path: Path, capsys: pytest.CaptureFixture
     text = capsys.readouterr().out
     assert "[fail] python" in text
     assert "fix:" in text
+
+
+def test_install_check_flags_a_hidden_pth(tmp_path):
+    from swarmqa.doctor import check_install
+
+    pth = tmp_path / "__editable__.swarmqa-0.1.0.pth"
+    pth.write_text("/repo\n", encoding="utf-8")
+    (tmp_path / "distutils-precedence.pth").write_text("", encoding="utf-8")
+    hidden = {pth.name}
+
+    def flags(path):
+        return 0x8000 if path.name in hidden else 0
+
+    env = _env()
+    env.site_dirs = lambda: [str(tmp_path)]
+    env.file_flags = flags
+    check = check_install(env)
+    assert check.status == "fail" and "chflags nohidden" in check.fix
+    env.environ = {"PYTHONPATH": "/repo"}
+    env.find_spec = lambda name: object()
+    assert check_install(env).status == "warn"
+    hidden.clear()
+    assert check_install(env).status == "ok"

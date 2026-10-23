@@ -44,6 +44,7 @@ from swarmqa.errors import (
     AppMissingError,
     BackendUnavailable,
     ElementNotFoundError,
+    InputError,
     UITimeoutError,
 )
 from swarmqa.models import AppTarget, ElementQuery, UIElement
@@ -419,6 +420,7 @@ def test_client_tap_bodies(server):
         ("not_launched", AppMissingError),
         ("not_found", ElementNotFoundError),
         ("timeout", UITimeoutError),
+        ("input_failed", InputError),
         ("protocol_mismatch", BackendUnavailable),
         ("internal", AQAError),
         ("bad_request", AQAError),
@@ -432,6 +434,20 @@ def test_error_codes_map_to_driver_errors(server, code, expected):
     assert info.value.code == code
     assert isinstance(info.value.__cause__, schema.RunnerError)
     assert type(info.value) is expected
+
+
+def test_lost_keyboard_focus_is_an_input_error(server):
+    server.state.fail["/tap"] = schema.RunnerError(
+        "internal", "Failed to synthesize event: Neither element nor any descendant has keyboard focus."
+    )
+    with pytest.raises(InputError):
+        RunnerClient(server.port).tap(point=(1, 1))
+
+
+def test_placeholder_round_trips():
+    field = UIElement(role="textfield", placeholder="Email address")
+    assert schema.decode_element(schema.encode_element(field)).placeholder == "Email address"
+    assert "placeholder" not in schema.encode_element(UIElement(role="button", label="Go"))
 
 
 def test_not_installed_is_app_missing(server):

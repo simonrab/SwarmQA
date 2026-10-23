@@ -20,6 +20,7 @@ from swarmqa.checks._tree import (
     TEXT_ROLES,
     TOGGLE_ROLES,
     describe,
+    first_text,
     nodes,
     norm_role,
     query_for,
@@ -58,6 +59,20 @@ SYSTEM_LOG_NOISE = (
     r"Could not find cached accumulator",
     r"CHHapticPattern",
 )
+# Error alerts the Simulator shows for reasons outside the app: no Apple ID
+# signed in, no App Store account, no push service. Matched against the
+# alert's text; they are reported as advisory, low severity.
+SIMULATOR_ERRORS = (
+    r"authorization attempt failed",
+    r"AuthenticationServices",
+    r"AKAuthenticationError",
+    r"ASAuthorizationError",
+    r"no active account",
+    r"Cannot connect to iTunes Store",
+    r"SKErrorDomain",
+    r"remote notifications are not supported in the simulator",
+    r"no valid .aps-environment",
+)
 _NUMBERS = re.compile(r"0x[0-9a-f]+|\d+", re.IGNORECASE)
 _TITLE_LIMIT = 100
 
@@ -71,14 +86,18 @@ class FunctionalSettings:
     `pixel_change_tolerance` is the fraction of changed screenshot pixels
     above which a tap with an unchanged tree still counts as having done
     something. `console_ignore` are regexes for log lines to drop, on top of
-    `SYSTEM_LOG_NOISE`. With `console_app_only`, lines from system
+    `SYSTEM_LOG_NOISE`. `environment_errors` are regexes for error alerts
+    the test environment causes rather than the app, on top of
+    `SIMULATOR_ERRORS`; those alerts become advisory. With `console_app_only`, lines from system
     subsystems (`console_system_subsystems` prefixes, `com.apple.` by
     default) are dropped unless the subsystem is the app's own bundle id:
     the app process hosts UIKit, SwiftUI and XCTest, which log errors in
     healthy runs. `spinner_timeout_s` is how long an activity indicator may
     stay on screen before it counts as endless; with `spinner_wait` the check
     re-observes the screen (tree only) until the spinner goes or the time is
-    up, instead of relying on the explorer to linger.
+    up, instead of relying on the explorer to linger. A tap that looks dead
+    is checked once more `dead_tap_recheck_s` later (tree only), because some
+    apps react after the step's observation (0 turns the recheck off).
     """
 
     crashes: bool = True
@@ -90,12 +109,14 @@ class FunctionalSettings:
     pixel_change_tolerance: float = 0.005
     endless_spinners: bool = True
     console_ignore: list[str] = field(default_factory=list)
+    environment_errors: list[str] = field(default_factory=list)
     console_app_only: bool = True
     console_system_subsystems: list[str] = field(default_factory=lambda: ["com.apple."])
     max_console_lines: int = 5
     spinner_timeout_s: float = 10.0
     spinner_wait: bool = True
     spinner_poll_s: float = 1.0
+    dead_tap_recheck_s: float = 1.5
 
 
 class FunctionalCheck:
@@ -106,6 +127,10 @@ class FunctionalCheck:
         self.settings = settings or FunctionalSettings()
         self._ignore = [
             re.compile(pattern) for pattern in (*SYSTEM_LOG_NOISE, *self.settings.console_ignore)
+        ]
+        self._environment = [
+            re.compile(pattern, re.IGNORECASE)
+            for pattern in (*SIMULATOR_ERRORS, *self.settings.environment_errors)
         ]
         self.last_error: str | None = None
         # Spinner key -> first time it was seen on screen, and keys already reported.
@@ -254,6 +279,8 @@ class FunctionalCheck:
             # holds the switch): a tap on the row's centre can miss the
             # control without the app being at fault.
             return []
+        if _behind_modal(before.tree, element):
+            return []  # an alert or sheet was up, so the tap landed on it
         if _near_keyboard(before.tree, element):
             return []  # the tap may have landed on the keyboard or its suggestion bar
         if visible_signature(before.tree, before.size) != visible_signature(ctx.after.tree, ctx.after.size):
@@ -270,6 +297,8 @@ class FunctionalCheck:
             ignore=usable_frame(element),
             scale=before.scale or 1.0,
         ):
+            return []
+        if self._changed_late(ctx):
             return []
         what = "toggle" if role in TOGGLE_ROLES else "control"
         return [
@@ -289,6 +318,21 @@ class FunctionalCheck:
                 check=self.name,
             )
         ]
+
+    def _changed_late(self, ctx: StepContext) -> bool:
+        """True when the screen changed within `dead_tap_recheck_s` after the step's observation."""
+        wait = self.settings.dead_tap_recheck_s
+        if wait <= 0 or ctx.driver is None:
+            return False
+        self.sleep(wait)
+        try:
+            later = ctx.driver.observe(screenshot=False)
+        except Exception as exc:  # noqa: BLE001 - driver trouble is not an app finding
+            self.last_error = f"observe for the dead-tap recheck failed: {exc}"
+            return False
+        return visible_signature(later.tree, later.size or ctx.after.size) != visible_signature(
+            ctx.after.tree, ctx.after.size
+        )
 
     # Endless spinner ----------------------------------------------------
 
@@ -376,14 +420,23 @@ class FunctionalCheck:
             text = subtree_text(modal)
             if text in seen_before or not _ERROR_TEXT.search(text):
                 continue
-            headline = modal.label or _first_text(modal) or text
+            headline = modal.label or first_text(modal) or text
+            details = f"A {norm_role(modal.role)} appeared with error text: {text}"
+            environment = any(pattern.search(text) for pattern in self._environment)
+            if environment:
+                details += (
+                    "\n\nThis looks like a test-environment error (for example no Apple ID "
+                    "signed in on the Simulator), not an app bug."
+                )
             issues.append(
                 CheckIssue(
                     kind="error_state",
                     category="broken",
                     title=f"Error shown: {_clip(headline)}",
-                    severity="high",
-                    details=f"A {norm_role(modal.role)} appeared with error text: {text}",
+                    severity="low" if environment else "high",
+                    confidence=0.5 if environment else 1.0,
+                    advisory=environment,
+                    details=details,
                     element=query_for(modal),
                     bbox=usable_frame(modal),
                     check=self.name,
@@ -536,15 +589,16 @@ def _modals(tree: list[UIElement]) -> list[UIElement]:
     return [element for element in walk(tree) if norm_role(element.role) in MODAL_ROLES]
 
 
+def _behind_modal(tree: list[UIElement], element: UIElement) -> bool:
+    """True when a modal is up and `element` is not inside the topmost one."""
+    modals = _modals(tree)
+    if not modals:
+        return False
+    return not any(item is element for item in walk([modals[-1]]))
+
+
 def _new_modal(before: list[UIElement], after: list[UIElement]) -> bool:
     return len(_modals(after)) > len(_modals(before))
-
-
-def _first_text(element: UIElement) -> str:
-    for item in walk(element.children):
-        if norm_role(item.role) in TEXT_ROLES and item.label:
-            return item.label
-    return ""
 
 
 def _pixels_changed(

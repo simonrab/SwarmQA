@@ -23,25 +23,37 @@ from swarmqa.decision.heuristic import goal_satisfied, matches_name, parse_goal,
 from swarmqa.driver.protocol import ScreenObservation, UnsupportedAction
 from swarmqa.driver.query import find_element, matches_query, walk
 from swarmqa.driver.v1_adapter import as_v2
-from swarmqa.errors import AppCrashedError, AppMissingError, ElementNotFoundError, UITimeoutError
+from swarmqa.errors import (
+    AppCrashedError,
+    AppMissingError,
+    AQAError,
+    BackendUnavailable,
+    ElementNotFoundError,
+    UITimeoutError,
+)
 from swarmqa.flows.cache import CachedFlow, CachedStep, FlowCache
 from swarmqa.explorer.screen_graph import (
     TAP_ROLES,
     Control,
     ScreenGraph,
+    action_key,
     actionable_controls,
     control_key,
     fingerprint,
+    modal_scope,
     normalize_role,
 )
 from swarmqa.llm.protocol import HistoryStep, ModelError, ModelProvider, StepDecision
+from swarmqa.llm.serialize import NO_EFFECT
 from swarmqa.models import CampaignConfig, ElementQuery, Finding, Shard, StepResult, UIElement, WorkerResult
 from swarmqa.reporter.findings import fingerprint_for, write_finding, write_replay
 from swarmqa.video_policy import keep_video, should_start_video
 
-LoopMode = Literal["goal", "crawl"]
+LoopMode = Literal["goal", "crawl", "driven"]
 _DEFAULT_SIZE = (390.0, 844.0)
 _BACK_NAMES = frozenset({"back", "done", "close", "cancel"})
+# Inside an alert, these dismiss it too.
+_DISMISS_NAMES = _BACK_NAMES | {"ok", "dismiss", "not now", "got it"}
 
 
 @dataclass
@@ -49,7 +61,9 @@ class AgentLoopSettings:
     """Knobs for one agent-loop session.
 
     `mode="goal"` follows `shard.goal` and drops to crawl when the goal is
-    empty. `max_steps` counts driver actions (taps, types, swipes, keys,
+    empty. `mode="driven"` asks the provider for every step, with no
+    heuristic, call cap or stall limit: the provider is an outside
+    controller (a coding agent in a chat, see `swarmqa.explorer.remote`). `max_steps` counts driver actions (taps, types, swipes, keys,
     backs, relaunches), not observations. `stall_limit` ends goal mode after
     that many steps in a row that failed or left the screen unchanged.
     `per_screen_checks` turns off expensive (model) checks entirely.
@@ -84,7 +98,9 @@ class AgentLoopSettings:
             "max_steps": explorer.max_steps,
             "max_wall_time_s": explorer.max_time_s,
             "max_model_calls": explorer.decision.max_model_calls,
-            "model_timeout_s": explorer.decision.model_timeout_s,
+            "model_timeout_s": explorer.decision.step_timeout(
+                config.llm.settings.get("provider", "anthropic") if config.llm.enabled else None
+            ),
             "platform": config.app.platform,
         }
         values.update(overrides)
@@ -186,9 +202,14 @@ def decision_from_json(data: dict[str, Any]) -> StepDecision:
 
 
 def _control_decision(control: Control, sample_text: str) -> StepDecision:
+    rationale = f'crawl: {control.role} "{control.display()}"' if control.point is not None else "crawl"
     if control.kind == "type":
-        return StepDecision(kind="type", target=control.query(), text=sample_text, rationale="crawl")
-    return StepDecision(kind="tap", target=control.query(), rationale="crawl")
+        return StepDecision(
+            kind="type", target=control.query(), text=sample_text, point=control.point, rationale=rationale
+        )
+    if control.point is not None:
+        return StepDecision(kind="tap_point", point=control.point, rationale=rationale)
+    return StepDecision(kind="tap", target=control.query(), rationale=rationale)
 
 
 def exact_element(tree: list[UIElement], query: ElementQuery) -> UIElement | None:
@@ -206,6 +227,20 @@ def exact_element(tree: list[UIElement], query: ElementQuery) -> UIElement | Non
             if (element.label or "").strip().lower() == wanted:
                 return element
     return candidates[0]
+
+
+def tappable_at(tree: list[UIElement], point: tuple[float, float]) -> UIElement | None:
+    """The smallest enabled tappable element whose frame contains `point`."""
+    x, y = point
+    best: UIElement | None = None
+    best_area = float("inf")
+    for element in walk(modal_scope(tree)):
+        if not element.enabled or element.frame is None or normalize_role(element.role) not in TAP_ROLES:
+            continue
+        left, top, width, height = element.frame
+        if left <= x <= left + width and top <= y <= top + height and width * height < best_area:
+            best, best_area = element, width * height
+    return best
 
 
 def precise_target(
@@ -273,7 +308,11 @@ class _AgentLoop:
         self.clock = clock
         self.campaign, self.relative = _campaign_context(self.work_dir)
         self.goal = (shard.goal or "").strip()
-        self.mode: LoopMode = "crawl" if settings.mode == "crawl" or not self.goal else "goal"
+        self.mode: LoopMode
+        if settings.mode == "driven":
+            self.mode = "driven"
+        else:
+            self.mode = "crawl" if settings.mode == "crawl" or not self.goal else "goal"
         self.tokens, self.expected = parse_goal(self.goal)
         self.platform = (settings.platform or config.app.platform or "macos").lower()
         # Replay cache (goal mode only): `cache_flow` is what was loaded,
@@ -316,17 +355,26 @@ class _AgentLoop:
         self.current_id = ""
         self.unreachable: set[str] = set()
         self.back_tried: set[str] = set()
+        # Per screen: actions (see `_identity`) that left that screen unchanged.
+        self.no_effect: dict[str, set[str]] = {}
         self.relaunches_for: dict[str, int] = {}
         self.video_started = False
         self.video_start_ts: float | None = None
         self.fatal: str | None = None
         self.stop_reason = ""
+        # An outside controller gets the loop so it can report issues on the current screen.
+        bind = getattr(provider, "bind", None)
+        if callable(bind):
+            bind(self)
 
     # Session ----------------------------------------------------------------
 
     def run(self) -> None:
         if not self._launch():
             return
+        # The time budget is for exploring: starting a runner or booting a
+        # simulator (minutes on a cold host) does not use it up.
+        self.started = self.clock()
         self._maybe_start_video()
         try:
             first = self._observe_step()
@@ -382,6 +430,11 @@ class _AgentLoop:
             return False
         except AppMissingError as exc:
             self._launch_failed("App failed to launch", f"App bundle missing, could not launch: {exc}")
+            return False
+        except BackendUnavailable as exc:
+            # The simulator or runner is at fault, not the app: an error result, no finding.
+            self._note("launch", "failed", f"environment: {exc}")
+            self.fatal = f"BackendUnavailable: {exc}"
             return False
         except Exception as exc:  # noqa: BLE001 - any launch failure is an error result
             self._launch_failed("App failed to launch", f"{type(exc).__name__}: {exc}")
@@ -634,6 +687,8 @@ class _AgentLoop:
     # Deciding -------------------------------------------------------------
 
     def _decide(self) -> _Plan:
+        if self.mode == "driven":
+            return self._driven_plan()
         if self.mode == "crawl":
             if self.fail_streak >= self.settings.stall_limit:
                 return _Plan(stop="stall")
@@ -660,6 +715,11 @@ class _AgentLoop:
                 )
         if self.provider is not None and self.model_calls < self.settings.max_model_calls:
             decision = self._ask_model(obs)
+            if decision is not None and self._identity(decision, obs) in self.no_effect.get(self.current_id, ()):
+                self._note(
+                    "model", "failed", f"rejected repeat of {describe(decision)} (no effect on this screen); falling back"
+                )
+                decision = None
             if decision is not None:
                 return _Plan(decision, "model")
         if self.provider is None and goal_satisfied(obs.tree, self.expected) and not picks:
@@ -740,12 +800,46 @@ class _AgentLoop:
         except OSError as exc:
             self._note("cache", "failed", f"could not write the flow cache: {exc}")
 
+    def _driven_plan(self) -> _Plan:
+        """The outside controller's next step; its failure ends the session."""
+        if self.provider is None:
+            return _Plan(stop="no_controller")
+        assert self.current is not None
+        try:
+            decision = self.provider.decide_step(
+                self.current, self.goal, list(self.history), timeout_s=self.settings.model_timeout_s
+            )
+        except ModelError as exc:
+            self._note("controller", "failed", f"{type(exc).__name__}: {exc}")
+            return _Plan(stop="controller_gone")
+        problem = self._invalid(decision)
+        if problem:
+            self._note("controller", "failed", f"unusable step ({problem})")
+            return _Plan(stop="controller_gone")
+        return _Plan(decision, "chat")
+
+    def record_external_issue(self, issue: CheckIssue) -> Finding | None:
+        """Record an issue an outside controller judged on the current screen, with its screenshot."""
+        if self.current is None:
+            return self._record_issue(issue, None)
+        ctx = StepContext(
+            after=self.current,
+            driver=self.driver,
+            before=None,
+            action=None,
+            since_ts=self.current.ts,
+            screen_id=self.current_id,
+            step_index=self.steps_used,
+            goal=self.goal,
+        )
+        return self._record_issue(issue, ctx)
+
     def _goal_candidates(self, tree: list[UIElement]) -> list[UIElement]:
         """Untried enabled tappable elements sharing a goal word, in tree order."""
         node = self.graph.nodes.get(self.current_id)
         tried = node.tried if node else set()
         found: list[UIElement] = []
-        for element in walk(tree):
+        for element in walk(modal_scope(tree)):
             if normalize_role(element.role) not in TAP_ROLES or not element.enabled:
                 continue
             if control_key(element) in tried:
@@ -792,7 +886,7 @@ class _AgentLoop:
         return ""
 
     def _crawl_plan(self) -> _Plan:
-        present = {control_key(element) for element in walk(self.current.tree)} if self.current else set()
+        present = {control_key(element) for element in walk(modal_scope(self.current.tree))} if self.current else set()
         if self.shared is not None:
             # Publish what this worker learnt; take others' screens, routes and claims.
             self.shared.exchange(self.graph, self.worker_id)
@@ -864,6 +958,13 @@ class _AgentLoop:
             outcome = _Outcome(replay=self._replay_for(effective) or self.planned_replay)
         except (UnsupportedAction, ElementNotFoundError) as exc:
             error = f"{type(exc).__name__}: {exc}"
+        except BackendUnavailable:
+            raise
+        except AQAError as exc:
+            # One action the driver could not do (for example typing that lost
+            # focus) is a failed step, not the end of the session.
+            error = f"{type(exc).__name__}: {exc}"
+            outcome = _Outcome(replay=self._replay_for(effective) or self.planned_replay)
         if outcome.note:
             text = f"{text} ({outcome.note})"
         self.narrative.append(text)
@@ -904,8 +1005,11 @@ class _AgentLoop:
         self.fail_streak = self.fail_streak + 1 if error else 0
         if error:
             summary = f"failed: {error}"
+        elif changed:
+            summary = f"screen changed to {after_id}"
         else:
-            summary = f"screen changed to {after_id}" if changed else "no visible change"
+            summary = NO_EFFECT
+            self.no_effect.setdefault(before_id, set()).add(self._identity(decision, before))
         self.history.append(HistoryStep(action=decision, screen=before_id, outcome=summary))
         self._visit(after, before=before, action=decision, since=since, error=error)
         return True
@@ -921,11 +1025,26 @@ class _AgentLoop:
         if control is not None:
             self.graph.mark_tried(screen_id, control)
             return
-        if decision.target is None:
-            return
-        element = exact_element(before.tree, decision.target)
+        element = self._element_for(decision, before)
         if element is not None:
             self.graph.mark_tried(screen_id, control_key(element))
+
+    @staticmethod
+    def _element_for(decision: StepDecision, obs: ScreenObservation) -> UIElement | None:
+        """The element a tap, type or tap at a point acts on, when the tree has it."""
+        if decision.kind in ("tap", "type") and decision.target is not None:
+            return exact_element(obs.tree, decision.target)
+        if decision.kind == "tap_point" and decision.point is not None:
+            return tappable_at(obs.tree, decision.point)
+        return None
+
+    @classmethod
+    def _identity(cls, decision: StepDecision, obs: ScreenObservation) -> str:
+        """What the action does on `obs`: a tap by element and a tap at a point on it are the same."""
+        element = cls._element_for(decision, obs) if decision.kind in ("tap", "tap_point") else None
+        if element is not None:
+            return f"tap:{control_key(element)}"
+        return action_key(decision_to_json(decision))
 
     @staticmethod
     def _resolve(decision: StepDecision, before: ScreenObservation) -> StepDecision:
@@ -952,6 +1071,16 @@ class _AgentLoop:
         elif kind == "type":
             if decision.target is None:
                 raise UnsupportedAction("type without a target")
+            if decision.point is not None and getattr(driver, "types_into_focus", False):
+                # The query cannot single out this field: focus it by its
+                # point, then type into whatever has focus.
+                driver.tap_point(*decision.point)
+                driver.type_text(None, decision.text or "")
+                self.planned_replay = [
+                    {"action": "tap_point", "point": [float(decision.point[0]), float(decision.point[1])]},
+                    {"action": "type", "text": decision.text or ""},
+                ]
+                return _Outcome(replay=self.planned_replay)
             driver.type_text(decision.target, decision.text or "")
         elif kind == "tap_point":
             if decision.point is None:
@@ -1005,13 +1134,15 @@ class _AgentLoop:
     @staticmethod
     def _back_button(tree: list[UIElement]) -> UIElement | None:
         best: UIElement | None = None
+        scope = modal_scope(tree)
+        wanted = _DISMISS_NAMES if scope is not tree else _BACK_NAMES
 
         def visit(nodes: list[UIElement], in_nav: bool) -> UIElement | None:
             nonlocal best
             for element in nodes:
                 role = normalize_role(element.role)
                 names = {(element.label or "").strip().lower(), (element.identifier or "").strip().lower()}
-                if role in TAP_ROLES and element.enabled and names & _BACK_NAMES:
+                if role in TAP_ROLES and element.enabled and names & wanted:
                     if in_nav:
                         return element
                     best = best or element
@@ -1020,7 +1151,7 @@ class _AgentLoop:
                     return found
             return None
 
-        return visit(tree, False) or best
+        return visit(scope, False) or best
 
     @staticmethod
     def _replay_for(decision: StepDecision) -> list[dict]:
@@ -1235,4 +1366,9 @@ def run_agent_loop(
     except Exception as exc:  # noqa: BLE001 - an internal error is an error result, not a crash
         loop.fatal = f"{type(exc).__name__}: {exc}"
         loop.stop_reason = loop.stop_reason or "internal_error"
+    finally:
+        # An outside controller (a chat session) learns the session is over.
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close(loop.stop_reason or ("error" if loop.fatal else "ended"))
     return loop.finish(started_at, started_mono)

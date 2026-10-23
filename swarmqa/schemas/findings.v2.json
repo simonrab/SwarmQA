@@ -58,6 +58,17 @@
             "video_clip": {"type": ["string", "null"]},
             "frames": {"type": "array", "items": {"type": "string"}}
           }
+        },
+        "confirmation": {
+          "enum": [null, "confirmed", "flaky", "not_reproduced", "skipped"],
+          "description": "Result of re-running the finding's replay; null when not checked."
+        },
+        "confirm_attempts": {"type": "integer", "minimum": 0},
+        "confirm_hits": {"type": "integer", "minimum": 0},
+        "occurrences": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Other places the same problem was seen, folded into this finding."
         }
       }
     }

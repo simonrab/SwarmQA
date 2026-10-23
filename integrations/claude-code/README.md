@@ -1,10 +1,11 @@
 # SwarmQA for Claude Code
 
-This folder adds a `/qa` skill and the `swarmqa` MCP server to an app repository, so Claude Code can run a SwarmQA campaign, fix what it finds, confirm each fix with `verify_fix`, and open the pull request.
+This folder adds two skills and the `swarmqa` MCP server to an app repository. With `/qa`, Claude Code runs a SwarmQA campaign, fixes what it finds, confirms each fix with `verify_fix`, and opens the pull request. With `/explore`, Claude Code drives the app on the simulators itself, choosing every tap, while SwarmQA's checks and evidence run underneath; no model key is needed for that.
 
 | File | Copy to (in the app repo) |
 | --- | --- |
 | `skills/qa/SKILL.md` | `.claude/skills/qa/SKILL.md` |
+| `skills/explore/SKILL.md` | `.claude/skills/explore/SKILL.md` |
 | `.mcp.json` | `.mcp.json` (merge the `swarmqa` entry if the file exists) |
 
 ## Install
@@ -29,8 +30,9 @@ This folder adds a `/qa` skill and the `swarmqa` MCP server to an app repository
 3. Copy the skill and the server entry:
 
    ```bash
-   mkdir -p .claude/skills/qa
+   mkdir -p .claude/skills/qa .claude/skills/explore
    cp /path/to/swarmqa/integrations/claude-code/skills/qa/SKILL.md .claude/skills/qa/
+   cp /path/to/swarmqa/integrations/claude-code/skills/explore/SKILL.md .claude/skills/explore/
    cp /path/to/swarmqa/integrations/claude-code/.mcp.json .    # or merge by hand
    ```
 

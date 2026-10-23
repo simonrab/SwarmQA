@@ -13,6 +13,10 @@ the same control, and each can route to screens the others found.
 After every campaign the worker screen graphs are merged into
 `<campaign>/screen_graph.json`.
 
+A local iOS campaign with more `workers` than names in `app.simulators` is
+swarmed by default (`enabled` unset), so each worker drives its own cloned
+simulator instead of sharing one.
+
     [swarm]
     enabled = false
     pool = "auto"            # auto (from app.platform) | ios | macos | fake
@@ -23,6 +27,7 @@ After every campaign the worker screen graphs are merged into
     erase_mode = "uninstall" # ios: uninstall | erase between leases
     keep_devices = true      # keep clones booted for the next campaign
     lease_timeout_s = 600
+    max_concurrent_boots = 0 # ios: simulators booting at once; 0 = 1 under 16 GB of RAM, else 2
     crawl = 0                # crawl shards sharing one frontier; 0 = no crawl
 
 Leases need thread isolation (`[local] isolation = "thread"`) on the local
@@ -64,6 +69,7 @@ class SwarmSettings:
     erase_mode: str = "uninstall"
     keep_devices: bool = True
     lease_timeout_s: float = 600.0
+    max_concurrent_boots: int = 0
     crawl: int = 0
 
     @classmethod
@@ -74,7 +80,7 @@ class SwarmSettings:
             errors.append(f"swarm.pool: must be one of {', '.join(POOLS)}")
         if settings.erase_mode not in ERASE_MODES:
             errors.append(f"swarm.erase_mode: must be one of {', '.join(ERASE_MODES)}")
-        for name in ("devices", "crawl"):
+        for name in ("devices", "crawl", "max_concurrent_boots"):
             value = getattr(settings, name)
             if isinstance(value, int) and value < 0:
                 errors.append(f"swarm.{name}: must be >= 0")
@@ -86,7 +92,13 @@ class SwarmSettings:
 
     @classmethod
     def from_config(cls, config: CampaignConfig) -> "SwarmSettings":
-        return cls.from_mapping(config.swarm.settings)
+        table = config.swarm.settings or {}
+        settings = cls.from_mapping(table)
+        if "enabled" not in table and _wants_ios_pool(config):
+            # More iOS workers than listed simulators: clone the simulators
+            # rather than make the workers share one.
+            settings.enabled = True
+        return settings
 
     def platform(self, config: CampaignConfig) -> str:
         return config.app.platform if self.pool in ("auto", "fake") else self.pool
@@ -121,10 +133,47 @@ def build_pool(settings: SwarmSettings, config: CampaignConfig) -> DevicePool:
             device_type=None if settings.golden else (settings.device_type or "iPhone 17"),
             runtime=settings.runtime or None,
             erase_mode=settings.erase_mode,  # type: ignore[arg-type]
+            max_concurrent_boots=settings.max_concurrent_boots or None,
         )
     from swarmqa.devices.local_mac import LocalMacPool
 
     return LocalMacPool()
+
+
+def _wants_ios_pool(config: CampaignConfig) -> bool:
+    """A local, thread-isolated iOS campaign with more workers than `app.simulators` names."""
+    if config.app.platform != "ios" or config.backend != "local" or config.local.isolation != "thread":
+        return False
+    listed = [name for name in config.app.simulators if str(name).strip()]
+    return config.workers > 1 and len(listed) < config.workers
+
+
+def build_once(config: CampaignConfig, *, runner: Any = None) -> None:
+    """Run `app.build_command` and point `app.path` (and `app.bundle_id`) at the `.app` it reports.
+
+    Raises `DeviceSetupError` when the build fails or reports no app, so the
+    campaign stops before leasing devices for an app that does not exist.
+    """
+    from swarmqa.devices import commands
+    from swarmqa.devices.protocol import DeviceSetupError
+    from swarmqa.driver.ios import _discover_app_path
+    from swarmqa.driver.runner_client import read_info_plist
+
+    print("building the app once for every device: app.build_command", file=sys.stderr, flush=True)
+    result = commands.run(
+        runner if runner is not None else commands.default_runner,
+        ["/bin/sh", "-c", str(config.app.build_command)],
+        timeout=1800,
+    )
+    if not result.ok:
+        raise DeviceSetupError(f"app.build_command failed: {result.detail()}")
+    found = _discover_app_path(result.stdout + "\n" + result.stderr)
+    if not found or not Path(found).is_dir():
+        raise DeviceSetupError("app.build_command finished but did not report a .app path; set app.path")
+    config.app.path = str(found)
+    if not config.app.bundle_id:
+        bundle_id = str(read_info_plist(Path(found)).get("CFBundleIdentifier") or "").strip()
+        config.app.bundle_id = bundle_id or None
 
 
 def expand_crawl(queue: list[Shard], settings: SwarmSettings) -> list[Shard]:

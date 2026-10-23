@@ -18,7 +18,7 @@ from swarmqa.github.events import Event, EventResult, PlatformOutcome
 from swarmqa.github.report import MARKER, Reporter, conclusion, headline, render
 from swarmqa.github.settings import GitHubConfigError, GitHubSettings
 from swarmqa.github.watch import Watcher, WatchState, build_repo, evaluate_sha, poll, run_sha, use_gh_credentials
-from swarmqa.models import BuildArtifact, CampaignConfig, CampaignResult, Finding
+from swarmqa.models import BuildArtifact, CampaignConfig, CampaignResult, Finding, WorkerResult
 
 REPO = "acme/app"
 SHA1 = "a" * 40
@@ -309,6 +309,31 @@ def test_render_orders_by_severity_and_marks_errors(tmp_path):
     assert "https://ci/run/1" in body and "`c9`" in body and MARKER not in body
 
 
+def test_comment_leads_with_verdict_and_keeps_doubtful_findings_apart(tmp_path):
+    (tmp_path / "report.html").write_text("<html></html>")
+    outcome = PlatformOutcome("ios", campaign_id="c9", report_dir=str(tmp_path), findings=[
+        finding("soft", advisory=True),
+        finding("gone", severity="critical", confirmation="not_reproduced", confirm_attempts=2,
+                replay_json="findings/gone.replay.json"),
+        finding("real", confirmation="confirmed", confirm_attempts=2, confirm_hits=2,
+                occurrences=["Save on Settings", "Save on Profile"], suspected_sources=["App/Save.swift:3"],
+                replay_json="findings/real.replay.json"),
+    ])
+    result = EventResult(Event("pr", SHA1, 1), [outcome])
+    body = render(result, settings(), evidence={"real": "https://cdn/real.png"}, for_comment=True)
+    assert "**1 problem found, 1 high; 2 more findings to check (advisory or not reproduced).**" in body
+    assert "| Severity | Finding | Confirmation | Count |" in body
+    assert "| high | Title real | Confirmed 2/2 | 3 |" in body
+    assert "Also seen in 2 more place(s): Save on Settings, Save on Profile" in body
+    assert "![real](https://cdn/real.png)" in body and "`App/Save.swift:3`" in body
+    assert body.index("Title real") < body.index("2 finding(s) to check") < body.index("Title gone")
+    assert "| critical | Title gone | Not reproduced 0/2 | 1 |" in body
+    assert "| high (advisory) | Title soft | not checked | 1 |" in body
+    assert "report.html" in body
+    short = render(result, settings(max_findings=1))
+    assert "Title real" in short and "Title gone" not in short and "2 more finding(s)" in short
+
+
 def test_evidence_command_uploads_first_screenshot(tmp_path):
     (tmp_path / "shot.png").write_bytes(b"png")
     calls = []
@@ -377,6 +402,38 @@ def test_evaluate_sha_runs_a_campaign_per_platform(tmp_path, monkeypatch):
     assert macos.findings[0].severity == "critical" and macos.error.startswith("build failed")
     assert result.exit_code == 1
     assert builder.calls[0][2] == f"https://github.com/{REPO}.git"
+
+
+def test_evaluate_sha_does_not_pass_a_platform_whose_shards_could_not_run(tmp_path, monkeypatch):
+    config = CampaignConfig()
+    config.intents = ["intents"]
+    broken = WorkerResult("w1", "s1", "error", backend="local", error="BackendUnavailable: no free simulator")
+    ok = WorkerResult("w2", "s2", "passed", backend="local")
+
+    def run_campaign(cfg, queue, *, options):
+        return CampaignResult("c1", str(tmp_path), results=[broken, ok], exit_code=0)
+
+    monkeypatch.setattr("swarmqa.intent.ingest.build_queue", lambda cfg, extra=None: [SimpleNamespace(id="s1")])
+    monkeypatch.setattr("swarmqa.github.watch.use_gh_credentials", lambda env=None: None)
+    result = evaluate_sha(Event("pr", SHA1, 1), config, settings(), repo=REPO,
+                          builder=FakeBuilder(), run_campaign=run_campaign, log=lambda _: None)
+    (ios,) = result.outcomes
+    assert ios.error == "1 of 2 shard(s) could not run: BackendUnavailable: no free simulator"
+    assert result.exit_code == 2
+    assert conclusion(result, settings()) == "neutral"
+    assert headline(result, settings()) == "could not test 1 platform(s)"
+
+
+def test_a_platform_that_could_not_be_tested_is_an_error_status_not_success(tmp_path):
+    gh = FakeGh({
+        ("POST", f"repos/{REPO}/check-runs"): RuntimeError("must authenticate via a GitHub App (HTTP 403)"),
+        ("POST", f"repos/{REPO}/statuses/{MAIN1}"): {},
+    })
+    untested = EventResult(Event("push", MAIN1, None, "main"), [PlatformOutcome("ios", error="no free simulator")])
+    reporter = Reporter(GitHubClient(REPO, runner=gh), settings(report="check"), log=lambda _: None)
+    reporter.finish(untested)
+    statuses = [w[2] for w in gh.writes() if "statuses" in w[1]]
+    assert [s["state"] for s in statuses] == ["error"]
 
 
 def test_build_repo_prefers_explicit_then_github_then_source_dir():

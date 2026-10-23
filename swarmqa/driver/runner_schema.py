@@ -27,6 +27,7 @@ ErrorCode = Literal[
     "not_launched",
     "app_crashed",
     "timeout",
+    "input_failed",
     "protocol_mismatch",
     "internal",
 ]
@@ -36,6 +37,7 @@ ERROR_STATUS: dict[str, int] = {
     "not_launched": 409,
     "app_crashed": 409,
     "timeout": 504,
+    "input_failed": 422,
     "protocol_mismatch": 426,
     "internal": 500,
 }
@@ -143,6 +145,7 @@ def encode_element(element: UIElement) -> dict[str, Any]:
         "enabled": element.enabled,
         "frame": list(element.frame) if element.frame is not None else None,
         "children": [encode_element(child) for child in element.children],
+        **({"placeholder": element.placeholder} if element.placeholder else {}),
     }
 
 
@@ -160,6 +163,7 @@ def decode_element(data: Any) -> UIElement:
         enabled=bool(obj.get("enabled", True)),
         frame=_frame(frame) if frame is not None else None,
         children=[decode_element(child) for child in _list(obj.get("children", []), "children")],
+        placeholder=_optional_str(obj, "placeholder"),
     )
 
 

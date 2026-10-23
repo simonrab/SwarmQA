@@ -112,6 +112,18 @@ def test_actionable_controls_skip_disabled_and_unlabeled():
     assert [(c.label, c.kind) for c in controls] == [("Go", "tap"), ("Email", "type")]
 
 
+def test_actionable_controls_only_inside_an_open_alert():
+    # Taps on controls behind an alert land on the alert, so only its buttons are offered.
+    tree = _home() + [
+        UIElement(
+            role="alert",
+            label="Error",
+            children=[UIElement(role="text", label="Sign in failed"), UIElement(role="button", label="OK")],
+        )
+    ]
+    assert [c.label for c in actionable_controls(tree)] == ["OK"]
+
+
 def _graph() -> ScreenGraph:
     graph = ScreenGraph()
     home = actionable_controls(_home())
@@ -197,3 +209,45 @@ def test_coverage_counts():
     assert stats["screens"] == 4
     assert stats["edges"] == 4
     assert stats["tried"] == 0 and stats["ratio"] == 0
+
+
+def _rows_screen():
+    def row(text, y):
+        return UIElement(
+            role="cell", frame=(0, y, 390, 44), children=[UIElement(role="text", label=text, frame=(16, y + 12, 200, 20))]
+        )
+
+    return [UIElement(role="window", label="Settings", children=[row("General", 100), row("Advanced", 144), row("About", 188)])]
+
+
+def test_unlabeled_rows_are_distinct_controls_reached_by_point():
+    controls = actionable_controls(_rows_screen())
+    assert [(c.display(), c.point) for c in controls] == [
+        ("General", (195.0, 122.0)),
+        ("Advanced", (195.0, 166.0)),
+        ("About", (195.0, 210.0)),
+    ]
+    assert len({c.key for c in controls}) == 3
+
+
+def _with_keyboard_tip(app_children, *, tip=True):
+    windows = [UIElement(role="window", label="App", children=app_children)]
+    if tip:
+        windows.append(UIElement(role="window", children=[
+            UIElement(role="text", label="Speed up your typing by sliding your finger across the letters"),
+            UIElement(role="button", label="Continue"),
+        ]))
+    windows.append(UIElement(role="window", children=[UIElement(role="keyboard", children=[
+        UIElement(role="button", label="shift"), UIElement(role="button", label="Emoji"),
+    ])]))
+    return [UIElement(role="application", label="Demo", children=windows)]
+
+
+def test_a_keyboard_tip_is_dismissed_before_anything_else():
+    tree = _with_keyboard_tip([UIElement(role="button", label="Save")])
+    assert [c.label for c in actionable_controls(tree)] == ["Continue"]
+
+
+def test_keyboard_buttons_are_not_app_controls():
+    tree = _with_keyboard_tip([UIElement(role="button", label="Save")], tip=False)
+    assert [c.label for c in actionable_controls(tree)] == ["Save"]

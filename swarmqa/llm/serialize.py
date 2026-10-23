@@ -11,9 +11,12 @@ back to an `ElementQuery`. Lines are indented two spaces per depth:
 from __future__ import annotations
 
 from swarmqa.llm.protocol import ChangedFile, HistoryStep, StepDecision
+from swarmqa.checks._tree import first_text
 from swarmqa.models import ElementQuery, UIElement
 
 MAX_ELEMENTS = 400
+# The outcome of a step that left the screen as it was.
+NO_EFFECT = "no effect: the screen stayed the same"
 _LABEL_LIMIT = 80
 
 
@@ -57,6 +60,8 @@ def history_text(history: list[HistoryStep], *, limit: int) -> str:
             parts.append(f"-> {_clip(step.outcome, 160)}")
         if step.screen:
             parts.append(f"(screen: {_clip(step.screen, 60)})")
+        if step.outcome == NO_EFFECT:
+            parts.append("[NO EFFECT - do not repeat on this screen]")
         lines.append(" ".join(parts))
     return "\n".join(lines)
 
@@ -102,6 +107,11 @@ def _line(key: str, element: UIElement) -> str:
     parts = [key, element.role or "element"]
     if element.label:
         parts.append(f'"{_clip(element.label, _LABEL_LIMIT)}"')
+    elif not element.identifier and element.children:
+        name = first_text(element)
+        if name:
+            # An unlabeled row: its child text says which one it is.
+            parts.append(f'~"{_clip(name, _LABEL_LIMIT)}"')
     if element.identifier:
         parts.append(f"id={element.identifier}")
     if element.value:

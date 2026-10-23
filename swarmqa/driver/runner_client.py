@@ -41,6 +41,7 @@ from swarmqa.driver.protocol import CrashReport, LogEntry, ScreenObservation
 from swarmqa.driver.query import find_element
 from swarmqa.errors import (
     AQAError,
+    InputError,
     AppCrashedError,
     AppMissingError,
     BackendUnavailable,
@@ -98,6 +99,8 @@ def driver_error(error: schema.RunnerError, *, bundle_id: str | None = None) -> 
         exc = ElementNotFoundError(text)
     elif code == "timeout":
         exc = UITimeoutError(text)
+    elif code == "input_failed" or (code == "internal" and "keyboard focus" in message.lower()):
+        exc = InputError(text)
     elif code == "protocol_mismatch":
         exc = BackendUnavailable(
             f"the swarm runner speaks a different protocol version ({text}); "
@@ -208,7 +211,10 @@ class RunnerClient:
 
     def type_text(self, text: str, query: ElementQuery | None = None, *, timeout: float | None = None) -> None:
         body = schema.encode_type(schema.TypeRequest(text=text, query=query))
-        self._json("POST", "/type", body, timeout or self.timeouts.step)
+        # The runner may retype slowly into a field that drops characters
+        # (about a second per chunk of 4), so long text gets more time.
+        default = self.timeouts.step + 0.5 * len(text)
+        self._json("POST", "/type", body, timeout or default)
 
     def swipe(
         self,
@@ -824,6 +830,9 @@ class RunnerDriverBase:
     `_log_command`, `_release`, `start_video` and `stop_video`.
     """
 
+    # `type_text(None, text)` types into the focused element (the runner's /type without a query).
+    types_into_focus = True
+
     backend = "runner"
     default_screenshot_format: schema.ScreenshotFormat = "png"
     scroll_distance = 180.0
@@ -952,7 +961,8 @@ class RunnerDriverBase:
         client = self._client()
         self._call(lambda: client.tap(query=target))
 
-    def type_text(self, target: ElementQuery, text: str) -> None:
+    def type_text(self, target: ElementQuery | None, text: str) -> None:
+        """Type into `target`, or with None into the element that has focus."""
         client = self._client()
         self._call(lambda: client.type_text(text, target))
 

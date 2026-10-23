@@ -73,6 +73,8 @@ class FakeSimctl:
         for udid, name in (existing or {}).items():
             self.devices[udid] = {"name": name, "state": "Shutdown", "apps": set()}
         self.boot_fails = boot_fails
+        # Booted devices that do not answer `simctl spawn`; an erase cures them.
+        self.wedged: set[str] = set()
         self._serial = 0
         self._mutex = threading.Lock()
 
@@ -104,6 +106,10 @@ class FakeSimctl:
                 return _fail(args, "timed out waiting for boot", 124)
             dev["state"] = "Booted"
             return _ok(args, "Device already booted")
+        if verb == "spawn":
+            if dev["state"] != "Booted" or rest[0] in self.wedged:
+                return _fail(args, "Unable to spawn: device is not responding", 60)
+            return _ok(args, "system = {}")
         if verb == "install":
             dev["apps"].add(rest[1])
             return _ok(args)
@@ -119,6 +125,7 @@ class FakeSimctl:
             if dev["state"] != "Shutdown":
                 return _fail(args, "Unable to erase contents and settings in current state: Booted", 149)
             dev["apps"] = set()
+            self.wedged.discard(rest[0])
             return _ok(args)
         if verb == "delete":
             del self.devices[rest[0]]
@@ -487,6 +494,7 @@ def test_ios_pool_clones_boots_installs_and_reuses(tmp_path: Path):
         ["xcrun", "simctl", "list", "devices", "-j"],
         ["xcrun", "simctl", "clone", "Golden iPhone", "aqa-sim-Golden-iPhone-0"],
         ["xcrun", "simctl", "bootstatus", udid, "-b"],
+        ["xcrun", "simctl", "spawn", udid, "launchctl", "print", "system"],
         ["xcrun", "simctl", "install", udid, "/builds/Sample.app"],
     ]
     assert runner.kwargs[2]["timeout"] == pool.boot_timeout_s
@@ -746,3 +754,47 @@ def test_local_mac_pool_is_empty_off_macos():
     assert pool.capacity("macos") == 0
     with pytest.raises(DeviceUnavailable):
         pool.acquire("macos", None, timeout_s=0)
+
+
+def test_ios_pool_erases_and_reboots_a_clone_that_does_not_respond(tmp_path: Path):
+    leftover = "99999999-0000-0000-0000-000000000000"
+    runner = FakeSimctl({leftover: "aqa-sim-G-0"})
+    runner.wedged.add(leftover)
+    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, work_root=tmp_path, lock_root=tmp_path / "locks")
+    assert pool.acquire("ios", IOS_BUILD).id == leftover
+    assert runner.verbs("erase") == [["xcrun", "simctl", "erase", leftover]]
+    assert len(runner.verbs("bootstatus")) == 2
+
+
+def test_ios_pool_gives_up_on_a_clone_that_never_responds(tmp_path: Path):
+    runner = FakeSimctl()
+
+    class AlwaysWedged(FakeSimctl):
+        def _handle(self, args, kwargs):
+            if args[2] == "spawn":
+                return _fail(args, "not responding")
+            return super()._handle(args, kwargs)
+
+    runner = AlwaysWedged()
+    pool = IOSSimulatorPool(golden="G", runner=runner, capacity=1, work_root=tmp_path, lock_root=tmp_path / "locks")
+    with pytest.raises(DeviceSetupError, match="does not respond"):
+        pool.acquire("ios", IOS_BUILD)
+
+
+def test_ios_pool_waits_for_a_boot_slot(tmp_path: Path):
+    from swarmqa.devices.ios_pool import BOOT_PREFIX
+    from swarmqa.devices.locks import try_lock
+
+    locks = tmp_path / "locks"
+    held = try_lock(f"{BOOT_PREFIX}-0", root=locks)  # another process is booting
+    assert held is not None
+    runner = FakeSimctl()
+    pool = IOSSimulatorPool(
+        golden="G", runner=runner, capacity=1, work_root=tmp_path, lock_root=locks,
+        max_concurrent_boots=1, boot_timeout_s=0.2, poll_s=0.01,
+    )
+    with pytest.raises(DeviceUnavailable, match="boot slot"):
+        pool.acquire("ios", IOS_BUILD)
+    assert runner.verbs("bootstatus") == []
+    held.release()
+    assert pool.acquire("ios", IOS_BUILD, timeout_s=1).kind == "simulator"

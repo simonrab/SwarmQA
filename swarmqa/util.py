@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -17,7 +18,7 @@ def parse_duration(value: str) -> float:
     """
     text = value.strip().lower()
     if not text or text.isdigit():
-        raise ValueError(f"duration must include a unit (s, m, h): {value!r}")
+        raise ValueError(f"duration must include a unit (s, m, h), for example {text}s or 15m: {value!r}")
     match = _DURATION.fullmatch(text)
     if not match or match.group(0) == "":
         raise ValueError(f"unrecognized duration: {value!r}")
@@ -38,3 +39,22 @@ def new_campaign_id(now: datetime | None = None) -> str:
 def slug(text: str, limit: int = 40) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return (cleaned or "shard")[:limit].strip("-") or "shard"
+
+
+def child_env(env: dict[str, str] | None = None) -> dict[str, str]:
+    """`env` (default: this process's) with the folder holding the `swarmqa` package first on `PYTHONPATH`.
+
+    A `python -m swarmqa...` child then imports the same package as this
+    process, even when the install's `.pth` file is skipped (macOS marks it
+    hidden under an iCloud-synced folder, and Python ignores hidden `.pth`
+    files).
+    """
+    from pathlib import Path
+
+    result = dict(os.environ if env is None else env)
+    package_parent = str(Path(__file__).resolve().parents[1])
+    parts = [part for part in result.get("PYTHONPATH", "").split(os.pathsep) if part]
+    if package_parent not in parts:
+        parts.insert(0, package_parent)
+    result["PYTHONPATH"] = os.pathsep.join(parts)
+    return result

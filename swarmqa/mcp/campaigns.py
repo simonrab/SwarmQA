@@ -26,6 +26,7 @@ from typing import Any
 
 from swarmqa.errors import AQAError
 from swarmqa.models import CampaignConfig, CliOverrides, Finding
+from swarmqa.util import child_env
 
 MCP_META = "mcp.json"
 CANCEL_REQUEST = "cancel-request.json"
@@ -226,11 +227,8 @@ def launch_runner(campaign: Path, cwd: Path) -> int:
     """Start the detached runner for `campaign`; return its pid."""
     log_path = Path(campaign) / RUNNER_LOG
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
     # The runner imports this package from wherever the server imported it.
-    package_parent = str(Path(__file__).resolve().parents[2])
-    existing = env.get("PYTHONPATH")
-    env["PYTHONPATH"] = package_parent + (os.pathsep + existing if existing else "")
+    env = child_env()
     with open(log_path, "ab") as log:
         process = subprocess.Popen(
             [sys.executable, "-m", "swarmqa.mcp._runner", str(campaign)],

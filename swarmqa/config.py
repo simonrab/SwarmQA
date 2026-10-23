@@ -98,6 +98,7 @@ def validate_config(config: CampaignConfig) -> list[str]:
     _validate_github(errors, config)
     _validate_flows(errors, config)
     _validate_swarm(errors, config)
+    _validate_findings(errors, config)
     _nonempty_str(errors, "spend.currency", config.spend.currency)
     _check_max_spend(errors, config)
     _int_at_least(errors, "explorer.max_steps", config.explorer.max_steps, 1)
@@ -227,6 +228,7 @@ def _apply_document(config: CampaignConfig, document: dict[str, Any], errors: li
     config.github.settings = dict(_section(document, "github", errors))
     config.flows.settings = dict(_section(document, "flows", errors))
     config.swarm.settings = dict(_section(document, "swarm", errors))
+    config.findings.settings = dict(_section(document, "findings", errors))
 
     llm = dict(_section(document, "llm", errors))
     if "enabled" in llm:
@@ -416,7 +418,8 @@ def _validate_decision(errors: list[str], config: CampaignConfig) -> None:
     _enum(errors, "explorer.decision.mode", decision.mode, _DECISION_MODES)
     _int_at_least(errors, "explorer.decision.escalate_after", decision.escalate_after, 1)
     _int_at_least(errors, "explorer.decision.max_model_calls", decision.max_model_calls, 0)
-    _number_above(errors, "explorer.decision.model_timeout_s", decision.model_timeout_s, 0)
+    if decision.model_timeout_s is not None:
+        _number_above(errors, "explorer.decision.model_timeout_s", decision.model_timeout_s, 0)
     _bool_field(
         errors, "explorer.decision.cache_observations", decision.cache_observations
     )
@@ -485,7 +488,7 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
             overrides.max_wall_time,
             config.budgets,
             "max_wall_time_s",
-            "budgets.max_wall_time_s",
+            "--max-wall-time",
             errors,
         )
     if overrides.max_spend is not None:
@@ -496,7 +499,7 @@ def _apply_overrides(config: CampaignConfig, overrides: CliOverrides, errors: li
         config.video.mode = overrides.video_mode  # type: ignore[assignment]
 
 
-_LLM_PROVIDERS = ("anthropic", "openai", "fake")
+_LLM_PROVIDERS = ("anthropic", "openai", "fake", "chat", "claude_cli", "codex_cli")
 
 
 def llm_settings(config: CampaignConfig):
@@ -555,6 +558,15 @@ def _validate_swarm(errors: list[str], config: CampaignConfig) -> None:
         errors.extend(exc.errors)
         return
     errors.extend(swarm_problems(settings, config))
+
+
+def _validate_findings(errors: list[str], config: CampaignConfig) -> None:
+    from swarmqa.confirm.settings import FindingsSettings
+
+    try:
+        FindingsSettings.from_mapping(config.findings.settings)
+    except ConfigError as exc:
+        errors.extend(exc.errors)
 
 
 def _validate_checks(errors: list[str], config: CampaignConfig) -> None:

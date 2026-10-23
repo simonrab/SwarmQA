@@ -32,9 +32,9 @@ The first screen gets a context with `before=None` and `action=None`. A check th
 |---|---|---|
 | `mode` | `goal` | `goal` follows `shard.goal`, or crawls when the goal is empty. `crawl` always crawls. |
 | `max_steps` | 40 | Driver actions (taps, types, swipes, keys, backs, relaunches). Observations are free. |
-| `max_wall_time_s` | 300 | Measured with the injected `clock`. |
+| `max_wall_time_s` | 300 | Measured with the injected `clock`, from the first successful launch (simulator boot and runner start are not counted). |
 | `max_model_calls` | 20 | Calls to `decide_step`, failed ones included. |
-| `model_timeout_s` | 30 | Passed to `decide_step`. |
+| `model_timeout_s` | 30 | Passed to `decide_step`. `from_config` takes `explorer.decision.model_timeout_s`, which defaults to 90 for the `claude_cli` and `codex_cli` providers. |
 | `stall_limit` | 5 | Goal mode ends after this many steps in a row that failed or left the screen unchanged; crawl mode after this many failed actions in a row; both after this many timed-out observations in a row. |
 | `per_screen_checks` | true | Off skips the per-screen (model) checks entirely. |
 | `screenshot_every_step` | true | Off captures a screenshot only on a screen's first visit. |

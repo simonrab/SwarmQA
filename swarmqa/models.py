@@ -155,10 +155,19 @@ class DecisionConfig:
     mode: DecisionMode = "heuristic"
     escalate_after: int = 3
     max_model_calls: int = 8
-    model_timeout_s: float = 30.0
+    # None: the model provider's own default (see `step_timeout`).
+    model_timeout_s: float | None = None
     cache_observations: bool = True
     system_one: SystemOneConfig = field(default_factory=SystemOneConfig)
     computer_use: ComputerUseConfig = field(default_factory=ComputerUseConfig)
+
+    def step_timeout(self, provider: str | None = None) -> float:
+        """`model_timeout_s` when set, else `provider`'s default step timeout."""
+        if self.model_timeout_s is not None:
+            return self.model_timeout_s
+        from swarmqa.llm.settings import step_timeout_default
+
+        return step_timeout_default(provider)
 
 
 @dataclass
@@ -280,6 +289,15 @@ class FlowsConfig:
 
 
 @dataclass
+class FindingsConfig:
+    """The `[findings]` table (confirmation re-runs and grouping), kept raw;
+    `swarmqa.confirm.settings.FindingsSettings.from_mapping` parses it.
+    """
+
+    settings: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class SwarmConfig:
     """The `[swarm]` table, kept raw; `swarmqa.orchestrator.swarm.SwarmSettings.from_mapping`
     parses it. See docs/orchestrator.md.
@@ -331,6 +349,7 @@ class CampaignConfig:
     github: GitHubConfig = field(default_factory=GitHubConfig)
     flows: FlowsConfig = field(default_factory=FlowsConfig)
     swarm: SwarmConfig = field(default_factory=SwarmConfig)
+    findings: FindingsConfig = field(default_factory=FindingsConfig)
     fail_on: FailOn = "scripted"
     report_root: str = "reports"
     gui_worker_warn_threshold: int = 2
@@ -380,6 +399,8 @@ class UIElement:
     enabled: bool = True
     frame: tuple[float, float, float, float] | None = None
     children: list["UIElement"] = field(default_factory=list)
+    # Placeholder text of an empty field, when the platform reports it.
+    placeholder: str | None = None
 
 
 @dataclass
@@ -512,6 +533,16 @@ class Finding:
     repro: str | None = None
     suspected_sources: list[str] = field(default_factory=list)
     evidence: Evidence = field(default_factory=Evidence)
+    # Confirmation re-run (swarmqa/confirm): None = not checked; else
+    # "confirmed", "flaky" (reproduced on some attempts), "not_reproduced"
+    # or "skipped" (no replay possible). `confirm_hits` of `confirm_attempts`
+    # replays showed it again.
+    confirmation: str | None = None
+    confirm_attempts: int = 0
+    confirm_hits: int = 0
+    # Grouping: other places the same problem was seen (labels, identifiers
+    # or screens), folded into this finding. Count = 1 + len(occurrences).
+    occurrences: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.worker_id and self.worker_id not in self.worker_ids:

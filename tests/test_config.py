@@ -859,7 +859,7 @@ def test_llm_table_is_off_by_default_and_validated(tmp_path: Path):
 
     with pytest.raises(ConfigError) as exc:
         load_config(_write(tmp_path, '[llm]\nprovider = "gemini"\n'))
-    assert exc.value.errors == ["llm.provider: must be one of anthropic, openai, fake"]
+    assert exc.value.errors == ["llm.provider: must be one of anthropic, openai, fake, chat, claude_cli, codex_cli"]
     with pytest.raises(ConfigError) as exc:
         load_config(_write(tmp_path, "[llm]\nmodel_name = 1\n"))
     assert exc.value.errors == ["llm: unknown llm settings: model_name"]

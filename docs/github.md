@@ -25,7 +25,7 @@ aqa watch --dry-run          # print what would be tested; build nothing
 - **Superseded runs.** One campaign runs per SHA and platform. If a PR's head moves before its run starts, the old SHA is skipped. If it moves during the run, the old SHA still gets its check, but the PR comment is left to the newer run.
 - **Cloning.** The builder clones `github.clone_url`, else `build.repo`, else `https://github.com/<repo>.git` (using `gh` as the git credential helper, so private repos work), else `app.source_dir`. GitHub comes before your local checkout because a local checkout usually lacks other people's PR heads.
 
-Exit codes with an event flag: 0 clean, 1 findings or a build failure, 2 could not run.
+Exit codes with an event flag: 0 clean, 1 findings or a build failure, 2 could not run. `--once` returns the worst code of the events it tested (0 when nothing new was found to test).
 
 ## aqa run --github-sha
 
@@ -44,7 +44,7 @@ Tests one commit the way `aqa watch` does and reports it. Without `--github-pr` 
 | `"comment"` | one PR comment, edited in place on every run (found by a hidden `<!-- swarmqa:report -->` marker) |
 | `"both"` | both |
 
-The check fails on any non-advisory finding; advisory (model-only) findings fail it only with `fail_on_advisory = true`. A platform that could not be built shows as a critical finding with the build log's errors.
+The check fails on any non-advisory finding; advisory (model-only) findings fail it only with `fail_on_advisory = true`. A platform that could not be built shows as a critical finding with the build log's errors. A platform where any shard could not run (for example no free simulator) is reported as not tested: a neutral check, or an `error` commit status, never a pass.
 
 **Check runs need a GitHub App token.** GitHub only lets GitHub Apps create check runs. The Actions `GITHUB_TOKEN` is one; a personal `gh` login is not. When the API refuses (HTTP 403), SwarmQA posts a commit status with the same verdict instead, linking to the PR comment.
 

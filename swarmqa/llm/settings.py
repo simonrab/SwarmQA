@@ -1,7 +1,7 @@
 """Model provider settings and the provider factory.
 
-`LLMSettings` is local to `swarmqa.llm` until the campaign config grows an
-`[llm]` table; `LLMSettings.from_mapping` reads that table's shape.
+`LLMSettings.from_mapping` reads the campaign config's `[llm]` table (all
+keys but `enabled`).
 `create_provider` imports a model SDK only when it builds a live
 transport, so the core install never needs `anthropic` or `openai`.
 """
@@ -14,7 +14,7 @@ from typing import Any, Literal, Mapping
 from swarmqa.llm.pricing import ModelPrice
 from swarmqa.llm.protocol import ModelError, ModelProvider
 
-ProviderName = Literal["anthropic", "openai", "fake"]
+ProviderName = Literal["anthropic", "openai", "fake", "chat", "claude_cli", "codex_cli"]
 CallKind = Literal["step", "judge", "flows", "computer_use"]
 CALL_KINDS: tuple[str, ...] = ("step", "judge", "flows", "computer_use")
 
@@ -35,13 +35,35 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
         "computer_use": "gpt-5.5",
     },
     "fake": {kind: "fake" for kind in CALL_KINDS},
+    # A coding agent in a chat drives each step through MCP (swarmqa.explorer.remote).
+    "chat": {kind: "chat" for kind in CALL_KINDS},
+    # Coding-agent CLIs on the user's own plan (swarmqa.llm.cli_provider).
+    # Claude Code model aliases; "default" leaves the CLI's own choice.
+    "claude_cli": {"step": "sonnet", "judge": "opus", "flows": "opus", "computer_use": "opus"},
+    "codex_cli": {kind: "default" for kind in CALL_KINDS},
 }
 
-DEFAULT_API_KEY_ENV = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "fake": ""}
+DEFAULT_API_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "fake": "",
+    "chat": "",
+    "claude_cli": "",
+    "codex_cli": "",
+}
 
 DEFAULT_EFFORT: dict[str, str] = {"step": "low", "judge": "medium", "flows": "high", "computer_use": "medium"}
 
 DEFAULT_MAX_TOKENS: dict[str, int] = {"step": 4096, "judge": 16000, "flows": 16000, "computer_use": 8000}
+
+# Seconds one explore step may wait for the model when `explorer.decision.model_timeout_s`
+# is unset. A CLI call starts a whole agent process, so it gets longer than an API call.
+DEFAULT_STEP_TIMEOUT_S = 30.0
+CLI_STEP_TIMEOUT_S = 90.0
+
+
+def step_timeout_default(provider: str | None) -> float:
+    return CLI_STEP_TIMEOUT_S if provider in ("claude_cli", "codex_cli") else DEFAULT_STEP_TIMEOUT_S
 
 
 class MissingExtraError(ModelError):
@@ -160,6 +182,15 @@ def create_provider(
         from swarmqa.llm.fake import FakeModelProvider
 
         return FakeModelProvider()
+    if settings.provider == "chat":
+        from swarmqa.explorer.remote import RemoteController
+
+        return RemoteController(idle_timeout_s=settings.timeout_s)  # type: ignore[return-value]
+    if settings.provider in ("claude_cli", "codex_cli"):
+        from swarmqa.llm.cli_provider import ClaudeCLIProvider, CLITransport, CodexCLIProvider
+
+        cls = ClaudeCLIProvider if settings.provider == "claude_cli" else CodexCLIProvider
+        return cls(settings, transport or CLITransport(cls.cli), meter=meter)
     if settings.provider == "anthropic":
         from swarmqa.llm.anthropic_provider import AnthropicProvider, AnthropicSDKTransport
 

@@ -6,7 +6,14 @@
 | --- | --- | --- |
 | Anthropic (Claude) | `swarmqa.llm.anthropic_provider` | `uv tool install 'swarmqa[anthropic]'` |
 | OpenAI | `swarmqa.llm.openai_provider` | `uv tool install 'swarmqa[openai]'` |
+| Claude Code CLI (`claude_cli`) | `swarmqa.llm.cli_provider` | core install; `claude` on `PATH`, signed in |
+| Codex CLI (`codex_cli`) | `swarmqa.llm.cli_provider` | core install; `codex` on `PATH`, signed in |
+| Chat (`chat`) | `swarmqa.explorer.remote` | core install; driven through `aqa mcp` (see `docs/mcp.md`) |
 | Fake (tests, dry runs) | `swarmqa.llm.fake` | core install |
+
+`claude_cli` and `codex_cli` run `claude -p` or `codex exec` once per call, with the call's JSON schema as the structured output, so a campaign runs on your Claude or ChatGPT plan instead of an API key. Their per-call cost is recorded as 0. A screenshot is written to a temporary folder the CLI may read. Each call starts a process (about 5 seconds per step for Claude Code), so they suit one or two devices; use an API provider for a large swarm. `claude_cli` model names are Claude Code aliases (`sonnet` for steps, `opus` for judging by default); `codex_cli` uses Codex's configured model unless you set one, and a ChatGPT sign-in only accepts the models your plan allows.
+
+`chat` is not called by SwarmQA at all: the agent in a Claude Code or Codex chat chooses each step through the MCP session tools.
 
 The core install needs neither SDK. `create_provider` imports an SDK only when it builds a live transport. If the SDK is missing it raises `MissingExtraError`, a `ModelError` whose message names the extra to install.
 
@@ -22,7 +29,7 @@ provider = create_provider(LLMSettings(provider="anthropic", max_cost=2.0), mete
 decision = provider.decide_step(obs, "Change the account email", history)
 ```
 
-`LLMSettings.from_mapping(table)` reads a TOML-style table with the same field names, so a future `[llm]` config section can be passed straight through. The campaign config does not have that section yet.
+`LLMSettings.from_mapping(table)` reads a TOML-style table with the same field names. The campaign config's `[llm]` table is passed straight through: `enabled = true` turns the provider on for the agent explorer (`explorer.engine = "agent"`), and the other keys are these settings.
 
 ## Settings
 

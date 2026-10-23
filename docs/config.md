@@ -127,7 +127,7 @@ on_step_failure = "stop" # stop | continue
 mode = "heuristic" # heuristic | system_one | computer_use | cascade
 escalate_after = 3
 max_model_calls = 8
-model_timeout_s = 30.0
+model_timeout_s = 30.0 # default 30, or 90 with llm provider claude_cli / codex_cli
 cache_observations = true
 
 [explorer.decision.system_one]
@@ -181,6 +181,7 @@ Unknown keys are ignored. Credentials are environment variable names (`endpoint_
 | `[explorer.friction]` | `explorer.friction` (`FrictionConfig`) |
 | `[flows]` | `flows.settings`, read by `swarmqa.flows.settings.FlowsSettings` (see `docs/flows.md`) |
 | `[swarm]` | `swarm.settings`, read by `swarmqa.orchestrator.swarm.SwarmSettings` (see `docs/orchestrator.md`) |
+| `[findings]` | `findings.settings`, read by `swarmqa.confirm.settings.FindingsSettings` (see `docs/trust.md`) |
 
 `max_wall_time` strings go through `swarmqa.util.parse_duration`. Accepted forms are `90s`, `5m`, `2h`, `1h30m`, and `1h2m3s`. Units are required. Campaign wall time is optional.
 
